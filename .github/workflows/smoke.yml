@@ -31,8 +31,10 @@ jobs:
           path: checkout with spaces
       - name: Test direct invocation, arguments, and exit code
         working-directory: checkout with spaces
-        shell: ${{ matrix.shell }} {0}
-        run: . ./tests/smoke.sh
+        shell: bash
+        env:
+          TEST_SHELL: ${{ matrix.shell }}
+        run: '"$TEST_SHELL" tests/smoke.sh'
 
   windows:
     name: Windows / ${{ matrix.shell }}

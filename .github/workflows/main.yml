@@ -1,0 +1,108 @@
+name: Main
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Determine version
+        id: version
+        run: echo "version=1.$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: ${{ matrix.os }}-${{ matrix.arch }}
+    needs: version
+    env:
+      DOTCMD_VERSION: ${{ needs.version.outputs.version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: linux, arch: x64, runner: ubuntu-24.04, shell: bash}
+          - {os: linux, arch: arm64, runner: ubuntu-24.04-arm, shell: bash}
+          - {os: macos, arch: x64, runner: macos-15-intel, shell: bash}
+          - {os: macos, arch: arm64, runner: macos-15, shell: bash}
+          - {os: windows, arch: x64, runner: windows-2025, shell: pwsh}
+          - {os: windows, arch: arm64, runner: windows-11-arm, shell: pwsh}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: checkout with spaces
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: checkout with spaces
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            checkout with spaces/.cache/downloads
+            checkout with spaces/.cache/toolchains
+            checkout with spaces/.cache/deps
+            checkout with spaces/.cache/zig
+          key: tools-${{ matrix.os }}-${{ matrix.arch }}-${{ hashFiles('checkout with spaces/toolchain.env') }}
+      - name: Build Unix
+        if: matrix.os != 'windows'
+        shell: bash
+        run: |
+          ./build --release
+          mkdir -p dist
+          cp target/release/dotcmd "dist/dotcmd-${{ matrix.os }}-${{ matrix.arch }}"
+      - name: Build Windows
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File .\build.ps1 --release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item target/release/dotcmd.exe "dist/dotcmd-windows-${{ matrix.arch }}.exe"
+      - name: Run tests
+        shell: ${{ matrix.shell }}
+        run: echo 'Tests are not implemented yet.'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dotcmd-${{ matrix.os }}-${{ matrix.arch }}
+          path: checkout with spaces/dist/*
+          if-no-files-found: error
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [version, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: dotcmd-*
+          path: dist
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          assets=(
+            dist/dotcmd-linux-x64
+            dist/dotcmd-linux-arm64
+            dist/dotcmd-macos-x64
+            dist/dotcmd-macos-arm64
+            dist/dotcmd-windows-x64.exe
+            dist/dotcmd-windows-arm64.exe
+          )
+          for asset in "${assets[@]}"; do test -s "$asset"; done
+          gh release create "$VERSION" "${assets[@]}" \
+            --target "$GITHUB_SHA" --title "$VERSION" --generate-notes

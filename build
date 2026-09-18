@@ -1,0 +1,129 @@
+#!/bin/sh
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$ROOT"
+. ./toolchain.env
+DOTCMD_VERSION=${DOTCMD_VERSION:-dev}
+MODE=debug
+if [ "${1:-}" = --release ]; then MODE=release; shift; fi
+if [ "$#" -ne 0 ]; then echo 'Usage: ./build [--release]' >&2; exit 2; fi
+CACHE="$ROOT/.cache"
+OUT="$ROOT/target/$MODE"
+mkdir -p "$CACHE/downloads" "$CACHE/toolchains" "$CACHE/deps" "$OUT"
+if ! mkdir "$CACHE/build.lock" 2>/dev/null; then
+    echo 'Another build is active. Remove .cache/build.lock only if a previous build was interrupted.' >&2
+    exit 1
+fi
+trap 'rmdir "$CACHE/build.lock"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d ' ' -f 1
+    else shasum -a 256 "$1" | cut -d ' ' -f 1; fi
+}
+download() {
+    url=$1 archive=$2 expected=$3
+    if [ ! -f "$archive" ] || [ "$(sha256 "$archive")" != "$expected" ]; then
+        curl --fail --location --retry 3 "$url" -o "$archive.tmp"
+        if [ "$(sha256 "$archive.tmp")" != "$expected" ]; then
+            rm -f "$archive.tmp"
+            echo "Checksum mismatch: $url" >&2
+            exit 1
+        fi
+        mv "$archive.tmp" "$archive"
+    fi
+}
+extract() {
+    archive=$1 directory=$2 marker=$3
+    if [ ! -f "$directory/$marker" ]; then
+        rm -rf "$directory.tmp"
+        mkdir -p "$directory.tmp"
+        tar -xf "$archive" --strip-components=1 -C "$directory.tmp"
+        test -f "$directory.tmp/$marker"
+        rm -rf "$directory"
+        mv "$directory.tmp" "$directory"
+    fi
+}
+
+case "$(uname -m)" in
+    x86_64|amd64) ARCH=x64; TARGET_ARCH=x86_64;;
+    arm64|aarch64) ARCH=arm64; TARGET_ARCH=aarch64;;
+    *) echo 'Unsupported CPU architecture' >&2; exit 1;;
+esac
+case "$(uname -s)" in
+    Linux)
+        OS=linux
+        case "$ARCH" in x64) HASH=$ZIG_X64_SHA256;; arm64) HASH=$ZIG_ARM64_SHA256;; esac
+        NAME="zig-$TARGET_ARCH-linux-$ZIG_VERSION"
+        download "https://ziglang.org/download/$ZIG_VERSION/$NAME.tar.xz" "$CACHE/downloads/$NAME.tar.xz" "$HASH"
+        TOOLCHAIN="$CACHE/toolchains/zig-$ZIG_VERSION"
+        extract "$CACHE/downloads/$NAME.tar.xz" "$TOOLCHAIN" zig
+        test "$("$TOOLCHAIN/zig" version)" = "$ZIG_VERSION"
+        export ZIG_GLOBAL_CACHE_DIR="$CACHE/zig"
+        export ZIG_LOCAL_CACHE_DIR="$CACHE/zig-local"
+        cc() { "$TOOLCHAIN/zig" cc -target "$TARGET_ARCH-linux-musl" -mcpu=baseline "$@"; }
+        ;;
+    Darwin)
+        OS=macos
+        SDK=$(xcrun --sdk macosx --show-sdk-path) || {
+            echo 'Install Apple Command Line Tools with: xcode-select --install' >&2; exit 1;
+        }
+        COMPILER=$(xcrun --sdk macosx --find clang)
+        cc() { "$COMPILER" -isysroot "$SDK" "-mmacosx-version-min=$MACOS_MIN_VERSION" "$@"; }
+        ;;
+    *) echo 'Unsupported OS; use build.ps1 on Windows.' >&2; exit 1;;
+esac
+
+LUA="$CACHE/deps/lua-$LUA_VERSION"
+download "https://www.lua.org/ftp/lua-$LUA_VERSION.tar.gz" "$CACHE/downloads/lua-$LUA_VERSION.tar.gz" "$LUA_SHA256"
+extract "$CACHE/downloads/lua-$LUA_VERSION.tar.gz" "$LUA" src/lua.h
+
+# A content fingerprint also detects deleted files and compiler/SDK changes.
+{
+    printf '%s\n' "$MODE" "$OS" "$ARCH" "$DOTCMD_VERSION"
+    cc --version
+    if [ "$OS" = macos ]; then printf '%s\n' "$SDK"; xcrun --sdk macosx --show-sdk-version; fi
+    for input in build build.ps1 toolchain.env embed.c THIRD_PARTY.txt; do sha256 "$input"; done
+    find src -type f | LC_ALL=C sort | while IFS= read -r input; do
+        printf '%s\n' "$input"
+        sha256 "$input"
+    done
+} > "$OUT/inputs.tmp"
+FINGERPRINT=$(sha256 "$OUT/inputs.tmp")
+rm "$OUT/inputs.tmp"
+if [ -x "$OUT/dotcmd" ] && [ -f "$OUT/inputs.sha256" ] && [ "$(cat "$OUT/inputs.sha256")" = "$FINGERPRINT" ]; then
+    echo "Up to date: $OUT/dotcmd"
+    exit 0
+fi
+
+echo "Building $OS-$ARCH ($MODE)"
+mkdir -p "$OUT/obj" "$OUT/generated"
+printf '#define DOTCMD_VERSION "%s"\n#define DOTCMD_BUILD "%s"\n' "$DOTCMD_VERSION" "$MODE" > "$OUT/generated/build_config.h"
+cc -std=c99 -O2 embed.c -o "$OUT/embed"
+"$OUT/embed" src/main.lua "$OUT/generated/main_lua.h" main_lua
+"$OUT/embed" THIRD_PARTY.txt "$OUT/generated/licenses.h" licenses
+
+if [ "$MODE" = release ]; then OPT=-Oz; else OPT=-O0; fi
+set --
+for source in "$LUA"/src/*.c; do
+    case "$source" in */lua.c|*/luac.c|*/onelua.c) continue;; esac
+    object="$OUT/obj/$(basename "$source" .c).o"
+    cc -std=c99 "$OPT" -g -DLUA_USE_POSIX -ffunction-sections -fdata-sections -c "$source" -o "$object"
+    set -- "$@" "$object"
+done
+cc -x c++ -std=c++11 -fno-exceptions -fno-rtti -Wall -Wextra -Werror "$OPT" -g \
+    -ffunction-sections -fdata-sections -I"$LUA/src" -I"$OUT/generated" \
+    -c src/main.cpp -o "$OUT/obj/main.o"
+set -- "$@" "$OUT/obj/main.o"
+if [ "$OS" = linux ]; then
+    set -- "$@" -static -Wl,--gc-sections
+    if [ "$MODE" = release ]; then set -- "$@" -s; fi
+else
+    set -- "$@" -Wl,-dead_strip
+    if [ "$MODE" = release ]; then set -- "$@" -Wl,-x; fi
+fi
+cc "$@" -lm -o "$OUT/dotcmd.tmp"
+mv "$OUT/dotcmd.tmp" "$OUT/dotcmd"
+printf '%s\n' "$FINGERPRINT" > "$OUT/inputs.sha256"
+echo "$OUT/dotcmd"

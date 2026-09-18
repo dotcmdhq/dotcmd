@@ -94,10 +94,10 @@ jobs:
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          sed "s/^:; version=.*/:; version=$VERSION/" .cmd > dist/.cmd
-          chmod +x dist/.cmd
+          sed "s/^:; version=.*/:; version=$VERSION/" .cmd > dist/dotcmd.cmd
+          chmod +x dist/dotcmd.cmd
           assets=(
-            dist/.cmd
+            dist/dotcmd.cmd
             dist/dotcmd-linux-x64
             dist/dotcmd-linux-arm64
             dist/dotcmd-macos-x64
@@ -107,4 +107,5 @@ jobs:
           )
           for asset in "${assets[@]}"; do test -s "$asset"; done
           gh release create "$VERSION" "${assets[@]}" \
-            --target "$GITHUB_SHA" --title "$VERSION" --generate-notes
+            --target "$GITHUB_SHA" --title "$VERSION" --generate-notes \
+            --notes 'Download dotcmd.cmd and save it as .cmd in your project. On Linux/macOS, make it executable with chmod +x .cmd. It downloads and caches the matching binary on first run.'

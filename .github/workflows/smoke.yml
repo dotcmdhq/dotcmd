@@ -1,0 +1,79 @@
+name: Smoke test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unix:
+    name: ${{ matrix.os }} / ${{ matrix.shell }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            shell: bash
+          - os: ubuntu-latest
+            shell: sh
+          - os: macos-latest
+            shell: bash
+          - os: macos-latest
+            shell: zsh
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: checkout with spaces
+      - name: Test direct invocation, arguments, and exit code
+        working-directory: checkout with spaces
+        shell: ${{ matrix.shell }} {0}
+        run: . ./tests/smoke.sh
+
+  windows:
+    name: Windows / ${{ matrix.shell }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [pwsh, cmd]
+    runs-on: windows-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: checkout with spaces
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: checkout with spaces
+      - name: Test from PowerShell
+        if: matrix.shell == 'pwsh'
+        shell: pwsh
+        run: |
+          $output = .\.cmd
+          if ($LASTEXITCODE -ne 0 -or $output -ne 'dotcmd: cmd') {
+            throw "Unexpected greeting or exit code: $output / $LASTEXITCODE"
+          }
+          Write-Output $output
+          .\.cmd python tests/probe.py "two words" plain
+          if ($LASTEXITCODE -ne 37) {
+            throw "Expected exit code 37, got $LASTEXITCODE"
+          }
+          Write-Output 'exit code: 37 (OK)'
+          exit 0
+      - name: Test from CMD
+        if: matrix.shell == 'cmd'
+        shell: cmd
+        run: |
+          cmd /d /c .\.cmd > greeting.txt
+          if errorlevel 1 exit /b 1
+          type greeting.txt
+          findstr /x /c:"dotcmd: cmd" greeting.txt > nul
+          if errorlevel 1 exit /b 1
+          cmd /d /c .\.cmd python tests/probe.py "two words" plain
+          if not "%errorlevel%"=="37" exit /b 1
+          echo exit code: 37 (OK)
+          exit /b 0

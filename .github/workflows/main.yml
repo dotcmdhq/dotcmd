@@ -88,14 +88,30 @@ jobs:
           pattern: dotcmd-*
           path: dist
           merge-multiple: true
+      - name: Prepare launcher
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        shell: bash
+        run: |
+          sed "s/^:; version=.*/:; version=$VERSION/" .cmd > dist/dotcmd.cmd
+          for platform in linux-x64 linux-arm64 macos-x64 macos-arm64 windows-x64 windows-arm64; do
+            asset="dist/dotcmd-$platform"
+            case "$platform" in windows-*) asset="$asset.exe";; esac
+            test -s "$asset"
+            hash=$(sha256sum < "$asset")
+            hash=${hash%% *}
+            key="sha_${platform//-/_}"
+            grep -q "^:; $key=" dist/dotcmd.cmd
+            sed -i "s/^:; $key=.*/:; $key=$hash/" dist/dotcmd.cmd
+          done
+          chmod +x dist/dotcmd.cmd
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ needs.version.outputs.version }}
+        shell: bash
         run: |
-          sed "s/^:; version=.*/:; version=$VERSION/" .cmd > dist/dotcmd.cmd
-          chmod +x dist/dotcmd.cmd
           assets=(
             dist/dotcmd.cmd
             dist/dotcmd-linux-x64
@@ -106,6 +122,14 @@ jobs:
             dist/dotcmd-windows-arm64.exe
           )
           for asset in "${assets[@]}"; do test -s "$asset"; done
+          url="https://github.com/$GH_REPO/releases/download/$VERSION/dotcmd.cmd"
+          printf '%s\n' \
+            'Run in your project directory.' '' \
+            'Linux/macOS:' '' '```sh' \
+            "curl -fsSL \"$url\" -o .cmd && chmod +x .cmd" \
+            '```' '' 'Windows (PowerShell):' '' '```powershell' \
+            "Invoke-WebRequest -UseBasicParsing \"$url\" -OutFile .cmd" \
+            '```' > "$RUNNER_TEMP/dotcmd-release-notes.md"
           gh release create "$VERSION" "${assets[@]}" \
-            --target "$GITHUB_SHA" --title "$VERSION" --generate-notes \
-            --notes 'Download dotcmd.cmd and save it as .cmd in your project. On Linux/macOS, make it executable with chmod +x .cmd. It downloads and caches the matching binary on first run.'
+            --target "$GITHUB_SHA" --title "$VERSION" \
+            --notes-file "$RUNNER_TEMP/dotcmd-release-notes.md"

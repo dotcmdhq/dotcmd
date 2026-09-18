@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 0
       - name: Determine version
         id: version
-        run: echo "version=1.$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+        run: echo "version=0.1.$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
 
   build:
     name: ${{ matrix.os }}-${{ matrix.arch }}
@@ -30,12 +30,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {os: linux, arch: x64, runner: ubuntu-24.04, shell: bash}
-          - {os: linux, arch: arm64, runner: ubuntu-24.04-arm, shell: bash}
-          - {os: macos, arch: x64, runner: macos-15-intel, shell: bash}
-          - {os: macos, arch: arm64, runner: macos-15, shell: bash}
-          - {os: windows, arch: x64, runner: windows-2025, shell: pwsh}
-          - {os: windows, arch: arm64, runner: windows-11-arm, shell: pwsh}
+          - {os: linux, arch: x64, runner: ubuntu-24.04}
+          - {os: linux, arch: arm64, runner: ubuntu-24.04-arm}
+          - {os: macos, arch: x64, runner: macos-15-intel}
+          - {os: macos, arch: arm64, runner: macos-15}
+          - {os: windows, arch: x64, runner: windows-2025}
+          - {os: windows, arch: arm64, runner: windows-11-arm}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     defaults:
@@ -69,7 +69,6 @@ jobs:
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item target/release/dotcmd.exe "dist/dotcmd-windows-${{ matrix.arch }}.exe"
       - name: Run tests
-        shell: ${{ matrix.shell }}
         run: echo 'Tests are not implemented yet.'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

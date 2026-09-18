@@ -2,8 +2,8 @@
 :; set -eu
 :; case "$(uname -s)" in Linux) os=linux;; Darwin) os=macos;; *) echo 'dotcmd: unsupported OS' >&2; exit 1;; esac
 :; case "$(uname -m)" in x86_64|amd64) arch=x64;; arm64|aarch64) arch=arm64;; *) echo 'dotcmd: unsupported CPU architecture' >&2; exit 1;; esac
-:; root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-:; cache="$root/.cache/dotcmd/$version/$os-$arch"
+:; case "$os" in linux) case "${XDG_CACHE_HOME:-}" in /*) cache="$XDG_CACHE_HOME/dotcmd";; *) cache="${HOME:?dotcmd: HOME is not set}/.cache/dotcmd";; esac;; macos) cache="${HOME:?dotcmd: HOME is not set}/Library/Caches/dotcmd";; esac
+:; cache="$cache/$version/$os-$arch"
 :; binary="$cache/dotcmd"
 :; if [ ! -x "$binary" ]; then mkdir -p "$cache"; tmp=$(mktemp -d "$cache/.download.XXXXXX"); trap 'rm -rf "$tmp"' EXIT; trap 'exit 130' INT; trap 'exit 143' TERM; curl --fail --location --retry 3 --silent --show-error "https://github.com/vlaaad/dotcmd/releases/download/$version/dotcmd-$os-$arch" -o "$tmp/dotcmd"; chmod +x "$tmp/dotcmd"; mv -f "$tmp/dotcmd" "$binary"; rmdir "$tmp"; trap - EXIT INT TERM; fi
 :; exec "$binary" "$@"
@@ -16,7 +16,8 @@ set "arch="
 if /i "%machine%"=="AMD64" set "arch=x64"
 if /i "%machine%"=="ARM64" set "arch=arm64"
 if not defined arch goto unsupported
-set "cache=%~dp0.cache\dotcmd\%version%\windows-%arch%"
+if not defined LOCALAPPDATA goto missing_cache
+set "cache=%LOCALAPPDATA%\dotcmd\Cache\%version%\windows-%arch%"
 set "binary=%cache%\dotcmd.exe"
 if exist "%binary%" goto run
 if not exist "%cache%" mkdir "%cache%"
@@ -36,4 +37,7 @@ if exist "%tmp%" del /q "%tmp%"
 exit /b 1
 :unsupported
 echo dotcmd: unsupported CPU architecture >&2
+exit /b 1
+:missing_cache
+echo dotcmd: LOCALAPPDATA is not set >&2
 exit /b 1

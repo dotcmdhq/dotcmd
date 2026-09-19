@@ -22,6 +22,7 @@ extern "C" {
 #include "main_lua.h"
 #include "licenses.h"
 #include "http.h"
+#include "exec.h"
 #include <curl/curl.h>
 
 #if defined(_WIN32)
@@ -129,6 +130,7 @@ static int Run(lua_State* L) {
     Invocation* invocation = (Invocation*)lua_touserdata(L, 1);
     luaL_openlibs(L);
     RegisterHttp(L);
+    RegisterExec(L);
     // Built-in modules remain available. Do not pick up an installed Lua tree.
     lua_getglobal(L, "package");
     SetString(L, "path", "");

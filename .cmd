@@ -11,7 +11,7 @@
 :; case "$os" in linux) case "${XDG_CACHE_HOME:-}" in /*) cache="$XDG_CACHE_HOME/dotcmd";; *) cache="${HOME:?dotcmd: HOME is not set}/.cache/dotcmd";; esac;; macos) cache="${HOME:?dotcmd: HOME is not set}/Library/Caches/dotcmd";; esac
 :; cache="$cache/$version/$os-$arch"
 :; binary="$cache/dotcmd"
-:; if [ -x "$binary" ]; then exec "$binary" "$@"; fi
+:; if [ -x "$binary" ]; then exec "$binary" --launcher "$0" "$@"; fi
 :; case "$os-$arch" in linux-x64) expected=$sha_linux_x64;; linux-arm64) expected=$sha_linux_arm64;; macos-x64) expected=$sha_macos_x64;; macos-arm64) expected=$sha_macos_arm64;; esac
 :; case "$os" in linux) sha_tool=sha256sum;; macos) sha_tool=shasum;; esac
 :; sha_path=$(command -v "$sha_tool" || true)
@@ -29,7 +29,7 @@
 :; chmod +x "$tmp"
 :; mv -f "$tmp" "$binary"
 :; trap - EXIT INT TERM
-:; exec "$binary" "$@"
+:; exec "$binary" --launcher "$0" "$@"
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
 for /f "tokens=2 delims==" %%V in ('findstr /b /c:":; version=" "%~f0"') do set "version=%%V"
@@ -54,7 +54,7 @@ set "dotcmd_url=https://github.com/vlaaad/dotcmd/releases/download/%version%/dot
 "%powershell_path%" -NoLogo -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; $tmp = Join-Path $env:cache ('.download-' + [Guid]::NewGuid() + '.exe'); try { [void][IO.Directory]::CreateDirectory($env:cache); Invoke-WebRequest -UseBasicParsing -Uri $env:dotcmd_url -OutFile $tmp; if ((Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash -ne $env:dotcmd_expected_sha) { throw 'SHA-256 mismatch' }; Move-Item -LiteralPath $tmp -Destination $env:binary -Force } catch { [Console]::Error.WriteLine('dotcmd: ' + $_.Exception.Message); exit 1 } finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }"
 if errorlevel 1 exit /b 1
 :run
-"%binary%" %*
+"%binary%" --launcher "%~f0" %*
 exit /b %errorlevel%
 :unsupported
 echo dotcmd: unsupported CPU architecture >&2

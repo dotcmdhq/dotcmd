@@ -1,0 +1,18 @@
+# Let normal CMake projects use the pinned Zig compiler, including try_compile.
+set(CMAKE_SYSTEM_NAME Linux)
+string(REGEX MATCH "^[^-]+" CMAKE_SYSTEM_PROCESSOR "${DOTCMD_ZIG_TARGET}")
+set(CMAKE_C_COMPILER "${DOTCMD_ZIG}")
+set(CMAKE_C_COMPILER_ARG1 "cc -target ${DOTCMD_ZIG_TARGET} -mcpu=baseline")
+set(CMAKE_CXX_COMPILER "${DOTCMD_ZIG}")
+# cc recognizes .cpp sources without pulling in the unused C++ standard library.
+set(CMAKE_CXX_COMPILER_ARG1 "cc -target ${DOTCMD_ZIG_TARGET} -mcpu=baseline")
+set(CMAKE_ASM_COMPILER "${DOTCMD_ZIG}")
+set(CMAKE_ASM_COMPILER_ARG1 "cc -target ${DOTCMD_ZIG_TARGET} -mcpu=baseline")
+set(CMAKE_AR "${DOTCMD_ZIG}")
+foreach(language C CXX)
+    set(CMAKE_${language}_ARCHIVE_CREATE "<CMAKE_AR> ar qc <TARGET> <LINK_FLAGS> <OBJECTS>")
+    set(CMAKE_${language}_ARCHIVE_APPEND "<CMAKE_AR> ar q <TARGET> <LINK_FLAGS> <OBJECTS>")
+    set(CMAKE_${language}_ARCHIVE_FINISH "<CMAKE_AR> ar s <TARGET>")
+endforeach()
+set(CMAKE_EXE_LINKER_FLAGS_INIT "-static")
+list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES DOTCMD_ZIG DOTCMD_ZIG_TARGET)

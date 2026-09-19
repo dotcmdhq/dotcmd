@@ -148,7 +148,7 @@ static int Run(lua_State* L) {
     SetString(L, "arch", DOTCMD_ARCH);
     SetString(L, "build", DOTCMD_BUILD);
     SetString(L, "lua_version", LUA_RELEASE);
-    SetString(L, "compiler", __clang_version__);
+    SetString(L, "compiler", DOTCMD_COMPILER);
     char* path = ExecutablePath();
     if (!path) return luaL_error(L, "cannot determine executable path");
     SetString(L, "executable", path);

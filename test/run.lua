@@ -14,7 +14,7 @@ return function(repo)
     fs.mkdir(home)
     local cache_root = windows and (appdata .. '/dotcmd/Cache')
         or host.os == 'macos' and (home .. '/Library/Caches/dotcmd') or (cache .. '/dotcmd')
-    local binary = repo .. '/target/release/dotcmd' .. (windows and '.exe' or '')
+    local binary = host.executable
     local binary_dir = cache_root .. '/test/' .. host.os .. '-' .. host.arch
     fs.mkdir(binary_dir)
     local cached = binary_dir .. '/dotcmd' .. (windows and '.exe' or '')

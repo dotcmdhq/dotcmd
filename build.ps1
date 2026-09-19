@@ -98,7 +98,7 @@ try {
     if (!(Test-Path "$Http/complete")) {
         & $Cmake -S $Curl -B $Http -C "$Root/curl.cmake" -G Ninja `
             "-DCMAKE_MAKE_PROGRAM=$NinjaDir/ninja.exe" "-DCMAKE_C_COMPILER=$script:Compiler" `
-            "-DCMAKE_RC_COMPILER=$Toolchain/bin/$Triple-w64-mingw32-windres.exe" `
+            "-DCMAKE_RC_COMPILER=$($Toolchain.Replace('\', '/'))/bin/$Triple-w64-mingw32-windres.exe" `
             '-DCMAKE_BUILD_TYPE=MinSizeRel' '-DCMAKE_C_FLAGS=-ffunction-sections -fdata-sections' `
             '-DCMAKE_EXE_LINKER_FLAGS=-static' '-DCURL_USE_SCHANNEL=ON' '-DCURL_USE_OPENSSL=OFF'
         if ($LASTEXITCODE -ne 0) { throw 'Configuring libcurl failed' }

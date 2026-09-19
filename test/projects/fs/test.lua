@@ -51,7 +51,7 @@ end)
 
 test('fs rename replacement and marking a file executable', function()
     t.write('from', 'new'); t.write('to', 'old')
-    fs.rename('from', 'to')
+    fs.rename('from', 'to', { if_exists = 'replace' })
     assert(t.read('to') == 'new' and fs.stat('from') == nil)
     fs.make_executable('to')
     assert(t.read('to') == 'new')

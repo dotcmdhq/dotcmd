@@ -1,5 +1,4 @@
 #include "fs.h"
-#include "lua_error.h"
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -411,15 +410,20 @@ static int Remove(lua_State* L) {
 }
 
 static int Rename(lua_State* L) {
-    bool replace = Option(L, 3, "replace", true);
+    static const char* const policies[] = {"error", "skip", "replace", NULL};
+    if (lua_isnoneornil(L, 3)) lua_pushnil(L); else lua_getfield(L, 3, "if_exists");
+    int policy = luaL_checkoption(L, -1, "error", policies); lua_pop(L, 1);
+    bool replace = policy == 2;
     State* state = NewState(L);
     PathChar* from = Path(L, state, 0, 1);
     PathChar* to = Path(L, state, 1, 2);
 #ifdef _WIN32
     if (!MoveFileExW(from, to, replace ? MOVEFILE_REPLACE_EXISTING : 0)) {
         DWORD error = GetLastError();
-        if (error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS)
-            return DestinationExists(L, "fs.rename", lua_tostring(L, 2));
+        if (policy == 1 && (error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS)) {
+            lua_pushboolean(L, false);
+            return 1;
+        }
         return Fail(L, "rename", lua_tostring(L, 1), error);
     }
 #else
@@ -430,11 +434,15 @@ static int Rename(lua_State* L) {
     int result = replace ? rename(from, to) : renamex_np(from, to, RENAME_EXCL);
 #endif
     if (result < 0) {
-        if (errno == EEXIST || errno == ENOTEMPTY) return DestinationExists(L, "fs.rename", lua_tostring(L, 2));
+        if (policy == 1 && (errno == EEXIST || errno == ENOTEMPTY)) {
+            lua_pushboolean(L, false);
+            return 1;
+        }
         return Fail(L, "rename", lua_tostring(L, 1), errno);
     }
 #endif
-    return 0;
+    lua_pushboolean(L, true);
+    return 1;
 }
 
 static int MakeExecutable(lua_State* L) {

@@ -33,13 +33,6 @@ local function cache_dir()
 end
 host.cache_dir = cache_dir()
 
-local function cache_publish(fn, ...)
-    local ok, err = pcall(fn, ...)
-    if not ok and (type(err) ~= "table" or err.code ~= "destination_exists") then
-        error(err, 0)
-    end
-end
-
 -- Completed entries are trusted; only fresh downloads are verified.
 function cached(options)
     local hash = options.sha256
@@ -75,17 +68,18 @@ function cached(options)
         })
         http { url = options.url, path = temp, check = true }
         assert(sha256 { path = temp } == hash, "cached: SHA-256 mismatch")
-        cache_publish(fs.rename, temp, download_path, { replace = false })
+        fs.rename(temp, download_path, { if_exists = "skip" })
     end
 
     if extraction then
         fs.mkdir(host.cache_dir .. "/extracted")
-        cache_publish(extract, {
+        extract {
             path = download_path,
             to = extraction_path,
             strip_components = extraction.strip_components,
             include = extraction.include,
-        })
+            if_exists = "skip",
+        }
     end
     return result_path
 end

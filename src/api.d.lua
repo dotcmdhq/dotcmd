@@ -50,18 +50,17 @@
 ---@field list fun(path: string): fun(): string? Unsorted entry names for a generic for loop.
 ---@field mkdir fun(path: string) Creates parent directories too.
 ---@field remove fun(path: string, options?: {recursive?: boolean}) Ignores missing paths; never traverses symlinks.
----@field rename fun(from: string, to: string, options?: {replace?: boolean}) Atomic rename; replace defaults to true. An existing destination raises dotcmd.DestinationExists when replace=false.
+---@field rename fun(from: string, to: string, options?: {if_exists?: dotcmd.IfExists}): boolean Atomic rename; if_exists defaults to error. Returns true on success, false when skipped; failures raise.
 ---@field make_executable fun(path: string) Adds Unix execute bits; no-op on Windows.
 
 ---@class dotcmd.Extraction
 ---@field strip_components? integer Leading path components to remove; defaults to 0.
 ---@field include? string[] Exact archive paths or directory prefixes, matched before stripping.
 
----@class dotcmd.DestinationExists
----@field code "destination_exists"
----@field message string Also returned by tostring(error).
+---@alias dotcmd.IfExists "error"|"skip"|"replace"
 
 ---@class dotcmd.ExtractOptions: dotcmd.Extraction
+---@field if_exists? dotcmd.IfExists Defaults to error. Replacement swaps trees on Unix; Windows moves the old tree aside before publication.
 ---@field path string Archive file; format detected by contents.
 ---@field to? string New destination directory; defaults to the archive path without its suffix.
 
@@ -86,5 +85,5 @@
 ---@field exec fun(program: string|dotcmd.ExecOptions, ...: string): integer, string?, string? Exit code and captured stdout/stderr. Executes without a shell.
 ---@field sha256 fun(input: string|dotcmd.File): string Hash bytes or a file; returns lowercase hexadecimal.
 ---@field fs dotcmd.Fs
----@field extract fun(options: string|dotcmd.ExtractOptions) Extract ZIP, tar, tar.gz, or tar.xz. Destination must not exist; parent must exist.
+---@field extract fun(options: string|dotcmd.ExtractOptions): boolean Extract ZIP, tar, tar.gz, or tar.xz. Returns true on success, false when skipped; parent must exist.
 ---@field cached fun(options: dotcmd.CachedOptions): string Absolute cached file path, or directory path when extracting.

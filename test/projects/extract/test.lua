@@ -17,7 +17,7 @@ for _, format in ipairs({ 'tar', 'tar.gz', 'tar.xz', 'zip' }) do
     test('extract ' .. format .. ' by contents, including Unicode', function()
         local path = 'sdk-' .. format .. '.bin'
         t.write(path, t.read('fixtures/sdk.' .. format))
-        assert(select('#', extract { path = path, to = 'out-' .. format }) == 0)
+        assert(extract { path = path, to = 'out-' .. format } == true)
         assert(t.read('out-' .. format .. '/sdk/lib/value') == 'library')
         assert(t.read('out-' .. format .. '/sdk/share/ü.txt') == 'unicode')
         assert(t.read('out-' .. format .. '/sdk/share/large') == string.rep('\0', 65536))

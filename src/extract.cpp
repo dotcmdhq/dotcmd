@@ -1,6 +1,5 @@
 #include "extract.h"
 #include "fs.h"
-#include "lua_error.h"
 #include <archive.h>
 #include <archive_entry.h>
 #include <errno.h>
@@ -40,6 +39,7 @@ struct State {
     char* temporary;
     char* scratch[4];
     bool staged;
+    int if_exists;
 #ifdef _WIN32
     char* previous_locale;
     int previous_locale_mode;
@@ -204,7 +204,7 @@ static const char* Strip(const char* path, lua_Integer count) {
     return path;
 }
 
-static void PrepareDestination(lua_State* L, State* s, const char* path) {
+static bool PrepareDestination(lua_State* L, State* s, const char* path) {
     Copy(L, &s->scratch[0], path);
     char* output = s->scratch[0];
 #ifdef _WIN32
@@ -220,7 +220,10 @@ static void PrepareDestination(lua_State* L, State* s, const char* path) {
     Canonical(L, &s->scratch[2], slash ? (*output ? output : "/") : ".");
     lua_pushfstring(L, "%s/%s", s->scratch[2], s->scratch[1]);
     Copy(L, &s->destination, lua_tostring(L, -1)); lua_pop(L, 1);
-    if (Exists(L, s->destination)) DestinationExists(L, "extract", s->destination);
+    if (Exists(L, s->destination)) {
+        if (s->if_exists == 1) return false;
+        if (s->if_exists == 0) luaL_error(L, "extract: destination already exists: %s", s->destination);
+    }
     lua_pushfstring(L, "%s.extract-XXXXXXXXXXXXXXXX", s->destination);
     Copy(L, &s->temporary, lua_tostring(L, -1)); lua_pop(L, 1);
 #ifdef _WIN32
@@ -239,28 +242,59 @@ static void PrepareDestination(lua_State* L, State* s, const char* path) {
     if (!mkdtemp(s->temporary)) luaL_error(L, "extract: cannot create temporary directory: %s", strerror(errno));
 #endif
     s->staged = true;
+    return true;
 }
 
-static void Publish(lua_State* L, State* s) {
+static bool Publish(lua_State* L, State* s) {
 #ifdef _WIN32
     wchar_t* from = Wide(L, s->temporary);
     wchar_t* to = Wide(L, s->destination);
-    BOOL moved = MoveFileExW(from, to, 0); DWORD error = GetLastError(); lua_pop(L, 2);
-    if (!moved && (error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS))
-        DestinationExists(L, "extract", s->destination);
-    if (!moved) luaL_error(L, "extract: cannot publish destination (Windows error %d)", (int)error);
-#elif defined(__linux__)
-    if (syscall(SYS_renameat2, AT_FDCWD, s->temporary, AT_FDCWD, s->destination, 1 /* RENAME_NOREPLACE */) < 0) {
-        if (errno == EEXIST || errno == ENOTEMPTY) DestinationExists(L, "extract", s->destination);
-        luaL_error(L, "extract: cannot publish destination: %s", strerror(errno));
+    if (MoveFileExW(from, to, 0)) { s->staged = false; return true; }
+    DWORD error = GetLastError();
+    if (error != ERROR_ALREADY_EXISTS && error != ERROR_FILE_EXISTS)
+        luaL_error(L, "extract: cannot publish destination (Windows error %d)", (int)error);
+    if (s->if_exists == 1) return false;
+    if (s->if_exists == 0) luaL_error(L, "extract: destination already exists: %s", s->destination);
+    // Windows cannot exchange directories. Keep the old tree until publication succeeds.
+    const char* backup = lua_pushfstring(L, "%s.old", s->temporary);
+    wchar_t* old = Wide(L, backup);
+    if (!MoveFileExW(to, old, 0))
+        luaL_error(L, "extract: cannot move existing destination (Windows error %d)", (int)GetLastError());
+    if (!MoveFileExW(from, to, 0)) {
+        error = GetLastError();
+        if (!MoveFileExW(old, to, 0))
+            luaL_error(L, "extract: cannot publish destination (Windows error %d); original saved at %s", (int)error, backup);
+        luaL_error(L, "extract: cannot publish destination (Windows error %d)", (int)error);
     }
+    s->staged = false;
+    if (!RemoveFsTree(backup)) luaL_error(L, "extract: cannot remove previous destination %s", backup);
+    return true;
 #else
-    if (renamex_np(s->temporary, s->destination, RENAME_EXCL) < 0) {
-        if (errno == EEXIST || errno == ENOTEMPTY) DestinationExists(L, "extract", s->destination);
+    for (;;) {
+        if (s->if_exists == 2) {
+#ifdef __linux__
+            int swapped = (int)syscall(SYS_renameat2, AT_FDCWD, s->temporary, AT_FDCWD, s->destination, 2 /* RENAME_EXCHANGE */);
+#else
+            int swapped = renamex_np(s->temporary, s->destination, RENAME_SWAP);
+#endif
+            // The old tree is now at temporary; the normal cleanup removes it.
+            if (swapped == 0) return true;
+            if (errno != ENOENT) luaL_error(L, "extract: cannot replace destination: %s", strerror(errno));
+        }
+#ifdef __linux__
+        int moved = (int)syscall(SYS_renameat2, AT_FDCWD, s->temporary, AT_FDCWD, s->destination, 1 /* RENAME_NOREPLACE */);
+#else
+        int moved = renamex_np(s->temporary, s->destination, RENAME_EXCL);
+#endif
+        if (moved == 0) { s->staged = false; return true; }
+        if (errno == EEXIST || errno == ENOTEMPTY) {
+            if (s->if_exists == 1) return false;
+            if (s->if_exists == 2) continue;
+            luaL_error(L, "extract: destination already exists: %s", s->destination);
+        }
         luaL_error(L, "extract: cannot publish destination: %s", strerror(errno));
     }
 #endif
-    s->staged = false;
 }
 
 static void FinishEntry(lua_State* L, State* s, struct archive_entry* entry, bool data) {
@@ -284,6 +318,9 @@ static int Extract(lua_State* L) {
     const char* input = String(L, -1);
     State* s = (State*)lua_newuserdatauv(L, sizeof(State), 0);
     memset(s, 0, sizeof(*s)); luaL_setmetatable(L, "dotcmd.extract"); lua_toclose(L, -1);
+    static const char* const policies[] = {"error", "skip", "replace", NULL};
+    if (options) lua_getfield(L, 1, "if_exists"); else lua_pushnil(L);
+    s->if_exists = luaL_checkoption(L, -1, "error", policies); lua_pop(L, 1);
     lua_Integer strip = 0;
     if (options) {
         lua_getfield(L, 1, "strip_components");
@@ -303,7 +340,8 @@ static int Extract(lua_State* L) {
         }
         if (removed) lua_pushstring(L, path); else lua_pushfstring(L, "%s.unpacked", path);
     }
-    PrepareDestination(L, s, String(L, -1)); lua_pop(L, 1);
+    bool prepared = PrepareDestination(L, s, String(L, -1)); lua_pop(L, 1);
+    if (!prepared) { lua_pushboolean(L, false); return 1; }
     if (options) lua_getfield(L, 1, "include"); else lua_pushnil(L);
     int filters = lua_gettop(L);
     size_t count = 0;
@@ -467,8 +505,8 @@ static int Extract(lua_State* L) {
         if (strncmp(resolved, s->scratch[0], root) || (resolved[root] && !Separator(resolved[root])))
             return luaL_error(L, "extract: symbolic link escapes the destination");
     }
-    Publish(L, s);
-    return 0;
+    lua_pushboolean(L, Publish(L, s));
+    return 1;
 }
 
 void RegisterExtract(lua_State* L) {

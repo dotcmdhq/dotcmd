@@ -4,7 +4,7 @@
   },
   "workspace": {
     "library": ["src/api.d.lua"],
-    "ignoreDir": [".cache", "target", ".git"],
+    "ignoreDir": ["target", ".git"],
     "checkThirdParty": false
   }
 }

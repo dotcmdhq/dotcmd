@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 if(CMAKE_HOST_APPLE)
+    # An explicit SDK keeps /usr/local Homebrew headers out of compiler defaults.
+    set(CMAKE_OSX_SYSROOT "macosx" CACHE STRING "macOS SDK")
     set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
 endif()
 project(dotcmd LANGUAGES C CXX)

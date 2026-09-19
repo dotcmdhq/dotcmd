@@ -69,8 +69,46 @@ try {
     Download "https://www.lua.org/ftp/lua-$($Config.LUA_VERSION).tar.gz" $LuaArchive $Config.LUA_SHA256
     Extract $LuaArchive $Lua 'src/lua.h'
 
+    $CmakeHash = $Config["CMAKE_WINDOWS_$($Arch.ToUpperInvariant())_SHA256"]
+    $CmakeArch = if ($Arch -eq 'arm64') { 'arm64' } else { 'x86_64' }
+    $CmakeName = "cmake-$($Config.CMAKE_VERSION)-windows-$CmakeArch"
+    $CmakeDir = Join-Path $Cache "toolchains/$CmakeName"
+    Download "https://github.com/Kitware/CMake/releases/download/v$($Config.CMAKE_VERSION)/$CmakeName.zip" "$Downloads/$CmakeName.zip" $CmakeHash
+    Extract "$Downloads/$CmakeName.zip" $CmakeDir 'bin/cmake.exe'
+    $Cmake = Join-Path $CmakeDir 'bin/cmake.exe'
+    $NinjaPlatform = if ($Arch -eq 'arm64') { 'winarm64' } else { 'win' }
+    $NinjaDir = Join-Path $Cache "toolchains/ninja-$($Config.NINJA_VERSION)"
+    $NinjaArchive = "$Downloads/ninja-$NinjaPlatform-$($Config.NINJA_VERSION).zip"
+    Download "https://github.com/ninja-build/ninja/releases/download/v$($Config.NINJA_VERSION)/ninja-$NinjaPlatform.zip" $NinjaArchive $Config["NINJA_WINDOWS_$($Arch.ToUpperInvariant())_SHA256"]
+    if (!(Test-Path "$NinjaDir/ninja.exe")) {
+        New-Item -ItemType Directory -Force $NinjaDir | Out-Null
+        & $Cmake -E chdir $NinjaDir $Cmake -E tar xf $NinjaArchive
+        if ($LASTEXITCODE -ne 0) { throw 'Extracting Ninja failed' }
+    }
+    $Curl = Join-Path $Cache "deps/curl-$($Config.CURL_VERSION)"
+    $CurlArchive = "$Downloads/curl-$($Config.CURL_VERSION).tar.xz"
+    $CurlTag = $Config.CURL_VERSION.Replace('.', '_')
+    Download "https://github.com/curl/curl/releases/download/curl-$CurlTag/curl-$($Config.CURL_VERSION).tar.xz" $CurlArchive $Config.CURL_SHA256
+    Extract $CurlArchive $Curl 'include/curl/curl.h'
+    $DependencyInputs = @($CompilerVersion, $Arch) + @(Get-FileHash toolchain.env, curl.cmake, build.ps1 -Algorithm SHA256 | ForEach-Object Hash)
+    $DependencyHasher = [System.Security.Cryptography.SHA256]::Create()
+    try { $DependencyKey = [BitConverter]::ToString($DependencyHasher.ComputeHash([Text.Encoding]::UTF8.GetBytes(($DependencyInputs -join "`n")))).Replace('-', '').ToLowerInvariant() }
+    finally { $DependencyHasher.Dispose() }
+    $Http = Join-Path $Cache "deps/http-windows-$Arch-$DependencyKey"
+    if (!(Test-Path "$Http/complete")) {
+        & $Cmake -S $Curl -B $Http -C "$Root/curl.cmake" -G Ninja `
+            "-DCMAKE_MAKE_PROGRAM=$NinjaDir/ninja.exe" "-DCMAKE_C_COMPILER=$script:Compiler" `
+            "-DCMAKE_RC_COMPILER=$Toolchain/bin/$Triple-w64-mingw32-windres.exe" `
+            '-DCMAKE_BUILD_TYPE=MinSizeRel' '-DCMAKE_C_FLAGS=-ffunction-sections -fdata-sections' `
+            '-DCMAKE_EXE_LINKER_FLAGS=-static' '-DCURL_USE_SCHANNEL=ON' '-DCURL_USE_OPENSSL=OFF'
+        if ($LASTEXITCODE -ne 0) { throw 'Configuring libcurl failed' }
+        & $Cmake --build $Http --target libcurl_static --parallel 4
+        if ($LASTEXITCODE -ne 0) { throw 'Building libcurl failed' }
+        New-Item -ItemType File "$Http/complete" | Out-Null
+    }
+
     $Inputs = @("$Mode windows $Arch", $CompilerVersion, $Version)
-    $Files = @(Get-Item build.ps1, toolchain.env, embed.c, THIRD_PARTY.txt) + @(Get-ChildItem src -File -Recurse | Sort-Object FullName)
+    $Files = @(Get-Item build.ps1, toolchain.env, curl.cmake, embed.c, THIRD_PARTY.txt) + @(Get-ChildItem src -File -Recurse | Sort-Object FullName)
     foreach ($File in $Files) {
         $Inputs += $File.FullName.Substring($Root.Length)
         $Inputs += (Get-FileHash $File.FullName -Algorithm SHA256).Hash
@@ -103,10 +141,13 @@ try {
         Compile (@('-std=c99') + $Common + @('-c', $Source.FullName, '-o', $Object))
         $Objects += $Object
     }
-    $MainObject = Join-Path $ObjectsDir 'main.o'
     @("#define DOTCMD_VERSION ""$Version""", "#define DOTCMD_BUILD ""$Mode""") | Set-Content -Encoding ASCII (Join-Path $Generated 'build_config.h')
-    Compile (@('-x', 'c++', '-std=c++11', '-fno-exceptions', '-fno-rtti', '-Wall', '-Wextra', '-Werror', "-I$Lua/src", "-I$Generated") + $Common + @('-c', 'src/main.cpp', '-o', $MainObject))
-    $Link = $Objects + @($MainObject, '-static', '-municode', '-Wl,--gc-sections')
+    foreach ($Source in (Get-ChildItem 'src/*.cpp' | Sort-Object Name)) {
+        $Object = Join-Path $ObjectsDir ($Source.BaseName + '.o')
+        Compile (@('-x', 'c++', '-std=c++11', '-fno-exceptions', '-fno-rtti', '-Wall', '-Wextra', '-Werror', '-DCURL_STATICLIB', "-I$Lua/src", "-I$Generated", "-I$Curl/include") + $Common + @('-c', $Source.FullName, '-o', $Object))
+        $Objects += $Object
+    }
+    $Link = $Objects + @("$Http/lib/libcurl.a", '-static', '-municode', '-Wl,--gc-sections', '-lws2_32', '-lcrypt32', '-lsecur32', '-lbcrypt', '-ladvapi32', '-liphlpapi')
     if ($Mode -eq 'release') { $Link += '-s' }
     Compile ($Link + @('-o', "$Exe.tmp"))
     Move-Item -Force "$Exe.tmp" $Exe

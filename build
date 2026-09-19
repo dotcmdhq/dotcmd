@@ -79,12 +79,65 @@ LUA="$CACHE/deps/lua-$LUA_VERSION"
 download "https://www.lua.org/ftp/lua-$LUA_VERSION.tar.gz" "$CACHE/downloads/lua-$LUA_VERSION.tar.gz" "$LUA_SHA256"
 extract "$CACHE/downloads/lua-$LUA_VERSION.tar.gz" "$LUA" src/lua.h
 
+# Build dependencies are cached locally; nothing is installed on the machine.
+case "$OS-$ARCH" in
+    linux-x64) CMAKE_PLATFORM=linux-x86_64; CMAKE_HASH=$CMAKE_LINUX_X64_SHA256; NINJA_PLATFORM=linux; NINJA_HASH=$NINJA_LINUX_X64_SHA256;;
+    linux-arm64) CMAKE_PLATFORM=linux-aarch64; CMAKE_HASH=$CMAKE_LINUX_ARM64_SHA256; NINJA_PLATFORM=linux-aarch64; NINJA_HASH=$NINJA_LINUX_ARM64_SHA256;;
+    macos-*) CMAKE_PLATFORM=macos10.10-universal; CMAKE_HASH=$CMAKE_MACOS_SHA256; NINJA_PLATFORM=mac; NINJA_HASH=$NINJA_MACOS_SHA256;;
+esac
+CMAKE_DIR="$CACHE/toolchains/cmake-$CMAKE_VERSION"
+CMAKE_REL=bin/cmake
+if [ "$OS" = macos ]; then CMAKE_REL=CMake.app/Contents/bin/cmake; fi
+CMAKE_ARCHIVE="cmake-$CMAKE_VERSION-$CMAKE_PLATFORM.tar.gz"
+download "https://github.com/Kitware/CMake/releases/download/v$CMAKE_VERSION/$CMAKE_ARCHIVE" "$CACHE/downloads/$CMAKE_ARCHIVE" "$CMAKE_HASH"
+extract "$CACHE/downloads/$CMAKE_ARCHIVE" "$CMAKE_DIR" "$CMAKE_REL"
+CMAKE="$CMAKE_DIR/$CMAKE_REL"
+NINJA_DIR="$CACHE/toolchains/ninja-$NINJA_VERSION"
+download "https://github.com/ninja-build/ninja/releases/download/v$NINJA_VERSION/ninja-$NINJA_PLATFORM.zip" "$CACHE/downloads/ninja-$NINJA_PLATFORM-$NINJA_VERSION.zip" "$NINJA_HASH"
+if [ ! -x "$NINJA_DIR/ninja" ]; then
+    mkdir -p "$NINJA_DIR"
+    (cd "$NINJA_DIR" && "$CMAKE" -E tar xf "$CACHE/downloads/ninja-$NINJA_PLATFORM-$NINJA_VERSION.zip")
+    chmod +x "$NINJA_DIR/ninja"
+fi
+CURL="$CACHE/deps/curl-$CURL_VERSION"
+download "https://github.com/curl/curl/releases/download/curl-$(printf '%s' "$CURL_VERSION" | tr . _)/curl-$CURL_VERSION.tar.xz" "$CACHE/downloads/curl-$CURL_VERSION.tar.xz" "$CURL_SHA256"
+extract "$CACHE/downloads/curl-$CURL_VERSION.tar.xz" "$CURL" include/curl/curl.h
+TLS="$CACHE/deps/libressl-$LIBRESSL_VERSION"
+download "https://cdn.openbsd.org/pub/OpenBSD/LibreSSL/libressl-$LIBRESSL_VERSION.tar.gz" "$CACHE/downloads/libressl-$LIBRESSL_VERSION.tar.gz" "$LIBRESSL_SHA256"
+extract "$CACHE/downloads/libressl-$LIBRESSL_VERSION.tar.gz" "$TLS" include/openssl/ssl.h
+
+# Include compiler/SDK and build settings in the native dependency cache key.
+HTTP_KEY=$({ sha256 toolchain.env; sha256 curl.cmake; sha256 build; cc --version; if [ "$OS" = macos ]; then printf '%s\n' "$SDK"; xcrun --sdk macosx --show-sdk-version; fi; } | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | cut -d ' ' -f 1)
+HTTP="$CACHE/deps/http-$OS-$ARCH-$HTTP_KEY"
+if [ ! -f "$HTTP/complete" ]; then
+    set -- -G Ninja "-DCMAKE_MAKE_PROGRAM=$NINJA_DIR/ninja" -DCMAKE_BUILD_TYPE=MinSizeRel \
+        '-DCMAKE_C_FLAGS=-ffunction-sections -fdata-sections' -DBUILD_SHARED_LIBS=OFF
+    if [ "$OS" = linux ]; then
+        printf '#!/bin/sh\nexec "$(dirname "$0")/zig-%s/zig" ar "$@"\n' "$ZIG_VERSION" > "$CACHE/toolchains/zig-ar"
+        printf '#!/bin/sh\nexec "$(dirname "$0")/zig-%s/zig" ar s "$@"\n' "$ZIG_VERSION" > "$CACHE/toolchains/zig-ranlib"
+        chmod +x "$CACHE/toolchains/zig-ar" "$CACHE/toolchains/zig-ranlib"
+        set -- "$@" "-DCMAKE_C_COMPILER=$TOOLCHAIN/zig;cc;-target;$TARGET_ARCH-linux-musl;-mcpu=baseline" \
+            "-DCMAKE_ASM_COMPILER=$TOOLCHAIN/zig;cc;-target;$TARGET_ARCH-linux-musl;-mcpu=baseline" \
+            "-DCMAKE_AR=$CACHE/toolchains/zig-ar" "-DCMAKE_RANLIB=$CACHE/toolchains/zig-ranlib" -DCMAKE_EXE_LINKER_FLAGS=-static
+    else
+        set -- "$@" "-DCMAKE_C_COMPILER=$COMPILER" "-DCMAKE_OSX_SYSROOT=$SDK" "-DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOS_MIN_VERSION"
+    fi
+    "$CMAKE" -S "$TLS" -B "$HTTP/tls" "$@" -DLIBRESSL_APPS=OFF -DLIBRESSL_TESTS=OFF -DLIBRESSL_SKIP_INSTALL=ON -DOPENSSLDIR=/etc/ssl
+    "$CMAKE" --build "$HTTP/tls" --target ssl crypto --parallel 4
+    if [ "$OS" = macos ]; then set -- "$@" -DUSE_APPLE_SECTRUST=ON -DCURL_CA_BUNDLE=none -DCURL_CA_PATH=none; fi
+    "$CMAKE" -S "$CURL" -B "$HTTP/curl" -C "$ROOT/curl.cmake" "$@" \
+        -DCURL_USE_OPENSSL=ON -DOPENSSL_USE_STATIC_LIBS=ON "-DOPENSSL_INCLUDE_DIR=$TLS/include" \
+        "-DOPENSSL_SSL_LIBRARY=$HTTP/tls/ssl/libssl.a" "-DOPENSSL_CRYPTO_LIBRARY=$HTTP/tls/crypto/libcrypto.a"
+    "$CMAKE" --build "$HTTP/curl" --target libcurl_static --parallel 4
+    touch "$HTTP/complete"
+fi
+
 # A content fingerprint also detects deleted files and compiler/SDK changes.
 {
     printf '%s\n' "$MODE" "$OS" "$ARCH" "$DOTCMD_VERSION"
     cc --version
     if [ "$OS" = macos ]; then printf '%s\n' "$SDK"; xcrun --sdk macosx --show-sdk-version; fi
-    for input in build build.ps1 toolchain.env embed.c THIRD_PARTY.txt; do sha256 "$input"; done
+    for input in build build.ps1 toolchain.env curl.cmake embed.c THIRD_PARTY.txt; do sha256 "$input"; done
     find src -type f | LC_ALL=C sort | while IFS= read -r input; do
         printf '%s\n' "$input"
         sha256 "$input"
@@ -112,15 +165,19 @@ for source in "$LUA"/src/*.c; do
     cc -std=c99 "$OPT" -g -DLUA_USE_POSIX -ffunction-sections -fdata-sections -c "$source" -o "$object"
     set -- "$@" "$object"
 done
-cc -x c++ -std=c++11 -fno-exceptions -fno-rtti -Wall -Wextra -Werror "$OPT" -g \
-    -ffunction-sections -fdata-sections -I"$LUA/src" -I"$OUT/generated" \
-    -c src/main.cpp -o "$OUT/obj/main.o"
-set -- "$@" "$OUT/obj/main.o"
+for source in src/*.cpp; do
+    object="$OUT/obj/$(basename "$source" .cpp).o"
+    cc -x c++ -std=c++11 -fno-exceptions -fno-rtti -Wall -Wextra -Werror "$OPT" -g \
+        -DCURL_STATICLIB -ffunction-sections -fdata-sections -I"$LUA/src" -I"$OUT/generated" -I"$CURL/include" \
+        -c "$source" -o "$object"
+    set -- "$@" "$object"
+done
+set -- "$@" "$HTTP/curl/lib/libcurl.a" "$HTTP/tls/ssl/libssl.a" "$HTTP/tls/crypto/libcrypto.a"
 if [ "$OS" = linux ]; then
     set -- "$@" -static -Wl,--gc-sections
     if [ "$MODE" = release ]; then set -- "$@" -s; fi
 else
-    set -- "$@" -Wl,-dead_strip
+    set -- "$@" -Wl,-dead_strip -framework Security -framework CoreFoundation -framework CoreServices -framework SystemConfiguration
     if [ "$MODE" = release ]; then set -- "$@" -Wl,-x; fi
 fi
 cc "$@" -lm -o "$OUT/dotcmd.tmp"

@@ -6,6 +6,7 @@ local function build()
         and {"powershell.exe", "-NoProfile", "-File", host.project_dir .. "/build.ps1", "--release"}
         or {host.project_dir .. "/build", "--release"}
     command.cwd = host.project_dir
+    if windows then command.env = {PSModulePath=false} end
     return exec(command)
 end
 

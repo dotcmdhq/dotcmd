@@ -51,8 +51,11 @@ for %%P in (powershell.exe) do set "powershell_path=%%~$PATH:P"
 if not defined powershell_path if defined SystemRoot if exist "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" set "powershell_path=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 if not defined powershell_path goto missing_powershell
 set "dotcmd_url=https://github.com/vlaaad/dotcmd/releases/download/%version%/dotcmd-windows-%arch%.exe"
+setlocal
+set "PSModulePath="
 "%powershell_path%" -NoLogo -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; $tmp = Join-Path $env:cache ('.download-' + [Guid]::NewGuid() + '.exe'); try { [void][IO.Directory]::CreateDirectory($env:cache); Invoke-WebRequest -UseBasicParsing -Uri $env:dotcmd_url -OutFile $tmp; if ((Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash -ne $env:dotcmd_expected_sha) { throw 'SHA-256 mismatch' }; Move-Item -LiteralPath $tmp -Destination $env:binary -Force } catch { [Console]::Error.WriteLine('dotcmd: ' + $_.Exception.Message); exit 1 } finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }"
 if errorlevel 1 exit /b 1
+endlocal
 :run
 "%binary%" --launcher "%~f0" %*
 exit /b %errorlevel%

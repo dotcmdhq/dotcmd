@@ -34,8 +34,9 @@ test('exec inherits streams', function()
 end)
 
 test('exec environment overlays and removal', function()
-    local options = command('env', 'PATH', 'DOTCMD_TEST_SET', 'HOME', 'DOTCMD_TEST_EMPTY')
-    options.env = {DOTCMD_TEST_SET='new ü value', HOME=false, DOTCMD_TEST_EMPTY=''}
+    assert(os.getenv('USERPROFILE'))
+    local options = command('env', 'PATH', 'DOTCMD_TEST_SET', 'USERPROFILE', 'DOTCMD_TEST_EMPTY')
+    options.env = {DOTCMD_TEST_SET='new ü value', USERPROFILE=false, DOTCMD_TEST_EMPTY=''}
     options.stdout = 'capture'
     local code, out = exec(options)
     assert(code == 0)

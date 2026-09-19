@@ -439,6 +439,7 @@ bool RemoveFsTree(const char* path) {
     wchar_t* wide = (wchar_t*)malloc((size_t)count * sizeof(wchar_t));
     if (!wide) return false;
     MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, wide, count);
+    for (wchar_t* p = wide; *p; ++p) if (*p == L'/') *p = L'\\';
     FsError error = RemoveTree(wide, true);
     free(wide);
 #else

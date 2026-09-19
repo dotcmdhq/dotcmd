@@ -105,6 +105,8 @@ static wchar_t* Wide(lua_State* L, const char* text) {
     if (!count) luaL_error(L, "extract: invalid UTF-8 path");
     wchar_t* wide = (wchar_t*)lua_newuserdatauv(L, (size_t)count * sizeof(wchar_t), 0);
     MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, wide, count);
+    // Extended Windows paths require backslashes, including appended components.
+    for (wchar_t* p = wide; *p; ++p) if (*p == L'/') *p = L'\\';
     return wide;
 }
 #endif

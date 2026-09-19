@@ -1,13 +1,5 @@
 # Let normal CMake projects use the pinned Zig compiler, including try_compile.
-# Reapply the rules after CMake's platform defaults, which overwrite archive commands.
-set(CMAKE_USER_MAKE_RULES_OVERRIDE "${CMAKE_CURRENT_LIST_FILE}")
-if(DOTCMD_ZIG_TARGET MATCHES "-windows-")
-    set(CMAKE_SYSTEM_NAME Windows)
-    set(CMAKE_RC_COMPILER "${DOTCMD_ZIG}")
-    set(CMAKE_RC_COMPILE_OBJECT "<CMAKE_RC_COMPILER> rc <DEFINES> <INCLUDES> <FLAGS> /fo <OBJECT> -- <SOURCE>")
-else()
-    set(CMAKE_SYSTEM_NAME Linux)
-endif()
+set(CMAKE_SYSTEM_NAME Linux)
 string(REGEX MATCH "^[^-]+" CMAKE_SYSTEM_PROCESSOR "${DOTCMD_ZIG_TARGET}")
 set(CMAKE_C_COMPILER "${DOTCMD_ZIG}")
 set(CMAKE_C_COMPILER_ARG1 "cc -target ${DOTCMD_ZIG_TARGET} -mcpu=baseline")

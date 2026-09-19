@@ -98,13 +98,14 @@ local function build(mode)
                 ['linux-x64'] = '70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00',
                 ['linux-arm64'] = 'ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17',
                 ['windows-x64'] = '68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e',
-                ['windows-arm64'] = 'aee38316ee4111717900f45dd3130145c39289e105541d737eb8c5ed653c78ef',
             },
         }
-        local name = 'zig-' .. arch .. '-' .. host.os .. '-' .. zig_config.version
+        -- Zig 0.16's native Windows ARM64 compiler crashes during linking.
+        local compiler_arch = windows and 'x86_64' or arch
+        local name = 'zig-' .. compiler_arch .. '-' .. host.os .. '-' .. zig_config.version
         local toolchain = cached {
             url = 'https://ziglang.org/download/' .. zig_config.version .. '/' .. name .. (windows and '.zip' or '.tar.xz'),
-            sha256 = zig_config.sha256[platform], extract = { strip_components = 1 },
+            sha256 = zig_config.sha256[windows and 'windows-x64' or platform], extract = { strip_components = 1 },
         }
         env.ZIG_GLOBAL_CACHE_DIR = host.cache_dir .. '/zig'
         env.ZIG_LOCAL_CACHE_DIR = output .. '/zig'

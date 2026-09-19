@@ -23,6 +23,8 @@ extern "C" {
 #include "licenses.h"
 #include "http.h"
 #include "exec.h"
+#include "sha256.h"
+#include "fs.h"
 #include <curl/curl.h>
 
 #if defined(_WIN32)
@@ -131,6 +133,8 @@ static int Run(lua_State* L) {
     luaL_openlibs(L);
     RegisterHttp(L);
     RegisterExec(L);
+    RegisterSha256(L);
+    RegisterFs(L);
     // Built-in modules remain available. Do not pick up an installed Lua tree.
     lua_getglobal(L, "package");
     SetString(L, "path", "");

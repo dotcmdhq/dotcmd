@@ -52,23 +52,21 @@ jobs:
             checkout with spaces/.cache/deps
             checkout with spaces/.cache/zig
           key: tools-${{ matrix.os }}-${{ matrix.arch }}-${{ hashFiles('checkout with spaces/toolchain.env') }}
-      - name: Build Unix
+      - name: Build and test Unix
         if: matrix.os != 'windows'
         shell: bash
         run: |
-          ./build --release
+          ./.cmd test
           mkdir -p dist
           cp target/release/dotcmd "dist/dotcmd-${{ matrix.os }}-${{ matrix.arch }}"
-      - name: Build Windows
+      - name: Build and test Windows
         if: matrix.os == 'windows'
         shell: pwsh
         run: |
-          pwsh -NoProfile -File .\build.ps1 --release
+          .\.cmd test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item target/release/dotcmd.exe "dist/dotcmd-windows-${{ matrix.arch }}.exe"
-      - name: Run tests
-        run: echo 'Tests are not implemented yet.'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dotcmd-${{ matrix.os }}-${{ matrix.arch }}

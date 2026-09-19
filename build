@@ -168,7 +168,7 @@ done
 for source in src/*.cpp; do
     object="$OUT/obj/$(basename "$source" .cpp).o"
     cc -x c++ -std=c++11 -fno-exceptions -fno-rtti -Wall -Wextra -Werror "$OPT" -g \
-        -DCURL_STATICLIB -ffunction-sections -fdata-sections -I"$LUA/src" -I"$OUT/generated" -I"$CURL/include" \
+        -DCURL_STATICLIB -ffunction-sections -fdata-sections -I"$LUA/src" -I"$OUT/generated" -I"$CURL/include" -I"$TLS/include" \
         -c "$source" -o "$object"
     set -- "$@" "$object"
 done

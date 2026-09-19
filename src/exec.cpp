@@ -467,8 +467,13 @@ static int RunProcess(lua_State* L, Process* p) {
     // Quote according to the Windows C runtime argv rules, including trailing
     // backslashes and empty arguments. cmd.exe is never involved.
     for (size_t i = 0; i < p->count; ++i) {
-        if (!Append(&p->command, i ? " \"" : "\"", i ? 2 : 1)) luaL_error(L, "exec: out of memory");
         const char* arg = p->args[i];
+        if (i && !Append(&p->command, " ", 1)) luaL_error(L, "exec: out of memory");
+        if (*arg && !strpbrk(arg, " \t\n\v\"")) {
+            if (!Append(&p->command, arg, strlen(arg))) luaL_error(L, "exec: out of memory");
+            continue;
+        }
+        if (!Append(&p->command, "\"", 1)) luaL_error(L, "exec: out of memory");
         for (;;) {
             size_t slashes = 0;
             while (*arg == '\\') { ++slashes; ++arg; }

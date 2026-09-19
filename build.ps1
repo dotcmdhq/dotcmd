@@ -107,8 +107,46 @@ try {
         New-Item -ItemType File "$Http/complete" | Out-Null
     }
 
+    $ArchiveSource = Join-Path $Cache "deps/libarchive-$($Config.LIBARCHIVE_VERSION)"
+    $ZlibSource = Join-Path $Cache "deps/zlib-$($Config.ZLIB_VERSION)"
+    $XzSource = Join-Path $Cache "deps/xz-$($Config.XZ_VERSION)"
+    Download "https://github.com/libarchive/libarchive/releases/download/v$($Config.LIBARCHIVE_VERSION)/libarchive-$($Config.LIBARCHIVE_VERSION).tar.gz" "$Downloads/libarchive-$($Config.LIBARCHIVE_VERSION).tar.gz" $Config.LIBARCHIVE_SHA256
+    Extract "$Downloads/libarchive-$($Config.LIBARCHIVE_VERSION).tar.gz" $ArchiveSource 'libarchive/archive.h'
+    Download "https://zlib.net/fossils/zlib-$($Config.ZLIB_VERSION).tar.gz" "$Downloads/zlib-$($Config.ZLIB_VERSION).tar.gz" $Config.ZLIB_SHA256
+    Extract "$Downloads/zlib-$($Config.ZLIB_VERSION).tar.gz" $ZlibSource 'zlib.h'
+    Download "https://github.com/tukaani-project/xz/releases/download/v$($Config.XZ_VERSION)/xz-$($Config.XZ_VERSION).tar.gz" "$Downloads/xz-$($Config.XZ_VERSION).tar.gz" $Config.XZ_SHA256
+    Extract "$Downloads/xz-$($Config.XZ_VERSION).tar.gz" $XzSource 'src/liblzma/api/lzma.h'
+    $ArchiveKey = "$DependencyKey-$((Get-FileHash archive.cmake -Algorithm SHA256).Hash.ToLowerInvariant())"
+    $ArchiveBuild = Join-Path $Cache "deps/archive-windows-$Arch-$ArchiveKey"
+    if (!(Test-Path "$ArchiveBuild/complete")) {
+        $CmakeArgs = @('-G', 'Ninja', "-DCMAKE_MAKE_PROGRAM=$NinjaDir/ninja.exe", "-DCMAKE_C_COMPILER=$script:Compiler",
+            "-DCMAKE_RC_COMPILER=$($Toolchain.Replace('\', '/'))/bin/$Triple-w64-mingw32-windres.exe",
+            '-DCMAKE_BUILD_TYPE=MinSizeRel', '-DCMAKE_C_FLAGS=-ffunction-sections -fdata-sections',
+            '-DBUILD_SHARED_LIBS=OFF', '-DBUILD_TESTING=OFF', '-DCMAKE_EXE_LINKER_FLAGS=-static',
+            "-DCMAKE_INSTALL_PREFIX=$ArchiveBuild/install", '-DCMAKE_INSTALL_LIBDIR=lib')
+        & $Cmake -S $ZlibSource -B "$ArchiveBuild/zlib" @CmakeArgs -DZLIB_BUILD_SHARED=OFF -DZLIB_BUILD_TESTING=OFF
+        if ($LASTEXITCODE -ne 0) { throw 'Configuring zlib failed' }
+        & $Cmake --build "$ArchiveBuild/zlib" --parallel 4
+        if ($LASTEXITCODE -ne 0) { throw 'Building zlib failed' }
+        & $Cmake --install "$ArchiveBuild/zlib"
+        if ($LASTEXITCODE -ne 0) { throw 'Installing cached zlib failed' }
+        & $Cmake -S $XzSource -B "$ArchiveBuild/xz" @CmakeArgs -DXZ_TOOL_XZ=OFF -DXZ_TOOL_XZDEC=OFF -DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF -DXZ_DOC=OFF -DXZ_NLS=OFF -DXZ_TOOL_SCRIPTS=OFF
+        if ($LASTEXITCODE -ne 0) { throw 'Configuring liblzma failed' }
+        & $Cmake --build "$ArchiveBuild/xz" --target liblzma --parallel 4
+        if ($LASTEXITCODE -ne 0) { throw 'Building liblzma failed' }
+        & $Cmake --install "$ArchiveBuild/xz"
+        if ($LASTEXITCODE -ne 0) { throw 'Installing cached liblzma failed' }
+        & $Cmake -S $ArchiveSource -B "$ArchiveBuild/libarchive" -C "$Root/archive.cmake" @CmakeArgs `
+            "-DZLIB_INCLUDE_DIR=$ArchiveBuild/install/include" "-DZLIB_LIBRARY=$ArchiveBuild/install/lib/libzs.a" `
+            "-DLIBLZMA_INCLUDE_DIR=$ArchiveBuild/install/include" "-DLIBLZMA_LIBRARY=$ArchiveBuild/install/lib/liblzma.a"
+        if ($LASTEXITCODE -ne 0) { throw 'Configuring libarchive failed' }
+        & $Cmake --build "$ArchiveBuild/libarchive" --target archive_static --parallel 4
+        if ($LASTEXITCODE -ne 0) { throw 'Building libarchive failed' }
+        New-Item -ItemType File "$ArchiveBuild/complete" | Out-Null
+    }
+
     $Inputs = @("$Mode windows $Arch", $CompilerVersion, $Version)
-    $Files = @(Get-Item build.ps1, toolchain.env, curl.cmake, embed.c, THIRD_PARTY.txt) + @(Get-ChildItem src -File -Recurse | Sort-Object FullName)
+    $Files = @(Get-Item build.ps1, toolchain.env, curl.cmake, archive.cmake, embed.c, THIRD_PARTY.txt) + @(Get-ChildItem src -File -Recurse | Sort-Object FullName)
     foreach ($File in $Files) {
         $Inputs += $File.FullName.Substring($Root.Length)
         $Inputs += (Get-FileHash $File.FullName -Algorithm SHA256).Hash
@@ -144,12 +182,13 @@ try {
     @("#define DOTCMD_VERSION ""$Version""", "#define DOTCMD_BUILD ""$Mode""") | Set-Content -Encoding ASCII (Join-Path $Generated 'build_config.h')
     foreach ($Source in (Get-ChildItem 'src/*.cpp' | Sort-Object Name)) {
         $Object = Join-Path $ObjectsDir ($Source.BaseName + '.o')
-        Compile (@('-x', 'c++', '-std=c++11', '-fno-exceptions', '-fno-rtti', '-Wall', '-Wextra', '-Werror', '-DCURL_STATICLIB', "-I$Lua/src", "-I$Generated", "-I$Curl/include") + $Common + @('-c', $Source.FullName, '-o', $Object))
+        Compile (@('-x', 'c++', '-std=c++11', '-fno-exceptions', '-fno-rtti', '-Wall', '-Wextra', '-Werror', '-DCURL_STATICLIB', '-DLIBARCHIVE_STATIC', "-I$Lua/src", "-I$Generated", "-I$Curl/include", "-I$ArchiveSource/libarchive") + $Common + @('-c', $Source.FullName, '-o', $Object))
         $Objects += $Object
     }
     & "$Toolchain/bin/$Triple-w64-mingw32-windres.exe" -I src -i src/windows.rc -o "$ObjectsDir/windows.o" -O coff
     if ($LASTEXITCODE -ne 0) { throw 'Compiling Windows manifest failed' }
     $Link = $Objects + @("$ObjectsDir/windows.o", "$Http/lib/libcurl.a", '-static', '-municode', '-Wl,--gc-sections', '-lws2_32', '-lcrypt32', '-lsecur32', '-lbcrypt', '-ladvapi32', '-liphlpapi')
+    $Link += @("$ArchiveBuild/libarchive/libarchive/libarchive.a", "$ArchiveBuild/install/lib/liblzma.a", "$ArchiveBuild/install/lib/libzs.a")
     if ($Mode -eq 'release') { $Link += '-s' }
     Compile ($Link + @('-o', "$Exe.tmp"))
     Move-Item -Force "$Exe.tmp" $Exe

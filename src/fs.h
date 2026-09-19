@@ -8,3 +8,6 @@ struct lua_State;
 // make_executable(path) adds Unix execute bits (no-op on Windows).
 // UTF-8 paths are relative to cwd. Mutations return nothing; failures raise.
 void RegisterFs(lua_State* L);
+
+// Internal cleanup for temporary extraction trees; never follows links.
+bool RemoveFsTree(const char* path);

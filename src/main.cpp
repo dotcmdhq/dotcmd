@@ -25,6 +25,7 @@ extern "C" {
 #include "exec.h"
 #include "sha256.h"
 #include "fs.h"
+#include "extract.h"
 #include <curl/curl.h>
 
 #if defined(_WIN32)
@@ -135,6 +136,7 @@ static int Run(lua_State* L) {
     RegisterExec(L);
     RegisterSha256(L);
     RegisterFs(L);
+    RegisterExtract(L);
     // Built-in modules remain available. Do not pick up an installed Lua tree.
     lua_getglobal(L, "package");
     SetString(L, "path", "");

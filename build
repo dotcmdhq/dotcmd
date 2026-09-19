@@ -132,12 +132,46 @@ if [ ! -f "$HTTP/complete" ]; then
     touch "$HTTP/complete"
 fi
 
+ARCHIVE_SOURCE="$CACHE/deps/libarchive-$LIBARCHIVE_VERSION"
+ZLIB_SOURCE="$CACHE/deps/zlib-$ZLIB_VERSION"
+XZ_SOURCE="$CACHE/deps/xz-$XZ_VERSION"
+download "https://github.com/libarchive/libarchive/releases/download/v$LIBARCHIVE_VERSION/libarchive-$LIBARCHIVE_VERSION.tar.gz" "$CACHE/downloads/libarchive-$LIBARCHIVE_VERSION.tar.gz" "$LIBARCHIVE_SHA256"
+extract "$CACHE/downloads/libarchive-$LIBARCHIVE_VERSION.tar.gz" "$ARCHIVE_SOURCE" libarchive/archive.h
+download "https://zlib.net/fossils/zlib-$ZLIB_VERSION.tar.gz" "$CACHE/downloads/zlib-$ZLIB_VERSION.tar.gz" "$ZLIB_SHA256"
+extract "$CACHE/downloads/zlib-$ZLIB_VERSION.tar.gz" "$ZLIB_SOURCE" zlib.h
+download "https://github.com/tukaani-project/xz/releases/download/v$XZ_VERSION/xz-$XZ_VERSION.tar.gz" "$CACHE/downloads/xz-$XZ_VERSION.tar.gz" "$XZ_SHA256"
+extract "$CACHE/downloads/xz-$XZ_VERSION.tar.gz" "$XZ_SOURCE" src/liblzma/api/lzma.h
+ARCHIVE="$CACHE/deps/archive-$OS-$ARCH-$HTTP_KEY-$(sha256 archive.cmake)"
+if [ ! -f "$ARCHIVE/complete" ]; then
+    set -- -G Ninja "-DCMAKE_MAKE_PROGRAM=$NINJA_DIR/ninja" -DCMAKE_BUILD_TYPE=MinSizeRel \
+        '-DCMAKE_C_FLAGS=-ffunction-sections -fdata-sections' -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
+        "-DCMAKE_INSTALL_PREFIX=$ARCHIVE/install" -DCMAKE_INSTALL_LIBDIR=lib
+    if [ "$OS" = linux ]; then
+        set -- "$@" "-DCMAKE_C_COMPILER=$TOOLCHAIN/zig;cc;-target;$TARGET_ARCH-linux-musl;-mcpu=baseline" \
+            "-DCMAKE_AR=$CACHE/toolchains/zig-ar" "-DCMAKE_RANLIB=$CACHE/toolchains/zig-ranlib" -DCMAKE_EXE_LINKER_FLAGS=-static
+    else
+        set -- "$@" "-DCMAKE_C_COMPILER=$COMPILER" "-DCMAKE_OSX_SYSROOT=$SDK" "-DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOS_MIN_VERSION"
+    fi
+    "$CMAKE" -S "$ZLIB_SOURCE" -B "$ARCHIVE/zlib" "$@" -DZLIB_BUILD_SHARED=OFF -DZLIB_BUILD_TESTING=OFF
+    "$CMAKE" --build "$ARCHIVE/zlib" --parallel 4
+    "$CMAKE" --install "$ARCHIVE/zlib"
+    "$CMAKE" -S "$XZ_SOURCE" -B "$ARCHIVE/xz" "$@" -DXZ_TOOL_XZ=OFF -DXZ_TOOL_XZDEC=OFF \
+        -DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF -DXZ_DOC=OFF -DXZ_NLS=OFF
+    "$CMAKE" --build "$ARCHIVE/xz" --target liblzma --parallel 4
+    "$CMAKE" --install "$ARCHIVE/xz"
+    "$CMAKE" -S "$ARCHIVE_SOURCE" -B "$ARCHIVE/libarchive" -C "$ROOT/archive.cmake" "$@" \
+        "-DZLIB_INCLUDE_DIR=$ARCHIVE/install/include" "-DZLIB_LIBRARY=$ARCHIVE/install/lib/libz.a" \
+        "-DLIBLZMA_INCLUDE_DIR=$ARCHIVE/install/include" "-DLIBLZMA_LIBRARY=$ARCHIVE/install/lib/liblzma.a"
+    "$CMAKE" --build "$ARCHIVE/libarchive" --target archive_static --parallel 4
+    touch "$ARCHIVE/complete"
+fi
+
 # A content fingerprint also detects deleted files and compiler/SDK changes.
 {
     printf '%s\n' "$MODE" "$OS" "$ARCH" "$DOTCMD_VERSION"
     cc --version
     if [ "$OS" = macos ]; then printf '%s\n' "$SDK"; xcrun --sdk macosx --show-sdk-version; fi
-    for input in build build.ps1 toolchain.env curl.cmake embed.c THIRD_PARTY.txt; do sha256 "$input"; done
+    for input in build build.ps1 toolchain.env curl.cmake archive.cmake embed.c THIRD_PARTY.txt; do sha256 "$input"; done
     find src -type f | LC_ALL=C sort | while IFS= read -r input; do
         printf '%s\n' "$input"
         sha256 "$input"
@@ -168,11 +202,12 @@ done
 for source in src/*.cpp; do
     object="$OUT/obj/$(basename "$source" .cpp).o"
     cc -x c++ -std=c++11 -fno-exceptions -fno-rtti -Wall -Wextra -Werror "$OPT" -g \
-        -DCURL_STATICLIB -ffunction-sections -fdata-sections -I"$LUA/src" -I"$OUT/generated" -I"$CURL/include" -I"$TLS/include" \
+        -DCURL_STATICLIB -DLIBARCHIVE_STATIC -ffunction-sections -fdata-sections -I"$LUA/src" -I"$OUT/generated" -I"$CURL/include" -I"$TLS/include" -I"$ARCHIVE_SOURCE/libarchive" \
         -c "$source" -o "$object"
     set -- "$@" "$object"
 done
 set -- "$@" "$HTTP/curl/lib/libcurl.a" "$HTTP/tls/ssl/libssl.a" "$HTTP/tls/crypto/libcrypto.a"
+set -- "$@" "$ARCHIVE/libarchive/libarchive/libarchive.a" "$ARCHIVE/install/lib/liblzma.a" "$ARCHIVE/install/lib/libz.a"
 if [ "$OS" = linux ]; then
     set -- "$@" -static -Wl,--gc-sections
     if [ "$MODE" = release ]; then set -- "$@" -s; fi

@@ -432,6 +432,21 @@ static int MakeExecutable(lua_State* L) {
     return 0;
 }
 
+bool RemoveFsTree(const char* path) {
+#ifdef _WIN32
+    int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, NULL, 0);
+    if (!count) return false;
+    wchar_t* wide = (wchar_t*)malloc((size_t)count * sizeof(wchar_t));
+    if (!wide) return false;
+    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, wide, count);
+    FsError error = RemoveTree(wide, true);
+    free(wide);
+#else
+    FsError error = RemoveAt(AT_FDCWD, path, true);
+#endif
+    return error == 0;
+}
+
 void RegisterFs(lua_State* L) {
     if (luaL_newmetatable(L, "dotcmd.fs")) {
         lua_pushcfunction(L, Cleanup); lua_setfield(L, -2, "__close");

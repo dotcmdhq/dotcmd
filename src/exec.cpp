@@ -7,11 +7,13 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <fcntl.h>
+#include <io.h>
 #include <wchar.h>
 typedef wchar_t NativeChar;
 #else
 #include <fcntl.h>
-#include <poll.h>
+#include <pthread.h>
 #include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -24,19 +26,24 @@ extern "C" {
 }
 
 struct Buffer { char* data; size_t size; size_t capacity; };
-enum Mode { Inherit, Capture, Discard, File, Merge };
+enum Mode { Inherit, Capture, Discard, File, Merge, PipeStream };
 struct Stream {
     Mode mode;
     NativeChar* path;
     Buffer buffer;
     int error;
+    luaL_Stream* file;
 #ifdef _WIN32
     HANDLE read;
     HANDLE write;
     HANDLE thread;
+    volatile LONG stop;
 #else
     int read;
     int write;
+    pthread_t thread;
+    bool thread_started;
+    bool done;
 #endif
 };
 struct Process {
@@ -45,14 +52,16 @@ struct Process {
     NativeChar** env;
     NativeChar* cwd;
     Buffer command;
-    Stream streams[2];
+    Stream streams[3]; // stdout, stderr, stdin
     bool check;
+    bool exited;
+    bool closed;
+    lua_Integer code;
 #ifdef _WIN32
     wchar_t* application;
     wchar_t* command_line;
     wchar_t* environment;
     HANDLE process;
-    HANDLE input;
     LPPROC_THREAD_ATTRIBUTE_LIST attributes;
     bool attributes_ready;
 #else
@@ -60,6 +69,10 @@ struct Process {
     int error_pipe[2];
 #endif
 };
+
+#ifndef _WIN32
+static struct sigaction original_sigpipe;
+#endif
 
 static bool Append(Buffer* b, const void* data, size_t size) {
     if (size > SIZE_MAX - b->size) return false;
@@ -88,43 +101,80 @@ static void Close(int* fd) {
 }
 #endif
 
-static int Cleanup(lua_State* L) {
-    Process* p = (Process*)lua_touserdata(L, 1);
+static void CloseProcess(Process* p) {
+    if (p->closed) return;
+    p->closed = true;
 #ifdef _WIN32
     if (p->process) {
-        TerminateProcess(p->process, 1);
+        if (WaitForSingleObject(p->process, 0) == WAIT_TIMEOUT) TerminateProcess(p->process, 1);
         WaitForSingleObject(p->process, INFINITE);
+        DWORD code = 1;
+        GetExitCodeProcess(p->process, &code);
+        p->code = code;
+        p->exited = true;
         Close(&p->process);
     }
-    Close(&p->input);
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 3; ++i) {
         Stream* s = &p->streams[i];
         Close(&s->write);
         if (s->thread) {
-            CancelSynchronousIo(s->thread);
-            WaitForSingleObject(s->thread, INFINITE);
+            InterlockedExchange(&s->stop, 1);
+            // Cancellation can race the reader entering ReadFile; retry until
+            // it exits, even if a descendant still holds the pipe's writer.
+            do { CancelSynchronousIo(s->thread); }
+            while (WaitForSingleObject(s->thread, 10) == WAIT_TIMEOUT);
             Close(&s->thread);
         }
         Close(&s->read);
     }
+#else
+    if (p->pid > 0) {
+        int status = 0;
+        pid_t waited;
+        do { waited = waitpid(p->pid, &status, WNOHANG); } while (waited < 0 && errno == EINTR);
+        if (!waited) {
+            kill(p->pid, SIGKILL);
+            do { waited = waitpid(p->pid, &status, 0); } while (waited < 0 && errno == EINTR);
+        }
+        if (waited > 0) {
+            p->code = WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+            p->exited = true;
+        }
+        p->pid = 0;
+    }
+    Close(&p->error_pipe[0]);
+    Close(&p->error_pipe[1]);
+    for (int i = 0; i < 3; ++i) {
+        Stream* s = &p->streams[i];
+        if (s->thread_started) {
+            pthread_cancel(s->thread);
+            pthread_join(s->thread, NULL);
+            s->thread_started = false;
+        }
+        Close(&p->streams[i].read);
+        Close(&p->streams[i].write);
+    }
+#endif
+    for (int i = 0; i < 3; ++i) {
+        luaL_Stream* file = p->streams[i].file;
+        if (file && file->closef) {
+            file->closef = NULL;
+            fclose(file->f);
+            file->f = NULL;
+        }
+    }
+}
+
+static int Cleanup(lua_State* L) {
+    Process* p = (Process*)lua_touserdata(L, 1);
+    CloseProcess(p);
+#ifdef _WIN32
     if (p->attributes_ready) DeleteProcThreadAttributeList(p->attributes);
     p->attributes_ready = false;
     free(p->attributes); p->attributes = NULL;
     free(p->application); p->application = NULL;
     free(p->command_line); p->command_line = NULL;
     free(p->environment); p->environment = NULL;
-#else
-    if (p->pid > 0) {
-        kill(p->pid, SIGKILL);
-        while (waitpid(p->pid, NULL, 0) < 0 && errno == EINTR) {}
-        p->pid = 0;
-    }
-    Close(&p->error_pipe[0]);
-    Close(&p->error_pipe[1]);
-    for (int i = 0; i < 2; ++i) {
-        Close(&p->streams[i].read);
-        Close(&p->streams[i].write);
-    }
 #endif
     if (p->args) {
         for (size_t i = 0; i < p->count; ++i) free(p->args[i]);
@@ -136,7 +186,7 @@ static int Cleanup(lua_State* L) {
     }
     free(p->cwd); p->cwd = NULL;
     free(p->command.data); p->command = {};
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 3; ++i) {
         free(p->streams[i].path); p->streams[i].path = NULL;
         free(p->streams[i].buffer.data); p->streams[i].buffer = {};
     }
@@ -266,7 +316,7 @@ static void ReadEnvironment(lua_State* L, Process* p, int options) {
     lua_pop(L, 1);
 }
 
-static void ReadStream(lua_State* L, int options, const char* name, Stream* stream, bool merge) {
+static void ReadStream(lua_State* L, int options, const char* name, Stream* stream, bool input, bool spawn) {
     lua_getfield(L, options, name);
     if (lua_istable(L, -1)) {
         lua_getfield(L, -1, "path");
@@ -276,9 +326,10 @@ static void ReadStream(lua_State* L, int options, const char* name, Stream* stre
     } else if (!lua_isnil(L, -1)) {
         const char* mode = String(L, -1);
         if (strcmp(mode, "inherit") == 0) stream->mode = Inherit;
-        else if (strcmp(mode, "capture") == 0) stream->mode = Capture;
+        else if (!input && strcmp(mode, "capture") == 0) stream->mode = Capture;
+        else if (spawn && strcmp(mode, "pipe") == 0) stream->mode = PipeStream;
         else if (strcmp(mode, "discard") == 0) stream->mode = Discard;
-        else if (merge && strcmp(mode, "stdout") == 0) stream->mode = Merge;
+        else if (strcmp(name, "stderr") == 0 && strcmp(mode, "stdout") == 0) stream->mode = Merge;
         else luaL_error(L, "exec: invalid %s mode: %s", name, mode);
     }
     lua_pop(L, 1);
@@ -304,7 +355,22 @@ static void ChildFail(Process* p, const char* operation) {
     _exit(127);
 }
 
-static int RunProcess(lua_State* L, Process* p) {
+static void* ReadPipe(void* context) {
+    Stream* s = (Stream*)context;
+    char data[16384];
+    for (;;) {
+        ssize_t size;
+        do { size = read(s->read, data, sizeof(data)); } while (size < 0 && errno == EINTR);
+        if (size < 0) { s->error = errno; break; }
+        if (!size) break;
+        // Keep draining even after allocation failure so the child can exit.
+        if (!s->error && !Append(&s->buffer, data, (size_t)size)) s->error = ENOMEM;
+    }
+    __atomic_store_n(&s->done, true, __ATOMIC_RELEASE);
+    return NULL;
+}
+
+static void StartProcess(lua_State* L, Process* p) {
     const char* path = Environment(p, "PATH");
     if (!path) path = "/bin:/usr/bin";
     // Prepare PATH candidates before fork. Relative entries are evaluated after
@@ -322,8 +388,8 @@ static int RunProcess(lua_State* L, Process* p) {
         } while (start);
     }
     Pipe(L, p->error_pipe);
-    for (int i = 0; i < 2; ++i) {
-        if (p->streams[i].mode == Capture) {
+    for (int i = 0; i < 3; ++i) {
+        if (p->streams[i].mode == Capture || p->streams[i].mode == PipeStream) {
             int fds[2] = {-1, -1};
             if (pipe(fds) < 0) luaL_error(L, "exec: pipe: %s", strerror(errno));
             p->streams[i].read = fds[0]; p->streams[i].write = fds[1];
@@ -335,23 +401,25 @@ static int RunProcess(lua_State* L, Process* p) {
             }
         }
     }
-    fflush(NULL);
     p->pid = fork();
     if (p->pid < 0) { p->pid = 0; luaL_error(L, "exec: fork: %s", strerror(errno)); }
     if (p->pid == 0) {
         close(p->error_pipe[0]);
+        if (sigaction(SIGPIPE, &original_sigpipe, NULL) < 0) ChildFail(p, "restore SIGPIPE");
         if (p->cwd && chdir(p->cwd) < 0) ChildFail(p, "chdir");
-        for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < 3; ++i) {
             Stream* s = &p->streams[i];
+            bool input = i == 2;
+            int target = input ? STDIN_FILENO : i + 1;
             int fd = -1;
-            if (s->mode == Capture) fd = s->write;
+            if (s->mode == Capture || s->mode == PipeStream) fd = input ? s->read : s->write;
             else if (s->mode == Merge) fd = STDOUT_FILENO;
             else if (s->mode == File || s->mode == Discard) {
-                fd = open(s->mode == File ? s->path : "/dev/null", O_WRONLY | O_CREAT | O_TRUNC, 0666);
-                if (fd < 0) ChildFail(p, "open output");
+                fd = open(s->mode == File ? s->path : "/dev/null", input ? O_RDONLY : O_WRONLY | O_CREAT | O_TRUNC, 0666);
+                if (fd < 0) ChildFail(p, "open stream");
             }
-            if (fd >= 0 && fd != i + 1 && dup2(fd, i + 1) < 0) ChildFail(p, "redirect output");
-            if ((s->mode == File || s->mode == Discard) && fd != i + 1) close(fd);
+            if (fd >= 0 && fd != target && dup2(fd, target) < 0) ChildFail(p, "redirect stream");
+            if ((s->mode == File || s->mode == Discard) && fd != target) close(fd);
         }
         int denied = 0;
         for (size_t offset = 0; offset < p->command.size;) {
@@ -366,35 +434,46 @@ static int RunProcess(lua_State* L, Process* p) {
     }
     Close(&p->error_pipe[1]);
     for (int i = 0; i < 2; ++i) Close(&p->streams[i].write);
+    Close(&p->streams[2].read);
     ChildError error = {};
     ssize_t size;
     do { size = read(p->error_pipe[0], &error, sizeof(error)); } while (size < 0 && errno == EINTR);
     if (size < 0) luaL_error(L, "exec: start: %s", strerror(errno));
     Close(&p->error_pipe[0]);
     if (size) luaL_error(L, "exec: %s %s: %s", error.operation, p->args[0], strerror(error.number));
-    // Drain both pipes together: a child may fill either pipe before writing to
-    // the other. Sequential reads (or waiting first) can deadlock.
-    while (p->streams[0].read >= 0 || p->streams[1].read >= 0) {
-        struct pollfd fds[2] = {{p->streams[0].read, POLLIN, 0}, {p->streams[1].read, POLLIN, 0}};
-        int ready;
-        do { ready = poll(fds, 2, -1); } while (ready < 0 && errno == EINTR);
-        if (ready < 0) luaL_error(L, "exec: poll: %s", strerror(errno));
-        for (int i = 0; i < 2; ++i) {
-            if (!fds[i].revents) continue;
-            char data[16384];
-            ssize_t n;
-            do { n = read(fds[i].fd, data, sizeof(data)); } while (n < 0 && errno == EINTR);
-            if (n < 0) luaL_error(L, "exec: read: %s", strerror(errno));
-            if (!n) Close(&p->streams[i].read);
-            else if (!Append(&p->streams[i].buffer, data, (size_t)n)) luaL_error(L, "exec: out of memory");
+    for (int i = 0; i < 2; ++i) {
+        Stream* s = &p->streams[i];
+        if (s->mode == Capture) {
+            int error = pthread_create(&s->thread, NULL, ReadPipe, s);
+            if (error) luaL_error(L, "exec: start capture reader: %s", strerror(error));
+            s->thread_started = true;
         }
     }
-    int status;
-    pid_t waited;
-    do { waited = waitpid(p->pid, &status, 0); } while (waited < 0 && errno == EINTR);
-    if (waited < 0) luaL_error(L, "exec: wait: %s", strerror(errno));
-    p->pid = 0;
-    return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+}
+
+static bool FinishProcess(lua_State* L, Process* p, bool block) {
+    if (!p->exited && p->pid > 0) {
+        int status;
+        pid_t waited;
+        do { waited = waitpid(p->pid, &status, block ? 0 : WNOHANG); } while (waited < 0 && errno == EINTR);
+        if (waited < 0) luaL_error(L, "exec: wait: %s", strerror(errno));
+        if (!waited) return false;
+        p->pid = 0;
+        p->exited = true;
+        p->code = WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+    }
+    for (int i = 0; i < 2; ++i) {
+        Stream* s = &p->streams[i];
+        if (s->thread_started) {
+            if (!block && !__atomic_load_n(&s->done, __ATOMIC_ACQUIRE)) return false;
+            int error = pthread_join(s->thread, NULL);
+            if (error) luaL_error(L, "exec: wait for capture: %s", strerror(error));
+            s->thread_started = false;
+            Close(&s->read);
+        }
+        if (s->error) luaL_error(L, "exec: read output: %s", strerror(s->error));
+    }
+    return true;
 }
 #else
 static void WindowsError(lua_State* L, const char* operation, DWORD error) {
@@ -436,7 +515,7 @@ static DWORD WINAPI ReadPipe(void* context) {
     Stream* s = (Stream*)context;
     char data[16384];
     DWORD size;
-    for (;;) {
+    while (!InterlockedCompareExchange(&s->stop, 0, 0)) {
         if (!ReadFile(s->read, data, sizeof(data), &size, NULL)) {
             DWORD error = GetLastError();
             if (error != ERROR_BROKEN_PIPE && !s->error) s->error = (int)error;
@@ -461,7 +540,7 @@ static HANDLE InheritedHandle(lua_State* L, DWORD id, DWORD access) {
     return copy;
 }
 
-static int RunProcess(lua_State* L, Process* p) {
+static void StartProcess(lua_State* L, Process* p) {
     wchar_t* absolute = FullPath(L, p->cwd ? p->cwd : L".");
     free(p->cwd); p->cwd = absolute;
     // Quote according to the Windows C runtime argv rules, including trailing
@@ -530,13 +609,17 @@ static int RunProcess(lua_State* L, Process* p) {
         memcpy(cursor, p->env[i], size * sizeof(wchar_t)); cursor += size;
     }
     cursor[0] = cursor[1] = 0;
-    p->input = InheritedHandle(L, STD_INPUT_HANDLE, GENERIC_READ);
     SECURITY_ATTRIBUTES security = {sizeof(security), NULL, TRUE};
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 3; ++i) {
         Stream* s = &p->streams[i];
-        if (s->mode == Inherit) s->write = InheritedHandle(L, i ? STD_ERROR_HANDLE : STD_OUTPUT_HANDLE, GENERIC_WRITE);
-        else if (s->mode == Capture) {
-            if (!CreatePipe(&s->read, &s->write, &security, 0) || !SetHandleInformation(s->read, HANDLE_FLAG_INHERIT, 0))
+        bool input = i == 2;
+        HANDLE* child = input ? &s->read : &s->write;
+        if (s->mode == Inherit)
+            *child = InheritedHandle(L, input ? STD_INPUT_HANDLE : i ? STD_ERROR_HANDLE : STD_OUTPUT_HANDLE,
+                                     input ? GENERIC_READ : GENERIC_WRITE);
+        else if (s->mode == Capture || s->mode == PipeStream) {
+            if (!CreatePipe(&s->read, &s->write, &security, 0) ||
+                !SetHandleInformation(input ? s->write : s->read, HANDLE_FLAG_INHERIT, 0))
                 WindowsError(L, "create pipe", GetLastError());
         } else if (s->mode == Merge) {
             if (!DuplicateHandle(GetCurrentProcess(), p->streams[0].write, GetCurrentProcess(), &s->write, 0, TRUE, DUPLICATE_SAME_ACCESS))
@@ -546,18 +629,19 @@ static int RunProcess(lua_State* L, Process* p) {
                 wchar_t* path = ChildPath(L, p, s->path);
                 free(s->path); s->path = path;
             }
-            s->write = CreateFileW(s->mode == File ? s->path : L"NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                &security, s->mode == File ? CREATE_ALWAYS : OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-            if (s->write == INVALID_HANDLE_VALUE) WindowsError(L, "open output", GetLastError());
+            *child = CreateFileW(s->mode == File ? s->path : L"NUL", input ? GENERIC_READ : GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE, &security,
+                !input && s->mode == File ? CREATE_ALWAYS : OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (*child == INVALID_HANDLE_VALUE) WindowsError(L, "open stream", GetLastError());
         }
     }
     STARTUPINFOEXW startup = {};
     startup.StartupInfo.cb = sizeof(startup);
     startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
-    startup.StartupInfo.hStdInput = p->input;
+    startup.StartupInfo.hStdInput = p->streams[2].read;
     startup.StartupInfo.hStdOutput = p->streams[0].write;
     startup.StartupInfo.hStdError = p->streams[1].write;
-    HANDLE handles[] = {p->input, p->streams[0].write, p->streams[1].write};
+    HANDLE handles[] = {p->streams[2].read, p->streams[0].write, p->streams[1].write};
     SIZE_T size = 0;
     InitializeProcThreadAttributeList(NULL, 1, 0, &size);
     p->attributes = (LPPROC_THREAD_ATTRIBUTE_LIST)Allocate(L, size);
@@ -567,13 +651,12 @@ static int RunProcess(lua_State* L, Process* p) {
         WindowsError(L, "set inherited handles", GetLastError());
     startup.lpAttributeList = p->attributes;
     PROCESS_INFORMATION info = {};
-    fflush(NULL);
     if (!CreateProcessW(p->application, p->command_line, NULL, NULL, TRUE,
         EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT, p->environment, p->cwd, &startup.StartupInfo, &info))
         WindowsError(L, p->args[0], GetLastError());
     p->process = info.hProcess;
     CloseHandle(info.hThread);
-    Close(&p->input);
+    Close(&p->streams[2].read);
     for (int i = 0; i < 2; ++i) {
         Stream* s = &p->streams[i];
         Close(&s->write);
@@ -582,40 +665,104 @@ static int RunProcess(lua_State* L, Process* p) {
             if (!s->thread) WindowsError(L, "start capture reader", GetLastError());
         }
     }
-    if (WaitForSingleObject(p->process, INFINITE) != WAIT_OBJECT_0) WindowsError(L, "wait", GetLastError());
-    DWORD code;
-    if (!GetExitCodeProcess(p->process, &code)) WindowsError(L, "exit code", GetLastError());
-    Close(&p->process);
+}
+
+static bool FinishProcess(lua_State* L, Process* p, bool block) {
+    if (!p->exited && p->process) {
+        DWORD ready = WaitForSingleObject(p->process, block ? INFINITE : 0);
+        if (ready == WAIT_TIMEOUT) return false;
+        if (ready != WAIT_OBJECT_0) WindowsError(L, "wait", GetLastError());
+        DWORD code;
+        if (!GetExitCodeProcess(p->process, &code)) WindowsError(L, "exit code", GetLastError());
+        p->code = code;
+        p->exited = true;
+        Close(&p->process);
+    }
     for (int i = 0; i < 2; ++i) {
         Stream* s = &p->streams[i];
         if (s->thread) {
-            if (WaitForSingleObject(s->thread, INFINITE) != WAIT_OBJECT_0) WindowsError(L, "wait for capture", GetLastError());
+            DWORD ready = WaitForSingleObject(s->thread, block ? INFINITE : 0);
+            if (ready == WAIT_TIMEOUT) return false;
+            if (ready != WAIT_OBJECT_0) WindowsError(L, "wait for capture", GetLastError());
             Close(&s->thread);
             Close(&s->read);
-            if (s->error) WindowsError(L, "read output", (DWORD)s->error);
         }
+        if (s->error && !(p->closed && s->error == ERROR_OPERATION_ABORTED)) WindowsError(L, "read output", (DWORD)s->error);
     }
-    // Windows exit codes are unsigned 32-bit values; preserve them in Lua.
-    return (int)code;
+    return true;
 }
 #endif
 
-static int Exec(lua_State* L) {
+static int CloseFile(lua_State* L) {
+    luaL_Stream* file = (luaL_Stream*)luaL_checkudata(L, 1, LUA_FILEHANDLE);
+    int result = fclose(file->f);
+    file->f = NULL;
+    return luaL_fileresult(L, result == 0, NULL);
+}
+
+static const char* stream_names[] = {"stdout", "stderr", "stdin"};
+
+static void ExposePipes(lua_State* L, Process* p, int index) {
+    lua_getiuservalue(L, index, 1);
+    for (int i = 0; i < 3; ++i) {
+        Stream* s = &p->streams[i];
+        if (s->mode != PipeStream) continue;
+        luaL_Stream* file = (luaL_Stream*)lua_newuserdatauv(L, sizeof(luaL_Stream), 0);
+        file->f = NULL;
+        file->closef = NULL;
+        luaL_setmetatable(L, LUA_FILEHANDLE);
+        s->file = file;
+        lua_setfield(L, -2, stream_names[i]);
+        bool input = i == 2;
+#ifdef _WIN32
+        HANDLE* handle = input ? &s->write : &s->read;
+        int fd = _open_osfhandle((intptr_t)*handle, (input ? _O_WRONLY : _O_RDONLY) | _O_BINARY | _O_NOINHERIT);
+        if (fd == -1) luaL_error(L, "spawn: open pipe: %s", strerror(errno));
+        *handle = NULL; // The CRT descriptor now owns the handle.
+        file->f = _fdopen(fd, input ? "wb" : "rb");
+        if (!file->f) { int error = errno; _close(fd); luaL_error(L, "spawn: open pipe: %s", strerror(error)); }
+#else
+        int* fd = input ? &s->write : &s->read;
+        file->f = fdopen(*fd, input ? "w" : "r");
+        if (!file->f) luaL_error(L, "spawn: open pipe: %s", strerror(errno));
+        *fd = -1; // The FILE now owns the descriptor.
+#endif
+        file->closef = CloseFile;
+        if (input) setvbuf(file->f, NULL, _IONBF, 0);
+    }
+    lua_pop(L, 1);
+}
+
+static int CloseGuard(lua_State* L) {
+    Process* p = *(Process**)lua_touserdata(L, 1);
+    if (p) CloseProcess(p);
+    return 0;
+}
+
+static Process* NewProcess(lua_State* L, bool spawn) {
     int supplied = lua_gettop(L);
     bool options = lua_istable(L, 1);
     size_t count = options ? lua_rawlen(L, 1) : (size_t)supplied;
-    if (!count) return luaL_error(L, "exec: executable is required");
-    Process* p = (Process*)lua_newuserdatauv(L, sizeof(Process), 0);
+    if (!count) luaL_error(L, "exec: executable is required");
+    Process* p = (Process*)lua_newuserdatauv(L, sizeof(Process), 1);
     memset(p, 0, sizeof(*p));
 #ifndef _WIN32
     p->error_pipe[0] = p->error_pipe[1] = -1;
-    for (int i = 0; i < 2; ++i) p->streams[i].read = p->streams[i].write = -1;
+    for (int i = 0; i < 3; ++i) p->streams[i].read = p->streams[i].write = -1;
 #endif
-    luaL_setmetatable(L, "dotcmd.exec");
+    luaL_setmetatable(L, "dotcmd.process");
+    int index = lua_gettop(L);
+    lua_newtable(L);
+    lua_setiuservalue(L, index, 1);
+    // Construction failures must stop the child before returning to Lua.
+    Process** guard = (Process**)lua_newuserdatauv(L, sizeof(Process*), 0);
+    *guard = p;
+    luaL_setmetatable(L, "dotcmd.process.guard");
     lua_toclose(L, -1);
+    int guard_index = lua_gettop(L);
     p->count = count;
     p->args = (char**)calloc(count + 1, sizeof(char*));
-    if (!p->args) return luaL_error(L, "exec: out of memory");
+    if (!p->args) luaL_error(L, "exec: out of memory");
     for (size_t i = 0; i < count; ++i) {
         if (options) lua_rawgeti(L, 1, (lua_Integer)i + 1);
         const char* value = String(L, options ? -1 : (int)i + 1);
@@ -624,36 +771,53 @@ static int Exec(lua_State* L) {
         memcpy(p->args[i], value, size);
         if (options) lua_pop(L, 1);
     }
-    if (!p->args[0][0]) return luaL_error(L, "exec: executable must not be empty");
+    if (!p->args[0][0]) luaL_error(L, "exec: executable must not be empty");
     if (options) {
-        if (supplied != 1) return luaL_error(L, "exec: table form accepts one argument");
+        if (supplied != 1) luaL_error(L, "exec: table form accepts one argument");
         lua_getfield(L, 1, "cwd");
         if (!lua_isnil(L, -1)) p->cwd = Native(L, String(L, -1));
         lua_pop(L, 1);
-        lua_getfield(L, 1, "check");
-        if (!lua_isnil(L, -1)) { luaL_checktype(L, -1, LUA_TBOOLEAN); p->check = lua_toboolean(L, -1); }
-        lua_pop(L, 1);
-        ReadStream(L, 1, "stdout", &p->streams[0], false);
-        ReadStream(L, 1, "stderr", &p->streams[1], true);
+        if (!spawn) {
+            lua_getfield(L, 1, "check");
+            if (!lua_isnil(L, -1)) { luaL_checktype(L, -1, LUA_TBOOLEAN); p->check = lua_toboolean(L, -1); }
+            lua_pop(L, 1);
+        }
+        ReadStream(L, 1, "stdout", &p->streams[0], false, spawn);
+        ReadStream(L, 1, "stderr", &p->streams[1], false, spawn);
+        ReadStream(L, 1, "stdin", &p->streams[2], true, spawn);
     }
     ReadEnvironment(L, p, options ? 1 : 0);
-#ifdef _WIN32
-    lua_Integer code = (uint32_t)RunProcess(L, p);
-#else
-    lua_Integer code = RunProcess(L, p);
-#endif
-    if (p->check && code != 0) {
-        lua_pushfstring(L, "exec: %s exited with code %I", p->args[0], code);
+    // Preserve output order without flushing unrelated files or process pipes.
+    fflush(stdout);
+    fflush(stderr);
+    StartProcess(L, p);
+    ExposePipes(L, p, index);
+    *guard = NULL;
+    lua_closeslot(L, guard_index);
+    lua_pop(L, 1);
+    return p;
+}
+
+static void CheckResult(lua_State* L, Process* p, bool check) {
+    if (check && p->code != 0) {
+        lua_pushfstring(L, "exec: %s exited with code %I", p->args[0], p->code);
         Stream* error = &p->streams[p->streams[1].mode == Merge ? 0 : 1];
         if (error->mode == Capture && error->buffer.size) {
             lua_pushliteral(L, "\n");
             lua_pushlstring(L, error->buffer.data, error->buffer.size);
             lua_concat(L, 3);
         }
-        return lua_error(L);
+        lua_error(L);
     }
+}
+
+static int Result(lua_State* L, Process* p, int index) {
+    lua_getiuservalue(L, index, 1);
+    lua_getfield(L, -1, "result");
+    if (!lua_isnil(L, -1)) return 1;
+    lua_pop(L, 1);
     lua_createtable(L, 0, 3);
-    lua_pushinteger(L, code);
+    lua_pushinteger(L, p->code);
     lua_setfield(L, -2, "code");
     for (int i = 0; i < 2; ++i) {
         Stream* s = &p->streams[i];
@@ -662,15 +826,102 @@ static int Exec(lua_State* L) {
             lua_setfield(L, -2, i ? "stderr" : "stdout");
         }
     }
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -3, "result");
+    return 1;
+}
+
+static int Exec(lua_State* L) {
+    Process* p = NewProcess(L, false);
+    int index = lua_gettop(L);
+    lua_toclose(L, index);
+    FinishProcess(L, p, true);
+    CheckResult(L, p, p->check);
+    return Result(L, p, index);
+}
+
+static int Spawn(lua_State* L) {
+    NewProcess(L, true);
+    return 1;
+}
+
+static Process* GetProcess(lua_State* L) {
+    return (Process*)luaL_checkudata(L, 1, "dotcmd.process");
+}
+
+static int Wait(lua_State* L) {
+    Process* p = GetProcess(L);
+    bool check = false;
+    if (!lua_isnoneornil(L, 2)) {
+        luaL_checktype(L, 2, LUA_TTABLE);
+        lua_getfield(L, 2, "check");
+        if (!lua_isnil(L, -1)) { luaL_checktype(L, -1, LUA_TBOOLEAN); check = lua_toboolean(L, -1); }
+        lua_pop(L, 1);
+    }
+    FinishProcess(L, p, true);
+    CheckResult(L, p, check);
+    return Result(L, p, 1);
+}
+
+static int Poll(lua_State* L) {
+    Process* p = GetProcess(L);
+    if (!FinishProcess(L, p, false)) { lua_pushnil(L); return 1; }
+    return Result(L, p, 1);
+}
+
+static int Kill(lua_State* L) {
+    Process* p = GetProcess(L);
+#ifdef _WIN32
+    if (p->process && WaitForSingleObject(p->process, 0) == WAIT_TIMEOUT && !TerminateProcess(p->process, 1) &&
+        WaitForSingleObject(p->process, 0) == WAIT_TIMEOUT) WindowsError(L, "kill", GetLastError());
+#else
+    if (p->pid > 0 && kill(p->pid, SIGKILL) < 0 && errno != ESRCH) luaL_error(L, "spawn: kill: %s", strerror(errno));
+#endif
+    return 0;
+}
+
+static int ProcessClose(lua_State* L) {
+    CloseProcess(GetProcess(L));
+    return 0;
+}
+
+static int Index(lua_State* L) {
+    GetProcess(L);
+    luaL_getmetatable(L, "dotcmd.process");
+    lua_pushvalue(L, 2);
+    lua_rawget(L, -2);
+    if (!lua_isnil(L, -1)) return 1;
+    lua_pop(L, 2);
+    lua_getiuservalue(L, 1, 1);
+    lua_pushvalue(L, 2);
+    lua_rawget(L, -2);
     return 1;
 }
 
 void RegisterExec(lua_State* L) {
-    if (luaL_newmetatable(L, "dotcmd.exec")) {
-        lua_pushcfunction(L, Cleanup); lua_setfield(L, -2, "__close");
+#ifndef _WIN32
+    // Writes to a closed stdin pipe must return a Lua I/O error, not kill dotcmd.
+    struct sigaction ignore = {};
+    ignore.sa_handler = SIG_IGN;
+    sigemptyset(&ignore.sa_mask);
+    sigaction(SIGPIPE, &ignore, &original_sigpipe);
+#endif
+    if (luaL_newmetatable(L, "dotcmd.process.guard")) {
+        lua_pushcfunction(L, CloseGuard); lua_setfield(L, -2, "__close");
+    }
+    lua_pop(L, 1);
+    if (luaL_newmetatable(L, "dotcmd.process")) {
+        lua_pushcfunction(L, Index); lua_setfield(L, -2, "__index");
+        lua_pushcfunction(L, Wait); lua_setfield(L, -2, "wait");
+        lua_pushcfunction(L, Poll); lua_setfield(L, -2, "poll");
+        lua_pushcfunction(L, Kill); lua_setfield(L, -2, "kill");
+        lua_pushcfunction(L, ProcessClose); lua_setfield(L, -2, "close");
+        lua_pushcfunction(L, ProcessClose); lua_setfield(L, -2, "__close");
         lua_pushcfunction(L, Cleanup); lua_setfield(L, -2, "__gc");
     }
     lua_pop(L, 1);
     lua_pushcfunction(L, Exec);
     lua_setglobal(L, "exec");
+    lua_pushcfunction(L, Spawn);
+    lua_setglobal(L, "spawn");
 }

@@ -19,7 +19,7 @@ local function check(root, env)
     fs.mkdir(directory)
     local binary = directory .. '/dotcmd' .. (windows and '.exe' or '')
     t.write(binary, t.read(host.executable)); fs.make_executable(binary)
-    local result = t.success(t.run_project(project, { 'cache' }, nil, env))
+    local result = t.success(t.run_project(project, { env = env }, 'cache'))
     assert(t.normalized(result:gsub('\n$', '')) == t.normalized(root), result)
 end
 
@@ -55,11 +55,11 @@ end)
 
 test('cache rejects a relative override', function()
     local env = environment(); env.DOTCMD_CACHE_DIR = 'relative/cache'
-    t.failure(t.run_project(project, { 'cache' }, nil, env), 'DOTCMD_CACHE_DIR must be an absolute path')
+    t.failure(t.run_project(project, { env = env }, 'cache'), 'DOTCMD_CACHE_DIR must be an absolute path')
     if windows then
         for _, path in ipairs({ 'C:cache', '\\cache' }) do
             env.DOTCMD_CACHE_DIR = path
-            t.failure(t.run_project(project, { 'cache' }, nil, env), 'DOTCMD_CACHE_DIR must be an absolute path')
+            t.failure(t.run_project(project, { env = env }, 'cache'), 'DOTCMD_CACHE_DIR must be an absolute path')
         end
     end
 end)

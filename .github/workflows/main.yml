@@ -47,7 +47,7 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/dotcmd
-          key: tools-${{ matrix.os }}-${{ matrix.arch }}-${{ hashFiles('checkout with spaces/.cmd.lua') }}
+          key: tools-${{ matrix.os }}-${{ matrix.arch }}-${{ hashFiles('checkout with spaces/.cmd.lua', 'checkout with spaces/test/run.lua') }}
           restore-keys: tools-${{ matrix.os }}-${{ matrix.arch }}-
       - name: Build and test Unix
         if: matrix.os != 'windows'

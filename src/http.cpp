@@ -281,13 +281,13 @@ static int Http(lua_State* L) {
     OPTION(CURLOPT_MAXREDIRS, 10L);
     OPTION(CURLOPT_SSL_VERIFYPEER, 1L);
     OPTION(CURLOPT_SSL_VERIFYHOST, 2L);
+    const char* ca_file = getenv("SSL_CERT_FILE");
 #ifdef __APPLE__
-    OPTION(CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_NATIVE_CA);
+    OPTION(CURLOPT_SSL_OPTIONS, ca_file ? 0L : (long)CURLSSLOPT_NATIVE_CA);
     OPTION(CURLOPT_PROXY_SSL_OPTIONS, (long)CURLSSLOPT_NATIVE_CA);
 #endif
 #if !defined(_WIN32) && !defined(__APPLE__)
     // Resolve trust on the running machine, not the machine that built dotcmd.
-    const char* ca_file = getenv("SSL_CERT_FILE");
     if (!ca_file) {
         const char* candidates[] = {
             "/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt",
@@ -298,10 +298,10 @@ static int Http(lua_State* L) {
             if (access(candidates[i], R_OK) == 0) { ca_file = candidates[i]; break; }
         }
     }
-    if (ca_file) OPTION(CURLOPT_CAINFO, ca_file);
     const char* ca_directory = getenv("SSL_CERT_DIR");
     if (ca_directory) OPTION(CURLOPT_CAPATH, ca_directory);
 #endif
+    if (ca_file) OPTION(CURLOPT_CAINFO, ca_file);
     OPTION(CURLOPT_CONNECTTIMEOUT, connect_timeout);
     OPTION(CURLOPT_TIMEOUT, timeout);
     OPTION(CURLOPT_NOSIGNAL, 1L);

@@ -17,18 +17,24 @@ function t.normalized(path)
     return (path:gsub('\\', '/'):gsub('/%./', '/'):gsub('/+$', ''))
 end
 
-function t.command(project, args)
+function t.command(project, ...)
     local options = host.os == 'windows'
         and { 'cmd.exe', '/d', '/c', 'call', project .. '/.cmd' }
         or { '/bin/sh', '-c', '"$@"', 'dotcmd-test', project .. '/.cmd' }
-    for _, arg in ipairs(args or {}) do options[#options + 1] = arg end
+    for _, arg in ipairs { ... } do options[#options + 1] = arg end
     return options
 end
 
-function t.run_project(project, args, cwd, env)
-    local options = t.command(project, args)
-    options.cwd = cwd or project
-    options.env = env
+function t.run_project(project, config, ...)
+    local options
+    if type(config) == 'table' then
+        options = t.command(project, ...)
+    else
+        options = t.command(project, config, ...)
+        config = {}
+    end
+    options.cwd = config.cwd or project
+    options.env = config.env
     options.stdout = 'capture'; options.stderr = 'capture'
     options.check = false
     return exec(options)

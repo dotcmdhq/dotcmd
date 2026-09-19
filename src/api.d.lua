@@ -32,11 +32,13 @@
 ---@field path string
 
 ---@alias dotcmd.Output "inherit"|"capture"|"discard"|dotcmd.File
+---@alias dotcmd.Input "inherit"|"discard"|dotcmd.File
 
 ---@class dotcmd.ExecOptions
 ---@field [integer] string Program at index 1, followed by arguments.
 ---@field cwd? string Child working directory; defaults to the caller's cwd.
 ---@field env? table<string, string|false> Overlay inherited variables; false removes one.
+---@field stdin? dotcmd.Input Defaults to inherit. File paths are relative to the child's cwd.
 ---@field stdout? dotcmd.Output Defaults to inherit. File paths are relative to the child's cwd.
 ---@field stderr? dotcmd.Output|"stdout" Defaults to inherit; stdout merges into standard output.
 ---@field check? boolean Raise on a nonzero exit; defaults to false.
@@ -45,6 +47,23 @@
 ---@field code integer Exit code.
 ---@field stdout string Present only when captured; annotated as a string to avoid nil checks at capture sites.
 ---@field stderr string Present only when captured; annotated as a string to avoid nil checks at capture sites.
+
+---@class dotcmd.SpawnOptions
+---@field [integer] string Program at index 1, followed by arguments.
+---@field cwd? string Child working directory; defaults to the caller's cwd.
+---@field env? table<string, string|false> Overlay inherited variables; false removes one.
+---@field stdin? dotcmd.Input|"pipe" Defaults to inherit. File paths are relative to the child's cwd.
+---@field stdout? dotcmd.Output|"pipe" Defaults to inherit. Output files are truncated.
+---@field stderr? dotcmd.Output|"pipe"|"stdout" Defaults to inherit; stdout merges into standard output.
+
+---@class dotcmd.Process
+---@field stdin file* Present when stdin is piped. Writes block; close it to send EOF.
+---@field stdout file* Present when stdout is piped. Reads block; callers must drain piped output.
+---@field stderr file* Present when stderr is piped. Reads block; callers must drain piped output.
+---@field wait fun(self: dotcmd.Process, options?: {check?: boolean}): dotcmd.ExecResult Wait for exit and captured output. check defaults to false; true raises on nonzero exit.
+---@field poll fun(self: dotcmd.Process): dotcmd.ExecResult? Return the completed result, or nil while running or collecting output.
+---@field kill fun(self: dotcmd.Process) Force-stop the direct child if running, without waiting.
+---@field close fun(self: dotcmd.Process) Stop the direct child, wait, and close pipes. Also called by <close>; safe to repeat.
 
 ---@class dotcmd.Stat
 ---@field type "file"|"directory"|"symlink"|"other"
@@ -86,8 +105,9 @@
 -- Opt in per file with: ---@type dotcmd.Env|_G followed by local _ENV = _ENV.
 ---@class dotcmd.Env
 ---@field host dotcmd.Host
----@field http fun(options: string|dotcmd.HttpOptions): dotcmd.HttpResponse HTTPS requests; transport/filesystem failures raise.
+---@field http fun(options: string|dotcmd.HttpOptions): dotcmd.HttpResponse HTTPS requests; transport/filesystem failures raise. SSL_CERT_FILE selects a PEM trust bundle.
 ---@field exec fun(program: string|dotcmd.ExecOptions, ...: string): dotcmd.ExecResult Executes without a shell; returns the exit code and captured output.
+---@field spawn fun(program: string|dotcmd.SpawnOptions, ...: string): dotcmd.Process Starts without a shell and returns immediately. Startup failures raise; captured output is drained automatically.
 ---@field sha256 fun(input: string|dotcmd.File): string Hash bytes or a file; returns lowercase hexadecimal.
 ---@field fs dotcmd.Fs
 ---@field extract fun(options: string|dotcmd.ExtractOptions): boolean Extract ZIP, tar, tar.gz, or tar.xz. Returns true on success, false when skipped; parent must exist.

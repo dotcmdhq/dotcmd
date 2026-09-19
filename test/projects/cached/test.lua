@@ -10,6 +10,30 @@ local function seed(bytes, name)
     return path, hash
 end
 local archive = t.read('sdk.zip')
+local url = assert(os.getenv('DOTCMD_TEST_URL'))
+
+test('cached downloads, verifies, and reuses a file', function()
+    local bytes = 'hello\0\255world'
+    local path = cached { url = url .. '/body', sha256 = sha256(bytes), name = 'fresh.bin' }
+    assert(t.read(path) == bytes)
+    t.write(path, 'trusted after download')
+    assert(cached { url = url .. '/status/500', sha256 = sha256(bytes), name = 'fresh.bin' } == path)
+    assert(t.read(path) == 'trusted after download')
+end)
+
+test('cached rejects an incorrect download hash without publishing files', function()
+    local hash = string.rep('0', 64)
+    t.assert_error('SHA-256 mismatch', function()
+        cached { url = url .. '/body', sha256 = hash, name = 'wrong.bin' }
+    end)
+    for name in fs.list(host.cache_dir .. '/downloads/' .. hash) do error('leftover file: ' .. name) end
+end)
+
+test('cached downloads, verifies, and extracts an archive', function()
+    local path = cached { url = url .. '/archive', sha256 = sha256(archive), name = 'fresh.zip', extract = true }
+    assert(t.read(path .. '/sdk/lib/value') == 'library')
+    assert(cached { url = url .. '/status/500', sha256 = sha256(archive), extract = true } == path)
+end)
 
 test('cached reuses trusted files without downloading or rehashing', function()
     local path, hash = seed('verified once', 'tool.jar')
@@ -35,7 +59,7 @@ return {test = function()
     print(cached{url='https://127.0.0.1/shared.jar', sha256=%q})
 end}
 ]]):format(hash))
-    assert(t.success(t.run_project(project, { 'test' })) == path .. '\n')
+    assert(t.success(t.run_project(project, 'test')) == path .. '\n')
 end)
 
 test('cached extracts and trusts completed directories without the archive', function()

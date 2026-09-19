@@ -10,6 +10,46 @@ return function(repo)
     os.remove(temp)
     fs.mkdir(work)
     local cleanup <close> = setmetatable({}, { __close = function() fs.remove(work, { recursive = true }) end })
+
+    -- Build the HTTPS fixture with a pinned toolchain; Go caches compilation.
+    local go_config = {
+        version = '1.27.1',
+        sha256 = {
+            linux = {
+                x64 = '63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445',
+                arm64 = '3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec',
+            },
+            macos = {
+                x64 = '8f8f52c6649542cf027bbc9b9c68d1ec042f9f34808a40413f0b8b3f66f3caa4',
+                arm64 = 'ee215d57e0ec269c60cc9ceca68e6bda321ba9ee5afe24f4b0988703c2d87d12',
+            },
+            windows = {
+                x64 = 'a3911b5e0e1b1053f25ed0675f4c1c6aad1e2bfcf253df2b9be4caabd2edd95d',
+                arm64 = '13b69b87bb0e83f96bc68560a8cace7f0343b1e03469f1110ea18d17e3234069',
+            },
+        },
+    }
+    local go_os = host.os == 'macos' and 'darwin' or host.os
+    local go_arch = host.arch == 'x64' and 'amd64' or host.arch
+    print('Preparing HTTPS test server...')
+    local go = cached {
+        url = 'https://go.dev/dl/go' .. go_config.version .. '.' .. go_os .. '-' .. go_arch
+            .. (windows and '.zip' or '.tar.gz'),
+        sha256 = go_config.sha256[host.os][host.arch], extract = { strip_components = 1 },
+    }
+    local server_binary = work .. '/http-server' .. (windows and '.exe' or '')
+    exec { go .. '/bin/go' .. (windows and '.exe' or ''), 'build', '-trimpath', '-o', server_binary,
+        repo .. '/test/server.go', check = true,
+        env = { GOROOT = go, GOTOOLCHAIN = 'local', GOENV = 'off', CGO_ENABLED = '0',
+            GOCACHE = host.cache_dir .. '/go-build', GOOS = go_os, GOARCH = go_arch },
+    }
+    local certificate = work .. '/test CA ü.pem'
+    local server <close> = spawn { server_binary, certificate, repo .. '/test/projects/cached/sdk.zip',
+        stdin = 'pipe', stdout = 'pipe', stderr = 'capture',
+    }
+    local server_url = server.stdout:read('l')
+    if not server_url then error(server:wait().stderr) end
+
     local home, cache, appdata = work .. '/home', work .. '/cache', work .. '/appdata'
     fs.mkdir(home)
     local cache_root = windows and (appdata .. '/dotcmd/Cache')
@@ -20,7 +60,10 @@ return function(repo)
     local cached = binary_dir .. '/dotcmd' .. (windows and '.exe' or '')
     t.write(cached, t.read(binary)); fs.make_executable(cached)
     local launcher = t.read(repo .. '/.cmd'):gsub('^:; version=[^\n]+', ':; version=test')
-    local env = { HOME = home, USERPROFILE = home, XDG_CACHE_HOME = cache, LOCALAPPDATA = appdata, DOTCMD_CACHE_DIR = false }
+    local env = { HOME = home, USERPROFILE = home, XDG_CACHE_HOME = cache, LOCALAPPDATA = appdata,
+        DOTCMD_CACHE_DIR = false, DOTCMD_TEST_URL = server_url, SSL_CERT_FILE = certificate,
+        SSL_CERT_DIR = false, NO_PROXY = '*', no_proxy = '*',
+    }
     t.write(work .. '/support.lua', t.read(repo .. '/test/support.lua'))
     local function copy_project(from, to)
         fs.mkdir(to)
@@ -47,7 +90,7 @@ return function(repo)
 local t = assert(loadfile(host.project_dir .. '/../support.lua'))()
 local test = t.test
 ]] .. t.read(project .. '/test.lua') .. '\nreturn t.finish()\nend}\n')
-            local result = t.run_project(project, { 'test' }, nil, env)
+            local result = t.run_project(project, { env = env }, 'test')
             io.write(result.stdout); io.stderr:write(result.stderr)
             if result.code == 0 then
                 passed = passed + 1
@@ -56,6 +99,8 @@ local test = t.test
             end
         end
     end
+    server.stdin:close()
+    server:wait { check = true }
     print(('%d suites passed, %d failed'):format(passed, failed))
     return failed == 0 and 0 or 1
 end

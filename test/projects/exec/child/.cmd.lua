@@ -2,9 +2,17 @@
 local _ENV = _ENV
 
 return {
+    ordered = function()
+        local t = assert(loadfile(host.project_dir .. '/../../support.lua'))()
+        io.stdout:setvbuf('full', 4096); io.stderr:setvbuf('full', 4096)
+        io.write('before:'); io.stderr:write('before:')
+        local result = exec(t.command(host.project_dir, 'emit'))
+        io.write(':after'); io.stderr:write(':after')
+        return result.code
+    end,
     inherit = function()
         local t = assert(loadfile(host.project_dir .. '/../../support.lua'))()
-        return exec(t.command(host.project_dir, { 'emit' })).code
+        return exec(t.command(host.project_dir, 'emit')).code
     end,
     emit = function()
         io.write('OUT\0\255'); io.stderr:write('ERR\0\254')

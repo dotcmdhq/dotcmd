@@ -1,3 +1,6 @@
+---@type dotcmd.Env|_G
+local _ENV = _ENV
+
 test('sha256 known vectors and binary strings', function()
     assert(sha256('') == 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
     assert(sha256('abc') == 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
@@ -7,9 +10,9 @@ end)
 
 test('sha256 streamed files and file errors', function()
     t.write('million', string.rep('a', 1000000))
-    assert(sha256{path='million'} == 'cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0')
+    assert(sha256 { path = 'million' } == 'cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0')
     t.write('empty', '')
-    assert(sha256{path='empty'} == 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
-    t.assert_error('sha256:', function() sha256{path='missing'} end)
-    t.assert_error('sha256:', function() sha256{path='bad\0path'} end)
+    assert(sha256 { path = 'empty' } == 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
+    t.assert_error('sha256:', function() sha256 { path = 'missing' } end)
+    t.assert_error('sha256:', function() sha256 { path = 'bad\0path' } end)
 end)

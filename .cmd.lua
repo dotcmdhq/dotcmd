@@ -1,12 +1,15 @@
+---@type dotcmd.Env|_G
+local _ENV = _ENV
+
 local windows = host.os == "windows"
 local binary = host.project_dir .. "/target/release/dotcmd" .. (windows and ".exe" or "")
 
 local function build()
     local command = windows
-        and {"powershell.exe", "-NoProfile", "-File", host.project_dir .. "/build.ps1", "--release"}
-        or {host.project_dir .. "/build", "--release"}
+        and { "powershell.exe", "-NoProfile", "-File", host.project_dir .. "/build.ps1", "--release" }
+        or { host.project_dir .. "/build", "--release" }
     command.cwd = host.project_dir
-    if windows then command.env = {PSModulePath=false} end
+    if windows then command.env = { PSModulePath = false } end
     return exec(command)
 end
 

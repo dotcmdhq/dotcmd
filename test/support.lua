@@ -1,3 +1,6 @@
+---@type dotcmd.Env|_G
+local _ENV = _ENV
+
 local t = {}
 
 function t.read(path)
@@ -16,9 +19,9 @@ end
 
 function t.command(project, args)
     local options = host.os == 'windows'
-        and {'cmd.exe', '/d', '/c', 'call', project .. '/.cmd'}
-        or {'/bin/sh', '-c', '"$@"', 'dotcmd-test', project .. '/.cmd'}
-    for _, arg in ipairs(args or {}) do options[#options+1] = arg end
+        and { 'cmd.exe', '/d', '/c', 'call', project .. '/.cmd' }
+        or { '/bin/sh', '-c', '"$@"', 'dotcmd-test', project .. '/.cmd' }
+    for _, arg in ipairs(args or {}) do options[#options + 1] = arg end
     return options
 end
 
@@ -29,7 +32,7 @@ function t.run_project(project, args, cwd, env)
     options.stdout = 'capture'; options.stderr = 'capture'
     options.check = false
     local code, out, err = exec(options)
-    return {code=code, out=out, err=err}
+    return { code = code, out = out, err = err }
 end
 
 function t.project(name, source)
@@ -62,8 +65,11 @@ end
 
 function t.test(name, fn)
     local ok, message = xpcall(fn, debug.traceback)
-    if ok then passed = passed + 1; print('PASS ' .. name)
-    else failed = failed + 1; io.stderr:write('FAIL ' .. name .. '\n' .. message .. '\n') end
+    if ok then
+        passed = passed + 1; print('PASS ' .. name)
+    else
+        failed = failed + 1; io.stderr:write('FAIL ' .. name .. '\n' .. message .. '\n')
+    end
 end
 
 function t.finish()

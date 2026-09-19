@@ -251,6 +251,9 @@ static int Http(lua_State* L) {
     const char* output = StringField(L, "path", NULL);
     long connect_timeout = TimeoutField(L, "connect_timeout", 30);
     long timeout = TimeoutField(L, "timeout", 0);
+    lua_getfield(L, 1, "check");
+    bool check = lua_toboolean(L, -1);
+    lua_pop(L, 1);
     lua_getfield(L, 1, "body");
     size_t body_length = 0;
     const char* body = NULL;
@@ -349,6 +352,8 @@ static int Http(lua_State* L) {
     long status = 0;
     code = curl_easy_getinfo(request->curl, CURLINFO_RESPONSE_CODE, &status);
     if (code != CURLE_OK) return luaL_error(L, "http: %s", curl_easy_strerror(code));
+    if (check && (status < 200 || status >= 300))
+        return luaL_error(L, "http: HTTP status %d", (int)status);
     if (request->file) {
         int result = fclose(request->file);
         request->file = NULL;

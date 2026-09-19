@@ -1,5 +1,10 @@
 {
   "runtime": {
     "version": "Lua 5.5"
+  },
+  "workspace": {
+    "library": ["src/api.d.lua"],
+    "ignoreDir": [".cache", "target", ".git"],
+    "checkThirdParty": false
   }
 }

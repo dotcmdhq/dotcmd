@@ -1,3 +1,6 @@
+---@type dotcmd.Env|_G
+local _ENV = _ENV
+
 -- Projects return {name = function(...) ... end} or
 -- {name = {description = "...", run = function(...) ... end}} from .cmd.lua.
 -- host is global; commands receive CLI strings as varargs.
@@ -29,6 +32,55 @@ local function cache_dir()
         .. (host.os == 'macos' and '/Library/Caches/dotcmd' or '/.cache/dotcmd')
 end
 host.cache_dir = cache_dir()
+
+-- Completed entries are trusted; only fresh downloads are verified.
+function cached(options)
+    local hash = options.sha256
+    local extraction = options.extract == true and {} or options.extract
+    local name = options.name
+    if not name then
+        local url_path = options.url:match("^[^:]+://[^/?#]+([^?#]*)")
+        name = url_path:match("([^/]+)$") or "download"
+        name = name:gsub("%%(%x%x)", function(hex)
+            return string.char(tonumber(hex, 16))
+        end)
+    end
+
+    local download_dir = host.cache_dir .. "/downloads/" .. hash
+    local download_path = download_dir .. "/" .. name
+    local path = download_path
+    if extraction then
+        path = host.cache_dir .. "/extracted/" .. sha256(hash .. "\0" .. ("%d"):format(extraction.strip_components or 0)
+            .. "\0" .. table.concat(extraction.include or {}, "\0"))
+    end
+    if fs.stat(path) then
+        return path
+    end
+
+    if not fs.stat(download_path) then
+        fs.mkdir(download_dir)
+        local temp = download_dir .. "/.tmp-" .. ("%016x%016x"):format(math.random(0), math.random(0))
+        local cleanup <close> = setmetatable({}, {
+            __close = function()
+                fs.remove(temp)
+            end,
+        })
+        http { url = options.url, path = temp, check = true }
+        assert(sha256 { path = temp } == hash, "cached: SHA-256 mismatch")
+        fs.rename(temp, download_path)
+    end
+
+    if extraction then
+        fs.mkdir(host.cache_dir .. "/extracted")
+        extract {
+            path = download_path,
+            to = path,
+            strip_components = extraction.strip_components,
+            include = extraction.include,
+        }
+    end
+    return path
+end
 
 function main(args)
     local launcher
@@ -95,7 +147,8 @@ function main(args)
             local description = type(command) == "table" and command.description
             print("  " .. key .. (description and ("  " .. description) or ""))
         end
-        print("\nOptions:\n  -h, --help  Show help\n  --version  Show dotcmd version\n  --licenses  Show dependency licenses")
+        print(
+            "\nOptions:\n  -h, --help  Show help\n  --version  Show dotcmd version\n  --licenses  Show dependency licenses")
         return 0
     end
 

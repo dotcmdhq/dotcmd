@@ -1,3 +1,6 @@
+---@type dotcmd.Env|_G
+local _ENV = _ENV
+
 -- Discover suites and invoke each project's .cmd test with the local binary.
 return function(repo)
     local t = assert(loadfile(repo .. '/test/support.lua'))()
@@ -6,7 +9,7 @@ return function(repo)
     local work = repo .. '/target/test-' .. temp:match('[^/\\]+$')
     os.remove(temp)
     fs.mkdir(work)
-    local cleanup <close> = setmetatable({}, {__close=function() fs.remove(work, {recursive=true}) end})
+    local cleanup <close> = setmetatable({}, { __close = function() fs.remove(work, { recursive = true }) end })
     local home, cache, appdata = work .. '/home', work .. '/cache', work .. '/appdata'
     fs.mkdir(home)
     local cache_root = windows and (appdata .. '/dotcmd/Cache')
@@ -17,14 +20,17 @@ return function(repo)
     local cached = binary_dir .. '/dotcmd' .. (windows and '.exe' or '')
     t.write(cached, t.read(binary)); fs.make_executable(cached)
     local launcher = t.read(repo .. '/.cmd'):gsub('^:; version=[^\n]+', ':; version=test')
-    local env = {HOME=home, USERPROFILE=home, XDG_CACHE_HOME=cache, LOCALAPPDATA=appdata, DOTCMD_CACHE_DIR=false}
+    local env = { HOME = home, USERPROFILE = home, XDG_CACHE_HOME = cache, LOCALAPPDATA = appdata, DOTCMD_CACHE_DIR = false }
     t.write(work .. '/support.lua', t.read(repo .. '/test/support.lua'))
     local function copy_project(from, to)
         fs.mkdir(to)
         for name in fs.list(from) do
             local source, destination = from .. '/' .. name, to .. '/' .. name
-            if fs.stat(source).type == 'directory' then copy_project(source, destination)
-            else t.write(destination, t.read(source)) end
+            if fs.stat(source).type == 'directory' then
+                copy_project(source, destination)
+            else
+                t.write(destination, t.read(source))
+            end
         end
         t.write(to .. '/.cmd', launcher)
         fs.make_executable(to .. '/.cmd')
@@ -41,10 +47,13 @@ return function(repo)
 local t = assert(loadfile(host.project_dir .. '/../support.lua'))()
 local test = t.test
 ]] .. t.read(project .. '/test.lua') .. '\nreturn t.finish()\nend}\n')
-            local result = t.run_project(project, {'test'}, nil, env)
+            local result = t.run_project(project, { 'test' }, nil, env)
             io.write(result.out); io.stderr:write(result.err)
-            if result.code == 0 then passed = passed + 1
-            else failed = failed + 1; io.stderr:write('FAIL suite ' .. name .. '\n') end
+            if result.code == 0 then
+                passed = passed + 1
+            else
+                failed = failed + 1; io.stderr:write('FAIL suite ' .. name .. '\n')
+            end
         end
     end
     print(('%d suites passed, %d failed'):format(passed, failed))

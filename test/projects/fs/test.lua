@@ -1,9 +1,12 @@
+---@type dotcmd.Env|_G
+local _ENV = _ENV
+
 test('fs metadata and missing paths', function()
     t.write('data-ü', 'abc')
     local info = fs.stat('data-ü')
     assert(info.type == 'file' and info.size == 3)
     assert(fs.stat('missing') == nil)
-    assert(fs.stat('.', {follow=false}).type == 'directory')
+    assert(fs.stat('.', { follow = false }).type == 'directory')
 end)
 
 test('fs mkdir creates parents and tolerates existing directories', function()
@@ -18,7 +21,7 @@ test('fs iterator contents and cleanup on break/error', function()
     fs.mkdir('entries')
     t.write('entries/z', ''); t.write('entries/a', '')
     local names = {}
-    for name in fs.list('entries') do names[#names+1] = name end
+    for name in fs.list('entries') do names[#names + 1] = name end
     table.sort(names)
     assert(table.concat(names, ',') == 'a,z')
     t.assert_error('fs.list:', function() for _ in fs.list('missing') do end end)
@@ -37,9 +40,9 @@ end)
 test('fs file, empty-directory, and recursive removal', function()
     fs.mkdir('tree/child'); t.write('tree/child/file', 'data')
     t.assert_error('fs.remove:', function() fs.remove('tree') end)
-    fs.remove('tree', {recursive=true})
+    fs.remove('tree', { recursive = true })
     assert(fs.stat('tree') == nil)
-    fs.remove('missing', {recursive=true})
+    fs.remove('missing', { recursive = true })
     fs.mkdir('empty-dir'); fs.remove('empty-dir')
     assert(fs.stat('empty-dir') == nil)
     t.write('remove-file', 'data'); fs.remove('remove-file')

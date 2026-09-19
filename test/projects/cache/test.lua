@@ -1,3 +1,6 @@
+---@type dotcmd.Env|_G
+local _ENV = _ENV
+
 local windows = host.os == 'windows'
 local project = t.project('child', [[
 assert(type(host.cache_dir) == 'string')
@@ -8,7 +11,7 @@ local appdata = host.project_dir .. '/appdata'
 local xdg = host.project_dir .. '/xdg'
 local version = assert(t.read(project .. '/.cmd'):match('^:; version=([^\n]+)'))
 local function environment()
-    return {HOME=home, USERPROFILE=home, LOCALAPPDATA=appdata, XDG_CACHE_HOME=xdg, DOTCMD_CACHE_DIR=false}
+    return { HOME = home, USERPROFILE = home, LOCALAPPDATA = appdata, XDG_CACHE_HOME = xdg, DOTCMD_CACHE_DIR = false }
 end
 local function check(root, env)
     -- Seed the launcher cache: no network or additional installed tools needed.
@@ -16,7 +19,7 @@ local function check(root, env)
     fs.mkdir(directory)
     local binary = directory .. '/dotcmd' .. (windows and '.exe' or '')
     t.write(binary, t.read(host.executable)); fs.make_executable(binary)
-    local result = t.success(t.run_project(project, {'cache'}, nil, env))
+    local result = t.success(t.run_project(project, { 'cache' }, nil, env))
     assert(t.normalized(result:gsub('\n$', '')) == t.normalized(root), result)
 end
 
@@ -27,7 +30,7 @@ test('cache uses the OS default in launcher and host', function()
 end)
 
 test('cache falls back when OS environment variables are missing or empty', function()
-    for _, value in ipairs({false, ''}) do
+    for _, value in ipairs({ false, '' }) do
         local env = environment()
         env.LOCALAPPDATA = value; env.XDG_CACHE_HOME = value
         local root = windows and home .. '/AppData/Local/dotcmd/Cache'
@@ -52,11 +55,11 @@ end)
 
 test('cache rejects a relative override', function()
     local env = environment(); env.DOTCMD_CACHE_DIR = 'relative/cache'
-    t.failure(t.run_project(project, {'cache'}, nil, env), 'DOTCMD_CACHE_DIR must be an absolute path')
+    t.failure(t.run_project(project, { 'cache' }, nil, env), 'DOTCMD_CACHE_DIR must be an absolute path')
     if windows then
-        for _, path in ipairs({'C:cache', '\\cache'}) do
+        for _, path in ipairs({ 'C:cache', '\\cache' }) do
             env.DOTCMD_CACHE_DIR = path
-            t.failure(t.run_project(project, {'cache'}, nil, env), 'DOTCMD_CACHE_DIR must be an absolute path')
+            t.failure(t.run_project(project, { 'cache' }, nil, env), 'DOTCMD_CACHE_DIR must be an absolute path')
         end
     end
 end)

@@ -1,4 +1,5 @@
 #include "fs.h"
+#include "lua_error.h"
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -15,6 +16,9 @@ typedef DWORD FsError;
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <sys/syscall.h>
+#endif
 typedef char PathChar;
 typedef int FsError;
 #endif
@@ -407,13 +411,28 @@ static int Remove(lua_State* L) {
 }
 
 static int Rename(lua_State* L) {
+    bool replace = Option(L, 3, "replace", true);
     State* state = NewState(L);
     PathChar* from = Path(L, state, 0, 1);
     PathChar* to = Path(L, state, 1, 2);
 #ifdef _WIN32
-    if (!MoveFileExW(from, to, MOVEFILE_REPLACE_EXISTING)) return Fail(L, "rename", lua_tostring(L, 1), GetLastError());
+    if (!MoveFileExW(from, to, replace ? MOVEFILE_REPLACE_EXISTING : 0)) {
+        DWORD error = GetLastError();
+        if (error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS)
+            return DestinationExists(L, "fs.rename", lua_tostring(L, 2));
+        return Fail(L, "rename", lua_tostring(L, 1), error);
+    }
 #else
-    if (rename(from, to) < 0) return Fail(L, "rename", lua_tostring(L, 1), errno);
+#ifdef __linux__
+    int result = replace ? rename(from, to)
+        : (int)syscall(SYS_renameat2, AT_FDCWD, from, AT_FDCWD, to, 1 /* RENAME_NOREPLACE */);
+#else
+    int result = replace ? rename(from, to) : renamex_np(from, to, RENAME_EXCL);
+#endif
+    if (result < 0) {
+        if (errno == EEXIST || errno == ENOTEMPTY) return DestinationExists(L, "fs.rename", lua_tostring(L, 2));
+        return Fail(L, "rename", lua_tostring(L, 1), errno);
+    }
 #endif
     return 0;
 }

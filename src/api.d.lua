@@ -50,12 +50,16 @@
 ---@field list fun(path: string): fun(): string? Unsorted entry names for a generic for loop.
 ---@field mkdir fun(path: string) Creates parent directories too.
 ---@field remove fun(path: string, options?: {recursive?: boolean}) Ignores missing paths; never traverses symlinks.
----@field rename fun(from: string, to: string) Renames without a copy fallback; raises on failure.
+---@field rename fun(from: string, to: string, options?: {replace?: boolean}) Atomic rename; replace defaults to true. An existing destination raises dotcmd.DestinationExists when replace=false.
 ---@field make_executable fun(path: string) Adds Unix execute bits; no-op on Windows.
 
 ---@class dotcmd.Extraction
 ---@field strip_components? integer Leading path components to remove; defaults to 0.
 ---@field include? string[] Exact archive paths or directory prefixes, matched before stripping.
+
+---@class dotcmd.DestinationExists
+---@field code "destination_exists"
+---@field message string Also returned by tostring(error).
 
 ---@class dotcmd.ExtractOptions: dotcmd.Extraction
 ---@field path string Archive file; format detected by contents.

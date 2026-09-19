@@ -1,5 +1,6 @@
 #include "extract.h"
 #include "fs.h"
+#include "lua_error.h"
 #include <archive.h>
 #include <archive_entry.h>
 #include <errno.h>
@@ -219,7 +220,7 @@ static void PrepareDestination(lua_State* L, State* s, const char* path) {
     Canonical(L, &s->scratch[2], slash ? (*output ? output : "/") : ".");
     lua_pushfstring(L, "%s/%s", s->scratch[2], s->scratch[1]);
     Copy(L, &s->destination, lua_tostring(L, -1)); lua_pop(L, 1);
-    if (Exists(L, s->destination)) luaL_error(L, "extract: destination already exists: %s", s->destination);
+    if (Exists(L, s->destination)) DestinationExists(L, "extract", s->destination);
     lua_pushfstring(L, "%s.extract-XXXXXXXXXXXXXXXX", s->destination);
     Copy(L, &s->temporary, lua_tostring(L, -1)); lua_pop(L, 1);
 #ifdef _WIN32
@@ -245,13 +246,19 @@ static void Publish(lua_State* L, State* s) {
     wchar_t* from = Wide(L, s->temporary);
     wchar_t* to = Wide(L, s->destination);
     BOOL moved = MoveFileExW(from, to, 0); DWORD error = GetLastError(); lua_pop(L, 2);
+    if (!moved && (error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS))
+        DestinationExists(L, "extract", s->destination);
     if (!moved) luaL_error(L, "extract: cannot publish destination (Windows error %d)", (int)error);
 #elif defined(__linux__)
-    if (syscall(SYS_renameat2, AT_FDCWD, s->temporary, AT_FDCWD, s->destination, 1 /* RENAME_NOREPLACE */) < 0)
+    if (syscall(SYS_renameat2, AT_FDCWD, s->temporary, AT_FDCWD, s->destination, 1 /* RENAME_NOREPLACE */) < 0) {
+        if (errno == EEXIST || errno == ENOTEMPTY) DestinationExists(L, "extract", s->destination);
         luaL_error(L, "extract: cannot publish destination: %s", strerror(errno));
+    }
 #else
-    if (renamex_np(s->temporary, s->destination, RENAME_EXCL) < 0)
+    if (renamex_np(s->temporary, s->destination, RENAME_EXCL) < 0) {
+        if (errno == EEXIST || errno == ENOTEMPTY) DestinationExists(L, "extract", s->destination);
         luaL_error(L, "extract: cannot publish destination: %s", strerror(errno));
+    }
 #endif
     s->staged = false;
 }

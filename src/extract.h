@@ -4,4 +4,5 @@ struct lua_State;
 // A missing `to` removes the archive suffix (or appends .unpacked).
 // Selection uses exact paths/directory prefixes before stripping components.
 // Publishes a new directory atomically; its parent must already exist.
+// An existing destination raises {code="destination_exists", message=...}.
 void RegisterExtract(lua_State* L);

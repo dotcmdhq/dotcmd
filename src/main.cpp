@@ -123,7 +123,7 @@ static void SetString(lua_State* L, const char* key, const char* value) {
 }
 
 static int Traceback(lua_State* L) {
-    const char* message = lua_tostring(L, 1);
+    const char* message = luaL_tolstring(L, 1, NULL);
     luaL_traceback(L, L, message ? message : "Lua raised a non-string error", 1);
     return 1;
 }

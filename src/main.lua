@@ -48,13 +48,14 @@ function cached(options)
 
     local download_dir = host.cache_dir .. "/downloads/" .. hash
     local download_path = download_dir .. "/" .. name
-    local path = download_path
+    local extraction_path
     if extraction then
-        path = host.cache_dir .. "/extracted/" .. sha256(hash .. "\0" .. ("%d"):format(extraction.strip_components or 0)
+        extraction_path = host.cache_dir .. "/extracted/" .. sha256(hash .. "\0" .. ("%d"):format(extraction.strip_components or 0)
             .. "\0" .. table.concat(extraction.include or {}, "\0"))
     end
-    if fs.stat(path) then
-        return path
+    local result_path = extraction_path or download_path
+    if fs.stat(result_path) then
+        return result_path
     end
 
     if not fs.stat(download_path) then
@@ -74,12 +75,12 @@ function cached(options)
         fs.mkdir(host.cache_dir .. "/extracted")
         extract {
             path = download_path,
-            to = path,
+            to = extraction_path,
             strip_components = extraction.strip_components,
             include = extraction.include,
         }
     end
-    return path
+    return result_path
 end
 
 function main(args)

@@ -91,41 +91,26 @@ local function build(mode)
     -- Supply the compiler. CMake uses Apple's installed toolchain on macOS.
 
     local arch = host.arch == 'x64' and 'x86_64' or 'aarch64'
-    if host.os == 'linux' then
+    if host.os == 'linux' or windows then
         local zig_config = {
             version = '0.16.0',
             sha256 = {
-                x64 = '70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00',
-                arm64 = 'ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17',
+                ['linux-x64'] = '70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00',
+                ['linux-arm64'] = 'ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17',
+                ['windows-x64'] = '68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e',
+                ['windows-arm64'] = 'aee38316ee4111717900f45dd3130145c39289e105541d737eb8c5ed653c78ef',
             },
         }
-        local name = 'zig-' .. arch .. '-linux-' .. zig_config.version
+        local name = 'zig-' .. arch .. '-' .. host.os .. '-' .. zig_config.version
         local toolchain = cached {
-            url = 'https://ziglang.org/download/' .. zig_config.version .. '/' .. name .. '.tar.xz',
-            sha256 = zig_config.sha256[host.arch], extract = { strip_components = 1 },
+            url = 'https://ziglang.org/download/' .. zig_config.version .. '/' .. name .. (windows and '.zip' or '.tar.xz'),
+            sha256 = zig_config.sha256[platform], extract = { strip_components = 1 },
         }
         env.ZIG_GLOBAL_CACHE_DIR = host.cache_dir .. '/zig'
         env.ZIG_LOCAL_CACHE_DIR = output .. '/zig'
         args[#args + 1] = '-DCMAKE_TOOLCHAIN_FILE=' .. root .. '/cmake/zig.cmake'
-        args[#args + 1] = '-DDOTCMD_ZIG=' .. toolchain .. '/zig'
-        args[#args + 1] = '-DDOTCMD_ZIG_TARGET=' .. arch .. '-linux-musl'
-    elseif windows then
-        local mingw_config = {
-            version = '20251216',
-            sha256 = {
-                x64 = '2d96a4b758f7f8deaec5065833fe025aa53cfc5f704d0524002510984da0ccf4',
-                arm64 = '60c06bd255feb2ef1eb6fce7ee6b307d8f78ee6639660f49861c7c10a8a86164',
-            },
-        }
-        local name = 'llvm-mingw-' .. mingw_config.version .. '-ucrt-' .. arch
-        local toolchain = cached {
-            url = 'https://github.com/mstorsjo/llvm-mingw/releases/download/'
-                .. mingw_config.version .. '/' .. name .. '.zip',
-            sha256 = mingw_config.sha256[host.arch], extract = { strip_components = 1 },
-        }
-        args[#args + 1] = '-DCMAKE_C_COMPILER=' .. toolchain .. '/bin/' .. arch .. '-w64-mingw32-clang.exe'
-        args[#args + 1] = '-DCMAKE_CXX_COMPILER=' .. toolchain .. '/bin/' .. arch .. '-w64-mingw32-clang++.exe'
-        args[#args + 1] = '-DCMAKE_RC_COMPILER=' .. toolchain .. '/bin/' .. arch .. '-w64-mingw32-windres.exe'
+        args[#args + 1] = '-DDOTCMD_ZIG=' .. toolchain .. '/zig' .. suffix
+        args[#args + 1] = '-DDOTCMD_ZIG_TARGET=' .. arch .. (windows and '-windows-gnu' or '-linux-musl')
     end
 
     -- Configure and build locally; CMake owns dependencies and incremental builds.

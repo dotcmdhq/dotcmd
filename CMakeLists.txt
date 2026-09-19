@@ -215,6 +215,7 @@ else()
 endif()
 
 # Run the existing public .cmd tests with this build's executable.
+set(CMAKE_CTEST_ARGUMENTS --verbose)
 enable_testing()
 configure_file(.cmd .cmd COPYONLY)
 file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/.cmd.lua" CONTENT

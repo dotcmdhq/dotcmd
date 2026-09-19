@@ -1,7 +1,7 @@
 -- Projects return {name = function(...) ... end} or
 -- {name = {description = "...", run = function(...) ... end}} from .cmd.lua.
--- The project chunk receives host as its argument; commands receive CLI strings.
-function main(args, host)
+-- host is global; commands receive CLI strings as varargs.
+function main(args)
     local launcher
     if args[1] == "--launcher" then
         table.remove(args, 1)
@@ -24,8 +24,23 @@ function main(args, host)
     end
     host.project_dir = launcher:match("^(.*)/")
     if host.project_dir == "" then host.project_dir = "/" end
-    local project = assert(loadfile(host.project_dir .. "/.cmd.lua", "t"))
-    local commands = project(host)
+    local name = args[1]
+    local help = name == nil or name == "--help" or name == "-h"
+    local path = host.project_dir .. "/.cmd.lua"
+    local project, message = loadfile(path, "t")
+    local commands = {}
+    if project then
+        commands = project()
+    else
+        -- A missing project is a CLI condition, not a Lua failure.
+        local file, _, code = io.open(path, "r")
+        if file then file:close() end
+        if code ~= 2 then error(message) end -- ENOENT on POSIX and Windows.
+        if not help then
+            io.stderr:write("dotcmd: cannot run '" .. name .. "': no .cmd.lua found in " .. host.project_dir .. "\n")
+            return 1
+        end
+    end
     if type(commands) ~= "table" then error(".cmd.lua must return a command table") end
 
     local names = {}
@@ -42,10 +57,9 @@ function main(args, host)
         names[#names + 1] = name
     end
 
-    local name = args[1]
-    if name == nil or name == "--help" or name == "-h" then
+    if help then
         print("Usage: .cmd <command> [args...]")
-        print("\nCommands:")
+        if #names > 0 then print("\nCommands:") end
         table.sort(names)
         for _, key in ipairs(names) do
             local command = commands[key]
@@ -58,7 +72,7 @@ function main(args, host)
 
     local command = commands[name]
     if command == nil then
-        io.stderr:write("dotcmd: unknown command: " .. name .. "\n")
+        io.stderr:write("dotcmd: unknown command: " .. name .. "\nRun .cmd --help to list available commands.\n")
         return 1
     end
     local run = type(command) == "function" and command or command.run

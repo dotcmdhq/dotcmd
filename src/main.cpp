@@ -136,23 +136,6 @@ static int Run(lua_State* L) {
     SetString(L, "path", "");
     SetString(L, "cpath", "");
     lua_pop(L, 1);
-    if (luaL_loadbufferx(L, (const char*)main_lua, sizeof(main_lua), "@embedded/main.lua", "t") != LUA_OK)
-        return lua_error(L);
-    lua_call(L, 0, 0);
-    lua_getglobal(L, "main");
-    if (!lua_isfunction(L, -1)) return luaL_error(L, "main.lua must define main(args, host)");
-    lua_createtable(L, invocation->argc - 1, 0);
-    for (int i = 1; i < invocation->argc; ++i) {
-#ifdef _WIN32
-        char* argument = Utf8(invocation->argv[i]);
-        if (!argument) return luaL_error(L, "cannot convert argument to UTF-8");
-        lua_pushstring(L, argument);
-        free(argument);
-#else
-        lua_pushstring(L, invocation->argv[i]);
-#endif
-        lua_rawseti(L, -2, i);
-    }
     lua_createtable(L, 0, 8);
     SetString(L, "version", DOTCMD_VERSION);
     SetString(L, "os", DOTCMD_OS);
@@ -170,7 +153,25 @@ static int Run(lua_State* L) {
     free(path);
     lua_pushlstring(L, (const char*)licenses, sizeof(licenses));
     lua_setfield(L, -2, "licenses");
-    lua_call(L, 2, 1);
+    lua_setglobal(L, "host");
+    if (luaL_loadbufferx(L, (const char*)main_lua, sizeof(main_lua), "@embedded/main.lua", "t") != LUA_OK)
+        return lua_error(L);
+    lua_call(L, 0, 0);
+    lua_getglobal(L, "main");
+    if (!lua_isfunction(L, -1)) return luaL_error(L, "main.lua must define main(args)");
+    lua_createtable(L, invocation->argc - 1, 0);
+    for (int i = 1; i < invocation->argc; ++i) {
+#ifdef _WIN32
+        char* argument = Utf8(invocation->argv[i]);
+        if (!argument) return luaL_error(L, "cannot convert argument to UTF-8");
+        lua_pushstring(L, argument);
+        free(argument);
+#else
+        lua_pushstring(L, invocation->argv[i]);
+#endif
+        lua_rawseti(L, -2, i);
+    }
+    lua_call(L, 1, 1);
     if (!lua_isinteger(L, -1)) return luaL_error(L, "main must return an integer exit code");
     lua_Integer code = lua_tointeger(L, -1);
     if (code < 0 || code > 255) return luaL_error(L, "main exit code must be between 0 and 255");

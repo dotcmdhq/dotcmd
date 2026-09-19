@@ -134,7 +134,7 @@ set(zlib_library "${deps}/lib/${prefix}${zlib_name}${suffix}")
 set(lzma_library "${deps}/lib/${prefix}lzma${suffix}")
 set(archive_library "${deps}/lib/${prefix}archive${suffix}")
 add_dependency(zlib
-    "https://zlib.net/fossils/zlib-1.3.2.tar.gz"
+    "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz"
     "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16"
     INSTALL BYPRODUCTS "${zlib_library}"
     OPTIONS -DZLIB_BUILD_SHARED=OFF -DZLIB_BUILD_TESTING=OFF)

@@ -96,21 +96,19 @@ local function build(mode)
             '-DCMAKE_EXE_LINKER_FLAGS=-static' })
     else
         local macos_min_version = '11.0'
-        local _, sdk_path = exec { 'xcrun', '--sdk', 'macosx', '--show-sdk-path',
-            cwd = root, env = env, check = true, stdout = 'capture' }
-        sdk = sdk_path:gsub('%s+$', '')
-        local _, compiler = exec { 'xcrun', '--sdk', 'macosx', '--find', 'clang',
-            cwd = root, env = env, check = true, stdout = 'capture' }
-        compiler = compiler:gsub('%s+$', '')
+        sdk = exec { 'xcrun', '--sdk', 'macosx', '--show-sdk-path',
+            cwd = root, env = env, check = true, stdout = 'capture' }.stdout:gsub('%s+$', '')
+        local compiler = exec { 'xcrun', '--sdk', 'macosx', '--find', 'clang',
+            cwd = root, env = env, check = true, stdout = 'capture' }.stdout:gsub('%s+$', '')
         cc = { compiler, '-isysroot', sdk, '-mmacosx-version-min=' .. macos_min_version }
         append(cmake_options, { '-DCMAKE_C_COMPILER=' .. compiler, '-DCMAKE_OSX_SYSROOT=' .. sdk,
             '-DCMAKE_OSX_DEPLOYMENT_TARGET=' .. macos_min_version })
     end
-    local _, compiler_id = exec(append({ cwd = root, env = env, check = true, stdout = 'capture' }, cc, { '--version' }))
-    compiler_id = compiler_id:gsub('%s+$', '')
+    local compiler_id = exec(append({ cwd = root, env = env, check = true, stdout = 'capture' }, cc, { '--version' }))
+        .stdout:gsub('%s+$', '')
     if sdk then
-        local _, sdk_version = exec { 'xcrun', '--sdk', 'macosx', '--show-sdk-version',
-            cwd = root, env = env, check = true, stdout = 'capture' }
+        local sdk_version = exec { 'xcrun', '--sdk', 'macosx', '--show-sdk-version',
+            cwd = root, env = env, check = true, stdout = 'capture' }.stdout
         compiler_id = compiler_id .. sdk .. sdk_version:gsub('%s+$', '')
     end
 
@@ -440,7 +438,7 @@ return {
         description = 'Build and run the local dotcmd executable',
         run = function(...)
             build()
-            return exec(binary, '--launcher', root .. '/.cmd', ...)
+            return exec(binary, '--launcher', root .. '/.cmd', ...).code
         end,
     },
     test = {
@@ -450,7 +448,7 @@ return {
             local output = root .. '/target/release/'
             write(output .. '.cmd', read(root .. '/.cmd'))
             write(output .. '.cmd.lua', ('return {test = assert(loadfile(%q))()}\n'):format(root .. '/test/run.lua'))
-            return exec(binary, '--launcher', output .. '.cmd', 'test', root)
+            return exec(binary, '--launcher', output .. '.cmd', 'test', root).code
         end,
     },
 }

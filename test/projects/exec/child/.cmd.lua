@@ -4,7 +4,7 @@ local _ENV = _ENV
 return {
     inherit = function()
         local t = assert(loadfile(host.project_dir .. '/../../support.lua'))()
-        return exec(t.command(host.project_dir, { 'emit' }))
+        return exec(t.command(host.project_dir, { 'emit' })).code
     end,
     emit = function()
         io.write('OUT\0\255'); io.stderr:write('ERR\0\254')

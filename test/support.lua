@@ -31,8 +31,7 @@ function t.run_project(project, args, cwd, env)
     options.env = env
     options.stdout = 'capture'; options.stderr = 'capture'
     options.check = false
-    local code, out, err = exec(options)
-    return { code = code, out = out, err = err }
+    return exec(options)
 end
 
 function t.project(name, source)
@@ -45,15 +44,15 @@ function t.project(name, source)
 end
 
 function t.success(result)
-    assert(result.code == 0, result.err .. result.out)
-    assert(result.err == '', result.err)
-    return (result.out:gsub('\r\n', '\n'))
+    assert(result.code == 0, result.stderr .. result.stdout)
+    assert(result.stderr == '', result.stderr)
+    return (result.stdout:gsub('\r\n', '\n'))
 end
 
 function t.failure(result, expected)
-    assert(result.code == 1, 'expected exit 1, got ' .. result.code .. '\n' .. result.out .. result.err)
-    if expected then assert(result.err:find(expected, 1, true), result.err) end
-    return result.err
+    assert(result.code == 1, 'expected exit 1, got ' .. result.code .. '\n' .. result.stdout .. result.stderr)
+    if expected then assert(result.stderr:find(expected, 1, true), result.stderr) end
+    return result.stderr
 end
 
 local passed, failed = 0, 0

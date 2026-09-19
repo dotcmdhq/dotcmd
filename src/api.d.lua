@@ -41,6 +41,11 @@
 ---@field stderr? dotcmd.Output|"stdout" Defaults to inherit; stdout merges into standard output.
 ---@field check? boolean Raise on a nonzero exit; defaults to false.
 
+---@class dotcmd.ExecResult
+---@field code integer Exit code.
+---@field stdout string Present only when captured; annotated as a string to avoid nil checks at capture sites.
+---@field stderr string Present only when captured; annotated as a string to avoid nil checks at capture sites.
+
 ---@class dotcmd.Stat
 ---@field type "file"|"directory"|"symlink"|"other"
 ---@field size integer Bytes.
@@ -82,7 +87,7 @@
 ---@class dotcmd.Env
 ---@field host dotcmd.Host
 ---@field http fun(options: string|dotcmd.HttpOptions): dotcmd.HttpResponse HTTPS requests; transport/filesystem failures raise.
----@field exec fun(program: string|dotcmd.ExecOptions, ...: string): integer, string?, string? Exit code and captured stdout/stderr. Executes without a shell.
+---@field exec fun(program: string|dotcmd.ExecOptions, ...: string): dotcmd.ExecResult Executes without a shell; returns the exit code and captured output.
 ---@field sha256 fun(input: string|dotcmd.File): string Hash bytes or a file; returns lowercase hexadecimal.
 ---@field fs dotcmd.Fs
 ---@field extract fun(options: string|dotcmd.ExtractOptions): boolean Extract ZIP, tar, tar.gz, or tar.xz. Returns true on success, false when skipped; parent must exist.

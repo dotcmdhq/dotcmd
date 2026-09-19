@@ -22,8 +22,8 @@ for _, format in ipairs({ 'tar', 'tar.gz', 'tar.xz', 'zip' }) do
         assert(t.read('out-' .. format .. '/sdk/share/ü.txt') == 'unicode')
         assert(t.read('out-' .. format .. '/sdk/share/large') == string.rep('\0', 65536))
         if host.os ~= 'windows' then
-            local code, out = exec { './out-' .. format .. '/sdk/bin/run', stdout = 'capture' }
-            assert(code == 0 and out == 'sdk works\n')
+            local result = exec { './out-' .. format .. '/sdk/bin/run', stdout = 'capture' }
+            assert(result.code == 0 and result.stdout == 'sdk works\n')
         end
     end)
 end

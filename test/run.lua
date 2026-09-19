@@ -48,7 +48,7 @@ local t = assert(loadfile(host.project_dir .. '/../support.lua'))()
 local test = t.test
 ]] .. t.read(project .. '/test.lua') .. '\nreturn t.finish()\nend}\n')
             local result = t.run_project(project, { 'test' }, nil, env)
-            io.write(result.out); io.stderr:write(result.err)
+            io.write(result.stdout); io.stderr:write(result.stderr)
             if result.code == 0 then
                 passed = passed + 1
             else

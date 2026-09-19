@@ -652,13 +652,17 @@ static int Exec(lua_State* L) {
         }
         return lua_error(L);
     }
+    lua_createtable(L, 0, 3);
     lua_pushinteger(L, code);
+    lua_setfield(L, -2, "code");
     for (int i = 0; i < 2; ++i) {
         Stream* s = &p->streams[i];
-        if (s->mode == Capture) lua_pushlstring(L, s->buffer.data ? s->buffer.data : "", s->buffer.size);
-        else lua_pushnil(L);
+        if (s->mode == Capture) {
+            lua_pushlstring(L, s->buffer.data ? s->buffer.data : "", s->buffer.size);
+            lua_setfield(L, -2, i ? "stderr" : "stdout");
+        }
     }
-    return 3;
+    return 1;
 }
 
 void RegisterExec(lua_State* L) {

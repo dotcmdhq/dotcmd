@@ -342,6 +342,8 @@ static int Extract(lua_State* L) {
     Check(L, s->reader, archive_read_support_filter_xz(s->reader));
     Check(L, s->reader, archive_read_support_format_tar(s->reader));
     Check(L, s->reader, archive_read_support_format_zip(s->reader));
+    // Plain tar headers use UTF-8, not the Windows OEM code page.
+    Check(L, s->reader, archive_read_set_format_option(s->reader, "tar", "hdrcharset", "UTF-8"));
     Check(L, s->writer, archive_write_disk_set_options(s->writer,
         ARCHIVE_EXTRACT_SECURE_NODOTDOT | ARCHIVE_EXTRACT_SECURE_SYMLINKS | ARCHIVE_EXTRACT_NO_OVERWRITE));
 #ifdef _WIN32

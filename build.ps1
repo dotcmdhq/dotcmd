@@ -117,7 +117,7 @@ try {
     Download "https://github.com/tukaani-project/xz/releases/download/v$($Config.XZ_VERSION)/xz-$($Config.XZ_VERSION).tar.gz" "$Downloads/xz-$($Config.XZ_VERSION).tar.gz" $Config.XZ_SHA256
     Extract "$Downloads/xz-$($Config.XZ_VERSION).tar.gz" $XzSource 'src/liblzma/api/lzma.h'
     $ArchiveKey = "$DependencyKey-$((Get-FileHash archive.cmake -Algorithm SHA256).Hash.ToLowerInvariant())"
-    $ArchiveBuild = Join-Path $Cache "deps/archive-windows-$Arch-$ArchiveKey"
+    $ArchiveBuild = (Join-Path $Cache "deps/archive-windows-$Arch-$ArchiveKey").Replace('\', '/')
     if (!(Test-Path "$ArchiveBuild/complete")) {
         $CmakeArgs = @('-G', 'Ninja', "-DCMAKE_MAKE_PROGRAM=$NinjaDir/ninja.exe", "-DCMAKE_C_COMPILER=$script:Compiler",
             "-DCMAKE_RC_COMPILER=$($Toolchain.Replace('\', '/'))/bin/$Triple-w64-mingw32-windres.exe",

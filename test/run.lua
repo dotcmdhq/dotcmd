@@ -17,7 +17,7 @@ return function(repo)
     local cached = binary_dir .. '/dotcmd' .. (windows and '.exe' or '')
     t.write(cached, t.read(binary)); fs.make_executable(cached)
     local launcher = t.read(repo .. '/.cmd'):gsub('^:; version=[^\n]+', ':; version=test')
-    local env = {HOME=home, USERPROFILE=home, XDG_CACHE_HOME=cache, LOCALAPPDATA=appdata}
+    local env = {HOME=home, USERPROFILE=home, XDG_CACHE_HOME=cache, LOCALAPPDATA=appdata, DOTCMD_CACHE_DIR=false}
     t.write(work .. '/support.lua', t.read(repo .. '/test/support.lua'))
     local function copy_project(from, to)
         fs.mkdir(to)

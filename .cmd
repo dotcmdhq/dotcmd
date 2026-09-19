@@ -8,7 +8,8 @@
 :; set -eu
 :; case "$(uname -s)" in Linux) os=linux;; Darwin) os=macos;; *) echo 'dotcmd: unsupported OS' >&2; exit 1;; esac
 :; case "$(uname -m)" in x86_64|amd64) arch=x64;; arm64|aarch64) arch=arm64;; *) echo 'dotcmd: unsupported CPU architecture' >&2; exit 1;; esac
-:; case "$os" in linux) case "${XDG_CACHE_HOME:-}" in /*) cache="$XDG_CACHE_HOME/dotcmd";; *) cache="${HOME:?dotcmd: HOME is not set}/.cache/dotcmd";; esac;; macos) cache="${HOME:?dotcmd: HOME is not set}/Library/Caches/dotcmd";; esac
+:; cache=${DOTCMD_CACHE_DIR:-}
+:; case "$cache" in /*) ;; '') case "$os" in linux) case "${XDG_CACHE_HOME:-}" in /*) cache="$XDG_CACHE_HOME/dotcmd";; *) cache="${HOME:?dotcmd: HOME is not set}/.cache/dotcmd";; esac;; macos) cache="${HOME:?dotcmd: HOME is not set}/Library/Caches/dotcmd";; esac;; *) echo 'dotcmd: DOTCMD_CACHE_DIR must be an absolute path' >&2; exit 1;; esac
 :; cache="$cache/$version/$os-$arch"
 :; binary="$cache/dotcmd"
 :; if [ -x "$binary" ]; then exec "$binary" --launcher "$0" "$@"; fi
@@ -39,10 +40,22 @@ set "arch="
 if /i "%machine%"=="AMD64" set "arch=x64"
 if /i "%machine%"=="ARM64" set "arch=arm64"
 if not defined arch goto unsupported
+set "cache_root=%DOTCMD_CACHE_DIR%"
+if defined cache_root goto custom_cache
 set "cache_root=%LOCALAPPDATA%"
 if not defined cache_root if defined USERPROFILE set "cache_root=%USERPROFILE%\AppData\Local"
 if not defined cache_root goto missing_cache
-set "cache=%cache_root%\dotcmd\Cache\%version%\windows-%arch%"
+set "cache_root=%cache_root%\dotcmd\Cache"
+goto cache_ready
+:custom_cache
+if "%cache_root:~1,2%"==":\" goto cache_ready
+if "%cache_root:~1,2%"==":/" goto cache_ready
+if "%cache_root:~0,2%"=="\\" goto cache_ready
+if "%cache_root:~0,2%"=="//" goto cache_ready
+echo dotcmd: DOTCMD_CACHE_DIR must be an absolute path >&2
+exit /b 1
+:cache_ready
+set "cache=%cache_root%\%version%\windows-%arch%"
 set "binary=%cache%\dotcmd.exe"
 if exist "%binary%" goto run
 set "dotcmd_expected_sha="

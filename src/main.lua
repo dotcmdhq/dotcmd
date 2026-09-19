@@ -1,6 +1,35 @@
 -- Projects return {name = function(...) ... end} or
 -- {name = {description = "...", run = function(...) ... end}} from .cmd.lua.
 -- host is global; commands receive CLI strings as varargs.
+local function cache_dir()
+    local function env(name)
+        local value = os.getenv(name)
+        return value ~= '' and value or nil
+    end
+    local override = env('DOTCMD_CACHE_DIR')
+    if override then
+        local absolute = host.os == 'windows'
+            and (override:match('^%a:[/\\]') or override:match('^[/\\][/\\]'))
+            or (host.os ~= 'windows' and override:sub(1, 1) == '/')
+        assert(absolute, 'DOTCMD_CACHE_DIR must be an absolute path')
+        return override
+    end
+    if host.os == 'windows' then
+        local base = env('LOCALAPPDATA')
+        if not base then
+            base = assert(env('USERPROFILE'), 'neither LOCALAPPDATA nor USERPROFILE is set') .. '/AppData/Local'
+        end
+        return base .. '/dotcmd/Cache'
+    end
+    if host.os == 'linux' then
+        local xdg = env('XDG_CACHE_HOME')
+        if xdg and xdg:sub(1, 1) == '/' then return xdg .. '/dotcmd' end
+    end
+    return assert(env('HOME'), 'HOME is not set')
+        .. (host.os == 'macos' and '/Library/Caches/dotcmd' or '/.cache/dotcmd')
+end
+host.cache_dir = cache_dir()
+
 function main(args)
     local launcher
     if args[1] == "--launcher" then

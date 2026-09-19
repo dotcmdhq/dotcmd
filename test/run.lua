@@ -1,7 +1,7 @@
 ---@type dotcmd.Env|_G
 local _ENV = _ENV
 
--- Discover suites and invoke each project's .cmd test with the local binary.
+-- Discover suites and run each project's commands with the local binary.
 return function(repo)
     local t = assert(loadfile(repo .. '/test/support.lua'))()
     local windows = host.os == 'windows'
@@ -52,13 +52,6 @@ return function(repo)
 
     local home, cache, appdata = work .. '/home', work .. '/cache', work .. '/appdata'
     fs.mkdir(home)
-    local cache_root = windows and (appdata .. '/dotcmd/Cache')
-        or host.os == 'macos' and (home .. '/Library/Caches/dotcmd') or (cache .. '/dotcmd')
-    local binary = host.executable
-    local binary_dir = cache_root .. '/test/' .. host.os .. '-' .. host.arch
-    fs.mkdir(binary_dir)
-    local cached = binary_dir .. '/dotcmd' .. (windows and '.exe' or '')
-    t.write(cached, t.read(binary)); fs.make_executable(cached)
     local launcher = t.read(repo .. '/.cmd'):gsub('^:; version=[^\n]+', ':; version=test')
     local env = { HOME = home, USERPROFILE = home, XDG_CACHE_HOME = cache, LOCALAPPDATA = appdata,
         DOTCMD_CACHE_DIR = false, DOTCMD_TEST_URL = server_url, SSL_CERT_FILE = certificate,

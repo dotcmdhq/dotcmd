@@ -18,11 +18,7 @@ function t.normalized(path)
 end
 
 function t.command(project, ...)
-    local options = host.os == 'windows'
-        and { 'cmd.exe', '/d', '/c', 'call', project .. '/.cmd' }
-        or { '/bin/sh', '-c', '"$@"', 'dotcmd-test', project .. '/.cmd' }
-    for _, arg in ipairs { ... } do options[#options + 1] = arg end
-    return options
+    return { host.executable, '--launcher', project .. '/.cmd', ... }
 end
 
 function t.run_project(project, config, ...)

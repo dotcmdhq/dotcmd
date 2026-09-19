@@ -131,8 +131,6 @@ test('spawn kill stops the direct child and can be repeated', function()
     local process <close> = spawn(options)
     assert(process.stdout:read('l'):gsub('\r$', '') == 'ready')
     process:kill(); process:kill()
-    -- On Windows the launcher is a child of cmd.exe; release its input too.
-    process.stdin:close()
     assert(process:wait().code ~= 0)
     process:kill()
 end)

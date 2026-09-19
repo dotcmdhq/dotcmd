@@ -4,7 +4,6 @@ local _ENV = _ENV
 local success, failure = t.success, t.failure
 local child = host.project_dir .. '/child'
 local normalized = t.normalized
-local windows = host.os == 'windows'
 local empty = t.project('empty')
 local broken = t.project('broken', 'this is not valid Lua!')
 
@@ -29,10 +28,8 @@ test('CLI definitions, descriptions, and Lua errors', function()
     failure(t.run_project(broken, '--help'), '.cmd.lua')
 end)
 test('CLI argument boundaries and Unicode', function()
-    local args = { '', 'two words', 'héllo', '--help', 'quote"inside', 'backslash\\' }
-    if not windows then
-        args[#args + 1] = 'line\nbreak'; args[#args + 1] = '$HOME'
-    end
+    local args = { '', 'two words', 'héllo', '--help', 'quote"inside', 'backslash\\',
+        'line\nbreak', '$HOME', '%PATH%', '!PATH!', '&|<>^' }
     local expected = #args .. '\n'
     for _, arg in ipairs(args) do
         expected = expected .. arg:gsub('.', function(c) return ('%02x'):format(c:byte()) end) .. '\n'

@@ -872,8 +872,11 @@ static int Poll(lua_State* L) {
 static int Kill(lua_State* L) {
     Process* p = GetProcess(L);
 #ifdef _WIN32
-    if (p->process && WaitForSingleObject(p->process, 0) == WAIT_TIMEOUT && !TerminateProcess(p->process, 1) &&
-        WaitForSingleObject(p->process, 0) == WAIT_TIMEOUT) WindowsError(L, "kill", GetLastError());
+    if (p->process && !TerminateProcess(p->process, 1)) {
+        DWORD error = GetLastError();
+        // Our child handle has terminate access; access denied means it is already terminating.
+        if (error != ERROR_ACCESS_DENIED) WindowsError(L, "kill", error);
+    }
 #else
     if (p->pid > 0 && kill(p->pid, SIGKILL) < 0 && errno != ESRCH) luaL_error(L, "spawn: kill: %s", strerror(errno));
 #endif

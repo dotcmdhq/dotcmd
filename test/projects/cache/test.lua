@@ -13,13 +13,22 @@ local version = assert(t.read(project .. '/.cmd'):match('^:; version=([^\n]+)'))
 local function environment()
     return { HOME = home, USERPROFILE = home, LOCALAPPDATA = appdata, XDG_CACHE_HOME = xdg, DOTCMD_CACHE_DIR = false }
 end
+local function run(env)
+    -- Cache selection belongs to the launcher, so these tests invoke the script.
+    local options = windows
+        and { 'cmd.exe', '/d', '/c', 'call', project .. '/.cmd', 'cache' }
+        or { '/bin/sh', '-c', '"$@"', 'dotcmd-test', project .. '/.cmd', 'cache' }
+    options.cwd = project; options.env = env
+    options.stdout = 'capture'; options.stderr = 'capture'
+    return exec(options)
+end
 local function check(root, env)
     -- Seed the launcher cache: no network or additional installed tools needed.
     local directory = root .. '/' .. version .. '/' .. host.os .. '-' .. host.arch
     fs.mkdir(directory)
     local binary = directory .. '/dotcmd' .. (windows and '.exe' or '')
     t.write(binary, t.read(host.executable)); fs.make_executable(binary)
-    local result = t.success(t.run_project(project, { env = env }, 'cache'))
+    local result = t.success(run(env))
     assert(t.normalized(result:gsub('\n$', '')) == t.normalized(root), result)
 end
 
@@ -55,11 +64,11 @@ end)
 
 test('cache rejects a relative override', function()
     local env = environment(); env.DOTCMD_CACHE_DIR = 'relative/cache'
-    t.failure(t.run_project(project, { env = env }, 'cache'), 'DOTCMD_CACHE_DIR must be an absolute path')
+    t.failure(run(env), 'DOTCMD_CACHE_DIR must be an absolute path')
     if windows then
         for _, path in ipairs({ 'C:cache', '\\cache' }) do
             env.DOTCMD_CACHE_DIR = path
-            t.failure(t.run_project(project, { env = env }, 'cache'), 'DOTCMD_CACHE_DIR must be an absolute path')
+            t.failure(run(env), 'DOTCMD_CACHE_DIR must be an absolute path')
         end
     end
 end)

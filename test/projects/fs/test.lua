@@ -1,6 +1,6 @@
 test('fs metadata and missing paths', function()
-    t.write('data', 'abc')
-    local info = fs.stat('data')
+    t.write('data-ü', 'abc')
+    local info = fs.stat('data-ü')
     assert(info.type == 'file' and info.size == 3)
     assert(fs.stat('missing') == nil)
     assert(fs.stat('.', {follow=false}).type == 'directory')

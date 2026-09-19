@@ -147,7 +147,9 @@ try {
         Compile (@('-x', 'c++', '-std=c++11', '-fno-exceptions', '-fno-rtti', '-Wall', '-Wextra', '-Werror', '-DCURL_STATICLIB', "-I$Lua/src", "-I$Generated", "-I$Curl/include") + $Common + @('-c', $Source.FullName, '-o', $Object))
         $Objects += $Object
     }
-    $Link = $Objects + @("$Http/lib/libcurl.a", '-static', '-municode', '-Wl,--gc-sections', '-lws2_32', '-lcrypt32', '-lsecur32', '-lbcrypt', '-ladvapi32', '-liphlpapi')
+    & "$Toolchain/bin/$Triple-w64-mingw32-windres.exe" -I src -i src/windows.rc -o "$ObjectsDir/windows.o" -O coff
+    if ($LASTEXITCODE -ne 0) { throw 'Compiling Windows manifest failed' }
+    $Link = $Objects + @("$ObjectsDir/windows.o", "$Http/lib/libcurl.a", '-static', '-municode', '-Wl,--gc-sections', '-lws2_32', '-lcrypt32', '-lsecur32', '-lbcrypt', '-ladvapi32', '-liphlpapi')
     if ($Mode -eq 'release') { $Link += '-s' }
     Compile ($Link + @('-o', "$Exe.tmp"))
     Move-Item -Force "$Exe.tmp" $Exe

@@ -40,7 +40,8 @@ test('exec environment overlays and removal', function()
     options.stdout = 'capture'
     local code, out = exec(options)
     assert(code == 0)
-    assert(out:gsub('\r\n', '\n') == os.getenv('PATH') .. '\nnew ü value\n<missing>\n\n')
+    assert(out:gsub('\r\n', '\n') == os.getenv('PATH') .. '\nnew ü value\n<missing>\n\n',
+        ('unexpected environment: %q'):format(out))
 end)
 
 test('exec cwd and output file redirection', function()

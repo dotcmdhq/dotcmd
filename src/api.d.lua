@@ -102,9 +102,35 @@
 
 ---@alias dotcmd.Run fun(...: string): integer?
 
----@class dotcmd.Command
+---@alias dotcmd.Arity "1"|"?"|"+"|"*"
+---@alias dotcmd.ArgType "string"|"number"|"integer"|"boolean"|"file"|"directory"|string[]
+---@alias dotcmd.Parse fun(text: string): any?, string? Return nil and an optional message on invalid input; false is valid.
+
+---@class dotcmd.ValueSpec
+---@field type? dotcmd.ArgType Defaults to string. An array declares an enum. Path types preserve strings without checking existence.
+---@field parse? dotcmd.Parse Custom conversion/validation, instead of type. Exceptions remain Lua errors.
+---@field arity? dotcmd.Arity 1 = required scalar, ? = optional scalar, + = required repeated, * = optional repeated.
+---@field default? any Already-parsed value for optional arity, passed through unchanged; repeated defaults are arrays.
 ---@field description? string Help description.
----@field run dotcmd.Run
+
+---@class dotcmd.Option: dotcmd.ValueSpec
+---@field flag? boolean Consume no value and produce true; cannot have type or parse. Absent scalar flags default to false.
+---@field short? string Letters or punctuation used as short aliases: h? declares -h and -?. Values use -j 4 or -j=4.
+-- Option arity defaults to ?. Repeated options produce arrays, including flags.
+
+---@class dotcmd.Argument: dotcmd.ValueSpec
+---@field [integer] string Display name at index 1, for help and errors.
+-- Positional arity defaults to 1. Only the final positional may have another arity.
+-- Repeated positionals expand into varargs; a missing optional scalar passes nil.
+
+---@class dotcmd.Arguments: dotcmd.Argument[]
+---@field end_opts? boolean The first positional ends option recognition, including recognition of --. Defaults to false; positional parsing still applies.
+
+---@class dotcmd.Command
+---@field description? string First line is the summary in command listings; command help shows the full text.
+---@field opts? table<string, dotcmd.Option> Result keys; underscores become hyphens in long-option spellings. Presence enables option parsing and prepends an options table to run.
+---@field args? dotcmd.Arguments Positional schema; omitted means unrestricted strings, empty means no positionals.
+---@field run fun(...: any): integer? Receives opts first when declared, then individual positionals. Returns nil or an exit code from 0 to 255.
 
 ---@alias dotcmd.Commands table<string, dotcmd.Run|dotcmd.Command>
 

@@ -16,4 +16,21 @@ return {
     nothing = function() end,
     invalid = function() return false end,
     crash = function() error('intentional project error') end,
+    deploy = {
+        description = [[Deploy files
+
+Uploads the selected files to the deployment target.
+Existing files are replaced.
+]],
+        args = { { 'target', description = 'Deployment target' }, { 'files', type = 'file', arity = '*', description = 'Files to deploy' } },
+        opts = {
+            jobs = { short = 'j', type = 'integer', default = 4, description = 'Parallel jobs' },
+            mode = { type = { 'debug', 'release' }, default = 'release', description = 'Build mode' },
+            include = { type = 'directory', arity = '*', default = { 'src', 'lib' }, description = 'Include directory' },
+            verbose = { flag = true, short = 'v', arity = '*', description = 'Increase verbosity' },
+            token = { arity = '1', parse = function() error('help called parse') end },
+        },
+        run = function() error('help called run') end,
+    },
+    empty_schema = { opts = {}, args = {}, run = function() error('help called run') end },
 }

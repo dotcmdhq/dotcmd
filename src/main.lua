@@ -3,7 +3,7 @@ local _ENV = _ENV
 
 -- Projects return {name = function(...) ... end} or
 -- {name = {description = "...", run = function(...) ... end}} from .cmd.lua.
--- host is global; commands receive CLI strings as varargs.
+-- host is global; optional opts/args schemas prepare the arguments to run.
 local function cache_dir()
     local function env(name)
         local value = os.getenv(name)
@@ -94,35 +94,237 @@ function cached(options)
     return result_path
 end
 
-function main(args)
-    local launcher
-    if args[1] == "--launcher" then
-        table.remove(args, 1)
-        launcher = table.remove(args, 1)
+-- Schema declarations are trusted. Return packed run parameters or a CLI error.
+local function parse_args(command, argv)
+    local function many(spec)
+        return spec.arity == '*' or spec.arity == '+'
+    end
+    local function parse(spec, text)
+        if spec.parse then
+            local value, message = spec.parse(text)
+            if value == nil then return nil, message or 'invalid value' end
+            return value
+        end
+        local kind = spec.type
+        if kind == 'integer' or kind == 'number' then
+            local value = tonumber(text)
+            if value and kind == 'integer' then value = math.tointeger(value) end
+            if value == nil or value ~= value or value == math.huge or value == -math.huge then
+                return nil, 'expected ' .. (kind == 'integer' and 'an integer' or 'a finite number')
+            end
+            return value
+        elseif kind == 'boolean' then
+            if text == 'true' then return true end
+            if text == 'false' then return false end
+            return nil, 'expected true or false'
+        elseif type(kind) == 'table' then
+            for _, choice in ipairs(kind) do if text == choice then return text end end
+            return nil, 'expected one of: ' .. table.concat(kind, ', ')
+        end
+        -- Strings and file/directory paths are unchanged. Paths need not exist.
+        return text
+    end
+    local function option_like(text)
+        return #text > 1 and text:sub(1, 1) == '-' and tonumber(text) == nil
     end
 
-    if args[1] == "--version" then
+    local spellings = {}
+    for key, spec in pairs(command.opts or {}) do
+        spellings['--' .. key:gsub('_', '-')] = key
+        for short in (spec.short or ''):gmatch('.') do spellings['-' .. short] = key end
+    end
+    local opts, positionals = {}, {}
+    local options = command.opts ~= nil
+    local i = 1
+    while i <= #argv do
+        local text = argv[i]
+        if options and text == '--' then
+            options = false
+        elseif options and option_like(text) then
+            local spelling, attached = text:match('^([^=]+)=(.*)$')
+            local key = spellings[spelling or text]
+            local spec = key and command.opts[key]
+            if not spec then return nil, 'unknown option: ' .. text end
+            local label = '--' .. key:gsub('_', '-')
+            if opts[key] ~= nil and not many(spec) then return nil, 'option ' .. label .. ' may only appear once' end
+            local value = true
+            if spec.flag then
+                if attached ~= nil then return nil, 'option ' .. label .. ' does not take a value' end
+            else
+                local raw = attached
+                if raw == nil then
+                    i = i + 1
+                    raw = argv[i]
+                    if raw == nil or option_like(raw) then return nil, 'option ' .. label .. ' requires a value' end
+                end
+                local message
+                value, message = parse(spec, raw)
+                if value == nil then return nil, label .. ': ' .. tostring(message) end
+            end
+            if many(spec) then
+                if opts[key] == nil then opts[key] = {} end
+                opts[key][#opts[key] + 1] = value
+            else
+                opts[key] = value
+            end
+        else
+            positionals[#positionals + 1] = text
+            if command.args and command.args.end_opts then options = false end
+        end
+        i = i + 1
+    end
+
+    for key, spec in pairs(command.opts or {}) do
+        if opts[key] == nil then
+            if spec.arity == '1' or spec.arity == '+' then
+                return nil, 'missing required option: --' .. key:gsub('_', '-')
+            end
+            if spec.default ~= nil then
+                opts[key] = spec.default
+            elseif many(spec) then
+                opts[key] = {}
+            elseif spec.flag then
+                opts[key] = false
+            end
+        end
+    end
+
+    local result = { n = 0 }
+    local function append(value)
+        result.n = result.n + 1
+        result[result.n] = value
+    end
+    if command.opts ~= nil then append(opts) end
+    if command.args ~= nil then
+        local index = 1
+        for _, spec in ipairs(command.args) do
+            local count = many(spec) and (#positionals - index + 1) or (positionals[index] ~= nil and 1 or 0)
+            if count == 0 then
+                local arity = spec.arity or '1'
+                if arity == '1' or arity == '+' then return nil, 'missing required argument: ' .. spec[1] end
+                if many(spec) then
+                    for _, value in ipairs(spec.default or {}) do append(value) end
+                else
+                    append(spec.default)
+                end
+            else
+                for _ = 1, count do
+                    local value, message = parse(spec, positionals[index])
+                    if value == nil then return nil, spec[1] .. ': ' .. tostring(message) end
+                    append(value)
+                    index = index + 1
+                end
+            end
+        end
+        if index <= #positionals then return nil, 'unexpected positional argument: ' .. positionals[index] end
+    else
+        for _, value in ipairs(positionals) do append(value) end
+    end
+    return result
+end
+
+local function print_help_section(title, rows)
+    if #rows == 0 then return end
+    local width = 0
+    for _, row in ipairs(rows) do width = math.max(width, #row[1]) end
+    print('\n' .. title .. ':')
+    for _, row in ipairs(rows) do
+        local description = row[2] or ''
+        local indent = string.rep(' ', width + 4)
+        print('  ' .. row[1] .. (description == '' and '' or
+            (string.rep(' ', width - #row[1] + 2) .. description:gsub('\n', '\n' .. indent))))
+    end
+end
+
+local function help_value_type(spec)
+    if spec.parse then return 'value' end
+    return type(spec.type) == 'table' and table.concat(spec.type, '|') or (spec.type or 'string')
+end
+
+local function help_default_value(value)
+    local kind = type(value)
+    if kind == 'string' then return value == '' and '""' or value end
+    if kind == 'number' or kind == 'boolean' then return tostring(value) end
+    return '<' .. kind .. '>'
+end
+
+local function help_description(spec, positional)
+    local notes = {}
+    if positional and (spec.type or spec.parse) then notes[#notes + 1] = help_value_type(spec) end
+    if not positional and (spec.arity == '1' or spec.arity == '+') then notes[#notes + 1] = 'required' end
+    if not positional and (spec.arity == '*' or spec.arity == '+') then notes[#notes + 1] = 'repeatable' end
+    if spec.default ~= nil then
+        local default = help_default_value(spec.default)
+        if spec.arity == '*' or spec.arity == '+' then
+            local values = {}
+            for _, value in ipairs(spec.default) do values[#values + 1] = help_default_value(value) end
+            default = '[' .. table.concat(values, ', ') .. ']'
+        end
+        notes[#notes + 1] = 'default: ' .. default
+    end
+    local description = spec.description or ''
+    if #notes > 0 then
+        description = description .. (description == '' and '' or ' ') .. '(' .. table.concat(notes, '; ') .. ')'
+    end
+    return description
+end
+
+local function print_help_options(opts)
+    local names, rows = {}, {}
+    for key in pairs(opts or {}) do names[#names + 1] = key end
+    table.sort(names)
+    for _, key in ipairs(names) do
+        local spec = opts[key]
+        local aliases = {}
+        for short in (spec.short or ''):gmatch('.') do aliases[#aliases + 1] = '-' .. short end
+        aliases[#aliases + 1] = '--' .. key:gsub('_', '-')
+        local label = table.concat(aliases, ', ')
+        if not spec.flag then label = label .. ' <' .. help_value_type(spec) .. '>' end
+        rows[#rows + 1] = { label, help_description(spec, false) }
+    end
+    print_help_section('Options', rows)
+end
+
+function main(args)
+    local main_command = {
+        args = { end_opts = true, { 'args', arity = '*' } },
+        opts = {
+            launcher = { description = 'Path to the project launcher' },
+            help = { flag = true, short = 'h?', description = 'Show help for a command, or list commands' },
+            version = { flag = true, description = 'Show dotcmd version' },
+            cache_dir = { flag = true, description = 'Show shared cache directory' },
+            licenses = { flag = true, description = 'Show dependency licenses' },
+        },
+    }
+    local parsed, message = parse_args(main_command, args)
+    if not parsed then
+        io.stderr:write('dotcmd: ' .. message .. '\n')
+        return 2
+    end
+    local opts = table.remove(parsed, 1)
+    local name = table.remove(parsed, 1)
+
+    if opts.version then
         print("dotcmd " .. host.version)
         return 0
     end
-    if args[1] == "--cache-dir" then
+    if opts.cache_dir then
         print(host.cache_dir)
         return 0
     end
-    if args[1] == "--licenses" then
+    if opts.licenses then
         io.write(host.licenses)
         return 0
     end
 
-    launcher = launcher or (host.cwd .. "/.cmd")
+    local launcher = opts.launcher or (host.cwd .. "/.cmd")
     if host.os == "windows" then launcher = launcher:gsub("\\", "/") end
     if launcher:sub(1, 1) ~= "/" and not (host.os == "windows" and launcher:match("^%a:/")) then
         launcher = host.cwd .. "/" .. launcher
     end
     host.project_dir = launcher:match("^(.*)/")
     if host.project_dir == "" then host.project_dir = "/" end
-    local name = args[1]
-    local help = name == nil or name == "--help" or name == "-h"
+    local help = name == nil or opts.help
     local path = host.project_dir .. "/.cmd.lua"
     local project, message = loadfile(path, "t")
     local commands = {}
@@ -140,7 +342,6 @@ function main(args)
     end
     if type(commands) ~= "table" then error(".cmd.lua must return a command table") end
 
-    local names = {}
     for name, command in pairs(commands) do
         if type(name) ~= "string" or name == "" then error("command names must be nonempty strings") end
         if type(command) ~= "function" then
@@ -151,20 +352,20 @@ function main(args)
                 error("description for command " .. name .. " must be a string")
             end
         end
-        names[#names + 1] = name
     end
 
-    if help then
-        print("Usage: .cmd <command> [args...]")
-        if #names > 0 then print("\nCommands:") end
+    if name == nil then
+        print('Usage: .cmd [options] <command> [args...]')
+        local names, rows = {}, {}
+        for key in pairs(commands) do names[#names + 1] = key end
         table.sort(names)
         for _, key in ipairs(names) do
-            local command = commands[key]
-            local description = type(command) == "table" and command.description
-            print("  " .. key .. (description and ("  " .. description) or ""))
+            local entry = commands[key]
+            local description = type(entry) == 'table' and entry.description
+            rows[#rows + 1] = { key, description and description:match('^[^\r\n]*') }
         end
-        print(
-            "\nOptions:\n  -h, --help  Show help\n  --version  Show dotcmd version\n  --cache-dir  Show shared cache directory\n  --licenses  Show dependency licenses")
+        print_help_section('Commands', rows)
+        print_help_options(main_command.opts)
         return 0
     end
 
@@ -173,8 +374,44 @@ function main(args)
         io.stderr:write("dotcmd: unknown command: " .. name .. "\nRun .cmd --help to list available commands.\n")
         return 1
     end
+    if opts.help then
+        if type(command) == 'function' then command = {} end
+        local usage = 'Usage: .cmd ' .. name
+        local rows = {}
+        if command.opts and next(command.opts) then usage = usage .. ' [options]' end
+        if command.args == nil then
+            usage = usage .. ' [args...]'
+        else
+            for _, spec in ipairs(command.args) do
+                local arity = spec.arity or '1'
+                local label = spec[1] .. ((arity == '*' or arity == '+') and '...' or '')
+                if arity == '?' or arity == '*' then
+                    label = '[' .. label .. ']'
+                else
+                    label = '<' .. label .. '>'
+                end
+                usage = usage .. ' ' .. label
+                rows[#rows + 1] = { spec[1], help_description(spec, true) }
+            end
+        end
+        print(usage)
+        if command.description then print('\n' .. command.description:gsub('%s+$', '')) end
+        print_help_section('Arguments', rows)
+        print_help_options(command.opts)
+        return 0
+    end
     local run = type(command) == "function" and command or command.run
-    local code = run(table.unpack(args, 2))
+    local code
+    if type(command) == 'table' and (command.opts ~= nil or command.args ~= nil) then
+        local parameters, message = parse_args(command, parsed)
+        if not parameters then
+            io.stderr:write('dotcmd ' .. name .. ': ' .. message .. '\n')
+            return 2
+        end
+        code = run(table.unpack(parameters, 1, parameters.n))
+    else
+        code = run(table.unpack(parsed))
+    end
     if code == nil then return 0 end
     if math.type(code) ~= "integer" or code < 0 or code > 255 then
         error("command " .. name .. " must return nil or an integer exit code between 0 and 255")

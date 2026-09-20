@@ -8,5 +8,4 @@
 - Embed API documentation and LuaLS annotations for the pinned version. Add `--setup-luals` to extract definitions and scope them to `.cmd.lua` with `---@type dotcmd.Env|_G` and `local _ENV = _ENV`. Initially create `.luarc.json` only when absent; otherwise show the required setting. Automatic updates to existing JSON/JSONC need formatting- and comment-preserving edits.
 - Polish: colored outputs
 - `./.cmd --update` to switch to latest
-- json
-- arg parse
+- json support?

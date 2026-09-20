@@ -139,10 +139,15 @@ end
 
 return {
     build = {
-        description = 'Build dotcmd (release by default; --debug for debug)',
-        run = function(mode)
-            assert(mode == nil or mode == '--debug', 'Usage: .cmd build [--debug]')
-            build(mode and 'debug' or 'release')
+        description = [[Build dotcmd
+
+Downloads the required build tools and builds into target/release.
+Use --debug to build into target/debug instead.
+]],
+        opts = { debug = { flag = true, description = 'Build in debug mode (default: release)' } },
+        args = {},
+        run = function(opts)
+            build(opts.debug and 'debug' or 'release')
         end,
     },
     ['local'] = {
@@ -154,6 +159,7 @@ return {
     },
     test = {
         description = 'Build and test .cmd in fixture projects',
+        args = {},
         run = function()
             local cmake = build()
             return exec { cmake, '--build', root .. '/target/release', '--target', 'test',

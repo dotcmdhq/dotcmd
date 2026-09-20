@@ -88,11 +88,17 @@
 ---@field path string Archive file; format detected by contents.
 ---@field to? string New destination directory; defaults to the archive path without its suffix.
 
+---Creates output as a file or directory. Its parent exists; output does not.
+---Input is the cached download and must not be modified. Return values are ignored.
+---Output is temporary and will be moved after success; do not embed its path.
+---Cache identity includes stripped Lua bytecode, not captured values or ambient state.
+---@alias dotcmd.Prepare fun(input: string, output: string)
+
 ---@class dotcmd.CachedOptions
 ---@field url string HTTPS download URL.
 ---@field sha256 string Pinned download hash. Verified only when downloading; cache hits are trusted.
 ---@field name? string Download filename; defaults to the URL filename, or download.
----@field extract? boolean|dotcmd.Extraction Extract into a cached directory; defaults to false.
+---@field prepare? dotcmd.Prepare Run only on a prepared-cache miss. Must be a Lua function; errors discard partial output.
 
 ---@alias dotcmd.Run fun(...: string): integer?
 
@@ -111,4 +117,4 @@
 ---@field sha256 fun(input: string|dotcmd.File): string Hash bytes or a file; returns lowercase hexadecimal.
 ---@field fs dotcmd.Fs
 ---@field extract fun(options: string|dotcmd.ExtractOptions): boolean Extract ZIP, tar, tar.gz, or tar.xz. Returns true on success, false when skipped; parent must exist.
----@field cached fun(options: dotcmd.CachedOptions): string Absolute cached file path, or directory path when extracting.
+---@field cached fun(options: dotcmd.CachedOptions): string Absolute download path, or prepared file/directory path when prepare is supplied.

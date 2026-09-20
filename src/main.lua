@@ -36,7 +36,7 @@ host.cache_dir = cache_dir()
 -- Completed entries are trusted; only fresh downloads are verified.
 function cached(options)
     local hash = options.sha256
-    local extraction = options.extract == true and {} or options.extract
+    local prepare = options.prepare
     local name = options.name
     if not name then
         local url_path = options.url:match("^[^:]+://[^/?#]+([^?#]*)")
@@ -48,12 +48,15 @@ function cached(options)
 
     local download_dir = host.cache_dir .. "/downloads/" .. hash
     local download_path = download_dir .. "/" .. name
-    local extraction_path
-    if extraction then
-        extraction_path = host.cache_dir .. "/extracted/" .. sha256(hash .. "\0" .. ("%d"):format(extraction.strip_components or 0)
-            .. "\0" .. table.concat(extraction.include or {}, "\0"))
+    local prepared_dir
+    if prepare ~= nil then
+        local ok, bytecode = pcall(string.dump, prepare, true)
+        assert(ok, "cached: prepare must be a Lua function")
+        -- Captured values and ambient state are the caller's responsibility.
+        prepared_dir = host.cache_dir .. "/prepared/" .. sha256(hash .. "\0" .. name
+            .. "\0" .. host.os .. "\0" .. host.arch .. "\0" .. bytecode)
     end
-    local result_path = extraction_path or download_path
+    local result_path = prepared_dir and (prepared_dir .. "/" .. name) or download_path
     if fs.stat(result_path) then
         return result_path
     end
@@ -71,15 +74,22 @@ function cached(options)
         fs.rename(temp, download_path, { if_exists = "skip" })
     end
 
-    if extraction then
-        fs.mkdir(host.cache_dir .. "/extracted")
-        extract {
-            path = download_path,
-            to = extraction_path,
-            strip_components = extraction.strip_components,
-            include = extraction.include,
-            if_exists = "skip",
-        }
+    if prepare then
+        fs.mkdir(host.cache_dir .. "/prepared")
+        local temp = host.cache_dir .. "/prepared/.tmp-" .. ("%016x%016x"):format(math.random(0), math.random(0))
+        fs.mkdir(temp)
+        local cleanup <close> = setmetatable({}, {
+            __close = function()
+                fs.remove(temp, { recursive = true })
+            end,
+        })
+        local output = temp .. "/" .. name
+        prepare(download_path, output)
+        local stat = fs.stat(output, { follow = false })
+        assert(stat and (stat.type == "file" or stat.type == "directory"),
+            "cached: prepare must create the output file or directory")
+        -- Publish the whole entry atomically; a concurrent winner is reused.
+        fs.rename(temp, prepared_dir, { if_exists = "skip" })
     end
     return result_path
 end

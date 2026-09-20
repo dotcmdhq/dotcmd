@@ -35,7 +35,10 @@ return function(repo)
     local go = cached {
         url = 'https://go.dev/dl/go' .. go_config.version .. '.' .. go_os .. '-' .. go_arch
             .. (windows and '.zip' or '.tar.gz'),
-        sha256 = go_config.sha256[host.os][host.arch], extract = { strip_components = 1 },
+        sha256 = go_config.sha256[host.os][host.arch],
+        prepare = function(input, output)
+            extract { path = input, to = output, strip_components = 1 }
+        end,
     }
     local server_binary = work .. '/http-server' .. (windows and '.exe' or '')
     exec { go .. '/bin/go' .. (windows and '.exe' or ''), 'build', '-trimpath', '-o', server_binary,

@@ -105,6 +105,10 @@ function main(args)
         print("dotcmd " .. host.version)
         return 0
     end
+    if args[1] == "--cache-dir" then
+        print(host.cache_dir)
+        return 0
+    end
     if args[1] == "--licenses" then
         io.write(host.licenses)
         return 0
@@ -160,7 +164,7 @@ function main(args)
             print("  " .. key .. (description and ("  " .. description) or ""))
         end
         print(
-            "\nOptions:\n  -h, --help  Show help\n  --version  Show dotcmd version\n  --licenses  Show dependency licenses")
+            "\nOptions:\n  -h, --help  Show help\n  --version  Show dotcmd version\n  --cache-dir  Show shared cache directory\n  --licenses  Show dependency licenses")
         return 0
     end
 

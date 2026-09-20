@@ -2,10 +2,7 @@
 local _ENV = _ENV
 
 local windows = host.os == 'windows'
-local project = t.project('child', [[
-assert(type(host.cache_dir) == 'string')
-return {cache = function() print(host.cache_dir) end}
-]])
+local project = t.project('child')
 local home = host.project_dir .. '/home'
 local appdata = host.project_dir .. '/appdata'
 local xdg = host.project_dir .. '/xdg'
@@ -16,14 +13,14 @@ end
 local function run(env)
     -- Cache selection belongs to the launcher, so these tests invoke the script.
     local options = windows
-        and { 'cmd.exe', '/d', '/c', 'call', project .. '/.cmd', 'cache' }
-        or { '/bin/sh', '-c', '"$@"', 'dotcmd-test', project .. '/.cmd', 'cache' }
+        and { 'cmd.exe', '/d', '/c', 'call', project .. '/.cmd', '--cache-dir' }
+        or { '/bin/sh', '-c', '"$@"', 'dotcmd-test', project .. '/.cmd', '--cache-dir' }
     options.cwd = project; options.env = env
     options.stdout = 'capture'; options.stderr = 'capture'
     return exec(options)
 end
 local function check(root, env)
-    -- Seed the launcher cache: no network or additional installed tools needed.
+    -- Seed the launcher cache so it uses the updated binary without a download.
     local directory = root .. '/' .. version .. '/' .. host.os .. '-' .. host.arch
     fs.mkdir(directory)
     local binary = directory .. '/dotcmd' .. (windows and '.exe' or '')

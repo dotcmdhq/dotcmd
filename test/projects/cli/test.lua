@@ -9,11 +9,15 @@ local broken = t.project('broken', 'this is not valid Lua!')
 
 test('CLI help without a project', function()
     for _, args in ipairs({ {}, { '-h' }, { '--help' } }) do
-        assert(success(t.run_project(empty, table.unpack(args))):find('--version', 1, true))
+        local output = success(t.run_project(empty, table.unpack(args)))
+        assert(output:find('--version', 1, true))
+        assert(output:find('--cache-dir', 1, true))
     end
 end)
 test('CLI built-ins skip broken project code', function()
     assert(success(t.run_project(broken, '--version')) == 'dotcmd ' .. host.version .. '\n')
+    assert(normalized(success(t.run_project(broken, '--cache-dir')):gsub('\n$', ''))
+        == normalized(host.cache_dir))
     assert(success(t.run_project(broken, '--licenses')):find('Lua', 1, true))
 end)
 test('CLI clean errors for missing project and unknown command', function()

@@ -38,7 +38,10 @@ local function build(mode)
     local cmake_dir = cached {
         url = 'https://github.com/Kitware/CMake/releases/download/v' .. cmake_config.version
             .. '/' .. cmake_name .. (windows and '.zip' or '.tar.gz'),
-        sha256 = cmake_config.sha256[host.os][host.arch], extract = { strip_components = 1 },
+        sha256 = cmake_config.sha256[host.os][host.arch],
+        prepare = function(input, output)
+            extract { path = input, to = output, strip_components = 1 }
+        end,
     }
     local cmake = cmake_dir .. (host.os == 'macos' and '/CMake.app/Contents/bin/cmake' or '/bin/cmake' .. suffix)
     local ninja_config = {
@@ -66,7 +69,10 @@ local function build(mode)
     local ninja_dir = cached {
         url = 'https://github.com/ninja-build/ninja/releases/download/v' .. ninja_config.version
             .. '/ninja-' .. ninja_config.name[host.os][host.arch] .. '.zip',
-        sha256 = ninja_config.sha256[host.os][host.arch], extract = true,
+        sha256 = ninja_config.sha256[host.os][host.arch],
+        prepare = function(input, output)
+            extract { path = input, to = output }
+        end,
     }
     local ninja = ninja_dir .. '/ninja' .. suffix
     local args = {
@@ -92,7 +98,10 @@ local function build(mode)
         local name = 'zig-' .. arch .. '-linux-' .. zig_config.version
         local toolchain = cached {
             url = 'https://ziglang.org/download/' .. zig_config.version .. '/' .. name .. '.tar.xz',
-            sha256 = zig_config.sha256[host.arch], extract = { strip_components = 1 },
+            sha256 = zig_config.sha256[host.arch],
+            prepare = function(input, output)
+                extract { path = input, to = output, strip_components = 1 }
+            end,
         }
         env.ZIG_GLOBAL_CACHE_DIR = host.cache_dir .. '/zig'
         env.ZIG_LOCAL_CACHE_DIR = output .. '/zig'
@@ -111,7 +120,10 @@ local function build(mode)
         local toolchain = cached {
             url = 'https://github.com/mstorsjo/llvm-mingw/releases/download/'
                 .. mingw_config.version .. '/' .. name .. '.zip',
-            sha256 = mingw_config.sha256[host.arch], extract = { strip_components = 1 },
+            sha256 = mingw_config.sha256[host.arch],
+            prepare = function(input, output)
+                extract { path = input, to = output, strip_components = 1 }
+            end,
         }
         args[#args + 1] = '-DCMAKE_C_COMPILER=' .. toolchain:gsub('\\', '/') .. '/bin/' .. arch .. '-w64-mingw32-clang.exe'
         args[#args + 1] = '-DCMAKE_CXX_COMPILER=' .. toolchain:gsub('\\', '/') .. '/bin/' .. arch .. '-w64-mingw32-clang++.exe'

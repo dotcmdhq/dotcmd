@@ -50,10 +50,8 @@ local function run(options, ...)
     end
     assert(loadfile(host.project_dir .. '/../main.lua', 't', env))()
     local args = { ... }
-    if options.name then
-        table.insert(args, 1, options.name)
-        table.insert(args, 1, '--launcher')
-    end
+    table.insert(args, 1, path)
+    table.insert(args, 1, '--launcher')
     local ok, code = pcall(env.main, args)
     result.code = ok and code or 1
     if not ok then result.stderr = result.stderr .. tostring(code) end

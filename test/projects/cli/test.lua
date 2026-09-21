@@ -35,6 +35,16 @@ test('CLI launcher accepts separate and attached values before commands', functi
         end
     end
 end)
+test('CLI requires the launcher when invoked as a binary', function()
+    for _, args in ipairs({ { 'nothing' }, { '--launcher=', 'nothing' } }) do
+        local command = { host.executable, table.unpack(args) }
+        command.cwd, command.stdout, command.stderr = child, 'capture', 'capture'
+        local result = exec(command)
+        assert(result.code == 2, result.stderr)
+        assert(result.stdout == '', result.stdout)
+        assert(result.stderr == "dotcmd: invoke the project's .cmd launcher\n", result.stderr)
+    end
+end)
 test('CLI option errors use the shared parser', function()
     for _, case in ipairs({
         { 'requires a value', '--launcher' },
@@ -81,13 +91,13 @@ test('CLI definitions, descriptions, and Lua errors', function()
 end)
 test('CLI general help shows sorted commands with first-line summaries', function()
     local output = success(t.run_project(child, '--help'))
-    assert(output:find('Usage: .cmd [options] <command> [args...]', 1, true), output)
+    assert(output:find('Usage: .cmd <command> [args...]', 1, true), output)
     local project_section = assert(output:find('\nProject commands:\n', 1, true), output)
     local builtin_section = assert(output:find('\nBuilt-in commands:\n', 1, true), output)
     assert(project_section < builtin_section, output)
     assert(output:find('  --echo', 1, true) > builtin_section, output)
     assert(output:find('  --help [command], -h, -?', 1, true) > builtin_section, output)
-    assert(builtin_section < output:find('\nOptions:\n', 1, true), output)
+    assert(not output:find('\nOptions:\n', 1, true), output)
     assert(output:match('\n  deploy %[options%] <target> %[files%.%.%.%]%s+Deploy files\n'), output)
     assert(output:find('\n  empty-schema\n', 1, true), output)
     assert(output:find('\n  nothing [args...]\n', 1, true), output)
@@ -100,11 +110,16 @@ test('CLI general help shows sorted commands with first-line summaries', functio
     assert(not output:match('Options:.*%-%-help'), output)
     for _, name in ipairs({ '--version', '--cache-dir', '--licenses' }) do
         local position = assert(output:find('  ' .. name, 1, true), output)
-        assert(position > builtin_section and position < output:find('\nOptions:\n', 1, true), output)
+        assert(position > builtin_section, output)
     end
-    assert(compact:find('--launcher <string> Path to the project launcher', 1, true), output)
+    assert(not output:find('--launcher', 1, true), output)
     assert(not output:find('Arguments:', 1, true), output)
     assert(success(t.run_project(empty, '--help')):find('Built-in commands:', 1, true))
+end)
+test('CLI hidden options remain accepted but do not appear in help', function()
+    assert(success(t.run_project(child, 'hidden-options')) == 'false\n')
+    assert(success(t.run_project(child, 'hidden-options', '--internal')) == 'true\n')
+    assert(success(t.run_project(child, '--help', 'hidden-options')) == 'Usage: .cmd hidden-options\n')
 end)
 test('CLI command help shows full descriptions and schema metadata without running code', function()
     local expected = [[Usage: .cmd deploy [options] <target> [files...]

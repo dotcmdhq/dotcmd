@@ -119,6 +119,7 @@
 ---@class dotcmd.Option: dotcmd.ValueSpec
 ---@field flag? boolean Consume no value and produce true; cannot have type or parse. Absent scalar flags default to false.
 ---@field short? string Letters or punctuation used as short aliases: h? declares -h and -?. Values use -j 4 or -j=4.
+---@field hidden? boolean Omit this option from help and completion suggestions; it remains accepted by the parser.
 -- Option arity defaults to ?. Repeated options produce arrays, including flags.
 
 ---@class dotcmd.Argument: dotcmd.ValueSpec

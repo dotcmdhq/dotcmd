@@ -141,13 +141,12 @@ return {
     build = {
         description = [[Build dotcmd
 
-Downloads the required build tools and builds into target/release.
-Use --debug to build into target/debug instead.
+Downloads the required build tools and builds into target/<mode>.
 ]],
-        opts = { debug = { flag = true, description = 'Build in debug mode (default: release)' } },
-        args = {},
-        run = function(opts)
-            build(opts.debug and 'debug' or 'release')
+        args = { { 'mode', arity = '?', type = { 'debug', 'release' }, default = 'release',
+            description = 'Build mode' } },
+        run = function(mode)
+            build(mode)
         end,
     },
     ['local'] = {

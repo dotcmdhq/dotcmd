@@ -43,4 +43,9 @@ Existing files are replaced.
         run = function() error('help called run') end,
     },
     empty_schema = { opts = {}, args = {}, run = function() error('help called run') end },
+    hidden_options = {
+        opts = { internal = { hidden = true, flag = true } },
+        args = {},
+        run = function(opts) print(tostring(opts.internal)) end,
+    },
 }

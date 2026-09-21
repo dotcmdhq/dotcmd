@@ -226,7 +226,7 @@ end
 local main_command = {
     args = { end_opts = true, { 'args', arity = '*', default = { '--help' } } },
     opts = {
-        launcher = { description = 'Path to the project launcher' },
+        launcher = { hidden = true },
     },
 }
 
@@ -340,7 +340,9 @@ The next invocation downloads the selected binary if it is not already cached.]]
 
             local function print_help_options(opts)
                 local names, rows = {}, {}
-                for key in pairs(opts or {}) do names[#names + 1] = key end
+                for key, spec in pairs(opts or {}) do
+                    if not spec.hidden then names[#names + 1] = key end
+                end
                 table.sort(names)
                 for _, key in ipairs(names) do
                     local spec = opts[key]
@@ -356,7 +358,12 @@ The next invocation downloads the selected binary if it is not already cached.]]
 
             local function help_usage(name, command)
                 local usage = name
-                if command.opts and next(command.opts) then usage = usage .. ' [options]' end
+                for _, spec in pairs(command.opts or {}) do
+                    if not spec.hidden then
+                        usage = usage .. ' [options]'
+                        break
+                    end
+                end
                 if command.args == nil then return usage .. ' [args...]' end
                 for _, spec in ipairs(command.args) do
                     local arity = spec.arity or '1'
@@ -369,7 +376,7 @@ The next invocation downloads the selected binary if it is not already cached.]]
             end
 
             if name == nil then
-                print('Usage: .cmd [options] <command> [args...]')
+                print('Usage: .cmd <command> [args...]')
                 local names, rows, builtin_rows = {}, {}, {}
                 for key, command in pairs(commands) do
                     if type(command) ~= 'string' then names[#names + 1] = key end
@@ -416,7 +423,11 @@ function main(args)
     local opts = table.remove(parsed, 1)
     local name = table.remove(parsed, 1)
 
-    launcher = opts.launcher or (host.cwd .. "/.cmd")
+    if not opts.launcher or opts.launcher == '' then
+        io.stderr:write("dotcmd: invoke the project's .cmd launcher\n")
+        return 2
+    end
+    launcher = opts.launcher
     if host.os == "windows" then launcher = launcher:gsub("\\", "/") end
     if launcher:sub(1, 1) ~= "/" and not (host.os == "windows" and launcher:match("^%a:/")) then
         launcher = host.cwd .. "/" .. launcher

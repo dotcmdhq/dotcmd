@@ -166,6 +166,10 @@ test('PowerShell setup queries the selected runtime and preserves the reported p
         local query
         env.exec = function(args) query = args; return { stdout = profile, code = 0 } end
         env.print = function() end
+        env.require = function(name)
+            if name == 'dotcmd.completion' then return assert(loadfile(host.project_dir .. '/../completion.lua', 't', env))() end
+            return require(name)
+        end
         assert(loadfile(host.project_dir .. '/../main.lua', 't', env))({
             completion_scripts = { powershell = '# adapter\n' },
         })
@@ -181,10 +185,9 @@ test('PowerShell setup queries the selected runtime and preserves the reported p
         local invalid = '# caf\233\r\n'
         t.write(profile, invalid)
         fs.remove(variables.XDG_CONFIG_HOME .. '/dotcmd/completions.ps1')
-        local message = ''
-        env.io = setmetatable({ stderr = { write = function(_, text) message = message .. text end } }, { __index = io })
-        equal(env.main({ '--launcher', child .. '/.cmd', '--setup-completions', shell }), 1)
-        assert(message:find('profile must use UTF-8', 1, true))
+        t.assert_error('profile must use UTF-8', function()
+            env.main({ '--launcher', child .. '/.cmd', '--setup-completions', shell })
+        end)
         equal(t.read(profile), invalid)
         assert(not fs.stat(variables.XDG_CONFIG_HOME .. '/dotcmd/completions.ps1'))
     end

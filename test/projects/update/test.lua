@@ -35,6 +35,11 @@ local function run(options, ...)
     env.io.stderr = { write = function(_, value) result.stderr = result.stderr .. value end }
     env.io.open = function() error('updater must not access launcher contents through Lua') end
     env.loadfile = function(file, mode) return loadfile(file, mode, env) end
+    env.require = function(name)
+        if name == 'dotcmd.update' then return assert(loadfile(host.project_dir .. '/../update.lua', 't', env))() end
+        if name == 'dotcmd.help' then return assert(loadfile(host.project_dir .. '/../help.lua', 't', env))() end
+        return require(name)
+    end
     env.http = function(request)
         result.requests[#result.requests + 1] = request.url
         assert(request.check)
@@ -60,6 +65,25 @@ local function run(options, ...)
     end
     return result
 end
+
+test('update module loads only when the command runs', function()
+    local project = t.project('lazy', [[
+for i, searcher in ipairs(package.searchers) do
+    package.searchers[i] = function(name)
+        local loader, data = searcher(name)
+        if name == 'dotcmd.update' and type(loader) == 'function' then print('loading updater') end
+        return loader, data
+    end
+end
+return {}
+]])
+    for _, args in ipairs({ { '--version' }, { '--help' }, { '--help', '--update' } }) do
+        assert(not t.success(t.run_project(project, table.unpack(args))):find('loading updater', 1, true))
+    end
+    local output = t.success(t.run_project(project, '--update', host.version))
+    assert(output:sub(1, 16) == 'loading updater\n')
+    assert(output:find('is already up to date', 1, true))
+end)
 
 test('update defaults to latest and accepts exact releases including downgrades', function()
     for _, args in ipairs({ {}, { 'latest' }, { '2.0.0' }, { '0.1.36' } }) do

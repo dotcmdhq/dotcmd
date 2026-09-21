@@ -169,6 +169,29 @@ function(embed path symbol)
         CONTENT "static const unsigned char ${symbol}[] = {\n${bytes}\n};\n" @ONLY)
 endfunction()
 embed("${CMAKE_CURRENT_SOURCE_DIR}/src/main.lua" main_lua)
+file(GLOB_RECURSE lua_modules CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/dotcmd/*.lua")
+set(module_includes "")
+set(module_entries "")
+foreach(path IN LISTS lua_modules)
+    file(RELATIVE_PATH module_path "${CMAKE_CURRENT_SOURCE_DIR}/src" "${path}")
+    string(REGEX REPLACE "\\.lua$" "" name "${module_path}")
+    string(REPLACE "/" "." name "${name}")
+    string(MAKE_C_IDENTIFIER "module_${name}" symbol)
+    embed("${path}" "${symbol}")
+    string(APPEND module_includes "#include \"${symbol}.h\"\n")
+    string(APPEND module_entries
+        "    {\"${name}\", \"@embedded/${module_path}\", ${symbol}, sizeof(${symbol})},\n")
+endforeach()
+file(CONFIGURE OUTPUT "${generated}/lua_modules.h" CONTENT
+    "${module_includes}
+static const struct {
+    const char* name;
+    const char* path;
+    const unsigned char* source;
+    size_t size;
+} lua_modules[] = {
+${module_entries}};
+" @ONLY)
 foreach(shell bash zsh fish powershell)
     embed("${CMAKE_CURRENT_SOURCE_DIR}/src/completion.${shell}" completion_${shell})
 endforeach()

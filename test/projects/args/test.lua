@@ -2,6 +2,7 @@
 local _ENV = _ENV
 
 local child = host.project_dir .. '/child'
+local args = require('dotcmd.args')
 
 local function succeeds(name, ...)
     t.success(t.run_project(child, name:gsub('_', '-'), ...))
@@ -14,6 +15,34 @@ local function rejects(name, expected, ...)
     assert(result.stderr:find(expected, 1, true), result.stderr)
     assert(not result.stderr:find('stack traceback', 1, true), result.stderr)
 end
+
+test('scan preserves raw values and option boundaries without resolving the schema', function()
+    local function unexpected() error('scan called a converter') end
+    local command = {
+        opts = {
+            mode = { short = 'm', parse = unexpected },
+            enabled = { type = 'boolean' },
+            tag = { arity = '*' },
+            jobs = { type = 'integer', default = 4 },
+            required = { arity = '1' },
+        },
+        args = { { 'values', arity = '+', parse = unexpected } },
+    }
+    local state = assert(args.scan(command, { '-m', 'raw', '--enabled=false', '--tag=one', '--tag=two', '--', 'tail', '--literal' }))
+    assert(state.opts.mode == 'raw' and state.opts.enabled == 'false')
+    assert(table.concat(state.opts.tag, '|') == 'one|two')
+    assert(state.opts.jobs == nil and state.opts.required == nil)
+    assert(table.concat(state.positionals, '|') == 'tail|--literal' and not state.options)
+    assert(state.spellings['-m'] == 'mode' and state.spellings['--mode'] == 'mode')
+    state = assert(args.scan(command, {}))
+    assert(state.options and #state.positionals == 0 and next(state.opts) == nil)
+    state = assert(args.scan(command, { '--jobs' }))
+    assert(state.pending == 'jobs')
+    local parsed, message = args.parse(command, { '--jobs' })
+    assert(parsed == nil and message == 'option --jobs requires a value')
+    local invalid, message = args.scan(command, { '--unknown' })
+    assert(invalid == nil and message == 'unknown option: --unknown')
+end)
 
 test('args absent preserves raw varargs and option-looking strings', function()
     succeeds('raw', '--', '--help', '--x=y', '')

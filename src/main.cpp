@@ -20,6 +20,7 @@ extern "C" {
 }
 #include "build_config.h"
 #include "main_lua.h"
+#include "lua_modules.h"
 #include "completion_bash.h"
 #include "completion_zsh.h"
 #include "completion_fish.h"
@@ -132,6 +133,20 @@ static int Traceback(lua_State* L) {
     return 1;
 }
 
+static int SearchBuiltin(lua_State* L) {
+    const char* name = luaL_checkstring(L, 1);
+    for (const auto& module : lua_modules) {
+        if (strcmp(name, module.name) != 0) continue;
+        if (luaL_loadbufferx(L, (const char*)module.source, module.size, module.path, "t") != LUA_OK)
+            return lua_error(L);
+        return 1;
+    }
+    if (strncmp(name, "dotcmd.", 7) == 0)
+        return luaL_error(L, "no embedded module '%s'", name);
+    lua_pushfstring(L, "no embedded module '%s'", name);
+    return 1;
+}
+
 // The whole initialization/call runs inside lua_pcall, including allocations.
 static int Run(lua_State* L) {
     Invocation* invocation = (Invocation*)lua_touserdata(L, 1);
@@ -145,7 +160,10 @@ static int Run(lua_State* L) {
     lua_getglobal(L, "package");
     SetString(L, "path", "");
     SetString(L, "cpath", "");
-    lua_pop(L, 1);
+    lua_getfield(L, -1, "searchers");
+    lua_pushcfunction(L, SearchBuiltin);
+    lua_rawseti(L, -2, 2); // Replace the Lua filesystem searcher.
+    lua_pop(L, 2);
     lua_createtable(L, 0, 8);
     SetString(L, "version", DOTCMD_VERSION);
     SetString(L, "os", DOTCMD_OS);

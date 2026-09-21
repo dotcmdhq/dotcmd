@@ -7,6 +7,16 @@ local function hex(value)
     return (value:gsub('.', function(c) return ('%02x'):format(c:byte()) end))
 end
 return {
+    help = function() print('project help') end,
+    update = function() print('project update') end,
+    __echo = function(value) print(value) end,
+    build_docs = {
+        aliases = { 'docs', 'docs_local', '-d' },
+        description = 'Build documentation',
+        args = { { 'value' } },
+        run = function(value) print(value) end,
+    },
+    ['already-hyphenated'] = function() print('hyphenated') end,
     args = {description = 'Print arguments as hex', run = function(...)
         print(select('#', ...))
         for i = 1, select('#', ...) do print(hex(select(i, ...))) end

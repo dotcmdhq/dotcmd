@@ -56,6 +56,10 @@ return {
         opts = { debug = { flag = true } },
         args = { end_opts = true, { 'value', type = 'integer' } },
     }, { debug = false }, 42),
+    end_opts_unknown = command({
+        opts = { debug = { flag = true } },
+        args = { end_opts = true, { 'rest', arity = '*' } },
+    }, { debug = false }, '--other=value', '--debug', '--'),
     attached = command({ opts = { name = {}, pattern = {} } }, { name = '', pattern = '-foo' }),
     separator = command({ opts = { debug = { flag = true } } }, { debug = false }, '--debug', '--', '-x'),
     raw_separator = command({ args = { end_opts = true, { 'values', arity = '*' } } }, '--', '--debug'),

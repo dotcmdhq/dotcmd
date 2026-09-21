@@ -4,11 +4,11 @@ local _ENV = _ENV
 local child = host.project_dir .. '/child'
 
 local function succeeds(name, ...)
-    t.success(t.run_project(child, name, ...))
+    t.success(t.run_project(child, name:gsub('_', '-'), ...))
 end
 
 local function rejects(name, expected, ...)
-    local result = t.run_project(child, name, ...)
+    local result = t.run_project(child, name:gsub('_', '-'), ...)
     assert(result.code == 2, result.stdout .. result.stderr)
     assert(result.stdout == '', result.stdout)
     assert(result.stderr:find(expected, 1, true), result.stderr)
@@ -57,6 +57,9 @@ test('args.end_opts preserves the tail while still parsing positionals', functio
     succeeds('end_opts', '-d', '42', '--debug', '--', '-d')
     succeeds('end_opts_one', '42')
     succeeds('end_opts_one', '--', '42')
+    succeeds('end_opts_unknown', '--other=value', '--debug', '--')
+    rejects('end_opts_one', 'does not take a value', '--debug=true')
+    rejects('end_opts_one', 'value: expected an integer', '--unknown')
     rejects('end_opts_one', 'missing required argument: value')
     rejects('end_opts_one', 'value: expected an integer', 'oops')
     rejects('end_opts_one', 'unexpected positional argument: --debug', '42', '--debug')
@@ -124,7 +127,7 @@ test('custom parsers validate and may return false or tables', function()
     succeeds('custom', '--disabled=x', '--object=hello', '5')
     rejects('invalid_custom', '--value: must be positive', '--value=-1')
     rejects('custom_number', 'value: invalid value', 'oops')
-    local result = t.run_project(child, 'parser_bug', '--value=x')
+    local result = t.run_project(child, 'parser-bug', '--value=x')
     assert(result.stdout == '')
     t.failure(result, 'parser bug')
 end)
@@ -149,8 +152,9 @@ test('help describes positional arities and defaults without parsing', function(
         { 'rest', '<first> [rest...]' }, { 'required_rest', '<first> <rest...>' },
         { 'defaults', '[options] [target]' },
     }) do
-        local output = t.success(t.run_project(child, '--help', case[1]))
-        assert(output:find('Usage: .cmd ' .. case[1] .. ' ' .. case[2] .. '\n', 1, true), output)
+        local name = case[1]:gsub('_', '-')
+        local output = t.success(t.run_project(child, '--help', name))
+        assert(output:find('Usage: .cmd ' .. name .. ' ' .. case[2] .. '\n', 1, true), output)
     end
     local output = t.success(t.run_project(child, '--help', 'defaults')):gsub(' +', ' ')
     assert(output:find('target (default: all)', 1, true), output)
@@ -158,8 +162,8 @@ test('help describes positional arities and defaults without parsing', function(
     assert(output:find('--include <string> (repeatable; default: [fallback])', 1, true), output)
     output = t.success(t.run_project(child, '--help', 'arities')):gsub(' +', ' ')
     assert(output:find('--plus <integer> (required; repeatable)', 1, true), output)
-    output = t.success(t.run_project(child, '--help', 'short_flag'))
+    output = t.success(t.run_project(child, '--help', 'short-flag'))
     assert(output:find('-h, -?, --help', 1, true), output)
-    output = t.success(t.run_project(child, '--help', 'long_options'))
+    output = t.success(t.run_project(child, '--help', 'long-options'))
     assert(output:find('--output-dir <string>', 1, true), output)
 end)

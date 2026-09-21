@@ -124,15 +124,16 @@
 -- Repeated positionals expand into varargs; a missing optional scalar passes nil.
 
 ---@class dotcmd.Arguments: dotcmd.Argument[]
----@field end_opts? boolean The first positional ends option recognition, including recognition of --. Defaults to false; positional parsing still applies.
+---@field end_opts? boolean The first token that is not a declared option or -- starts the positionals and ends option recognition. Defaults to false; positional parsing still applies.
 
 ---@class dotcmd.Command
+---@field aliases? string[] Additional literal CLI names, listed after the primary name in help.
 ---@field description? string First line is the summary in command listings; command help shows the full text.
 ---@field opts? table<string, dotcmd.Option> Result keys; underscores become hyphens in long-option spellings. Presence enables option parsing and prepends an options table to run.
 ---@field args? dotcmd.Arguments Positional schema; omitted means unrestricted strings, empty means no positionals.
 ---@field run fun(...: any): integer? Receives opts first when declared, then individual positionals. Returns nil or an exit code from 0 to 255.
 
----@alias dotcmd.Commands table<string, dotcmd.Run|dotcmd.Command>
+---@alias dotcmd.Commands table<string, dotcmd.Run|dotcmd.Command> Underscores in keys become hyphens in CLI command names.
 
 -- Opt in per file with: ---@type dotcmd.Env|_G followed by local _ENV = _ENV.
 ---@class dotcmd.Env

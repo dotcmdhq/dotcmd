@@ -52,7 +52,7 @@ test('spawn exposes stderr separately and can merge it into stdout', function()
 end)
 
 test('spawn drains captured output while Lua is reading another pipe', function()
-    local options = t.command(child, 'capture_then_signal')
+    local options = t.command(child, 'capture-then-signal')
     options.stdin = 'pipe'; options.stdout = 'capture'; options.stderr = 'pipe'
     local process <close> = spawn(options)
     assert(process.stderr:read('l'):gsub('\r$', '') == 'ready')
@@ -145,7 +145,7 @@ test('spawn close stops the child and closes exposed files', function()
 end)
 
 test('spawn close stops capture readers as well as the child', function()
-    local options = t.command(child, 'capture_then_signal')
+    local options = t.command(child, 'capture-then-signal')
     options.stdin = 'pipe'; options.stdout = 'capture'; options.stderr = 'pipe'
     local process <close> = spawn(options)
     assert(process.stderr:read('l'):gsub('\r$', '') == 'ready')

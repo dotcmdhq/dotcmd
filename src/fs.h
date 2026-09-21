@@ -6,7 +6,7 @@ struct lua_State;
 // mkdir(path) creates parents; remove(path, {recursive=false}) ignores missing
 // paths and never traverses symlinks; rename(from, to, {if_exists="error"}) has no copy fallback;
 // if_exists accepts error/skip/replace; rename returns true on success, false when skipped;
-// make_executable(path) adds Unix execute bits (no-op on Windows).
+// chmod(path, mode) sets Unix permissions; "+x" adds execute bits allowed by umask (no-op on Windows).
 // UTF-8 paths are relative to cwd. Other mutations return nothing; failures raise.
 void RegisterFs(lua_State* L);
 

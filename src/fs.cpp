@@ -174,6 +174,7 @@ static int Stat(lua_State* L) {
     else if (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) type = "directory";
     else type = file_type == FILE_TYPE_DISK ? "file" : "other";
     Attributes(L, type, ((uint64_t)info.nFileSizeHigh << 32) | info.nFileSizeLow);
+    lua_pushinteger(L, 0); lua_setfield(L, -2, "mode");
 #else
     struct stat info;
     if ((follow ? stat(path, &info) : lstat(path, &info)) < 0) {
@@ -182,6 +183,40 @@ static int Stat(lua_State* L) {
     }
     const char* type = S_ISREG(info.st_mode) ? "file" : S_ISDIR(info.st_mode) ? "directory" : S_ISLNK(info.st_mode) ? "symlink" : "other";
     Attributes(L, type, (uint64_t)info.st_size);
+    lua_pushinteger(L, info.st_mode & 0777); lua_setfield(L, -2, "mode");
+#endif
+    return 1;
+}
+
+static int Realpath(lua_State* L) {
+    State* state = NewState(L);
+    PathChar* path = Path(L, state, 0, 1);
+#ifdef _WIN32
+    HANDLE file = CreateFileW(path, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (file == INVALID_HANDLE_VALUE) return Fail(L, "realpath", lua_tostring(L, 1), GetLastError());
+    DWORD needed = GetFinalPathNameByHandleW(file, NULL, 0, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    if (!needed) {
+        FsError error = GetLastError(); CloseHandle(file);
+        return Fail(L, "realpath", lua_tostring(L, 1), error);
+    }
+    state->paths[1] = (wchar_t*)malloc((size_t)needed * sizeof(wchar_t));
+    if (!state->paths[1]) { CloseHandle(file); return luaL_error(L, "fs: out of memory"); }
+    DWORD size = GetFinalPathNameByHandleW(file, state->paths[1], needed, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    FsError error = !size ? GetLastError() : size >= needed ? ERROR_INSUFFICIENT_BUFFER : 0;
+    CloseHandle(file);
+    if (error) return Fail(L, "realpath", lua_tostring(L, 1), error);
+    int bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, state->paths[1], -1, NULL, 0, NULL, NULL);
+    if (!bytes) return Fail(L, "realpath", lua_tostring(L, 1), GetLastError());
+    luaL_Buffer buffer;
+    char* utf8 = luaL_buffinitsize(L, &buffer, (size_t)bytes);
+    if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, state->paths[1], -1, utf8, bytes, NULL, NULL))
+        return Fail(L, "realpath", lua_tostring(L, 1), GetLastError());
+    luaL_pushresultsize(&buffer, (size_t)bytes - 1);
+#else
+    state->paths[1] = realpath(path, NULL);
+    if (!state->paths[1]) return Fail(L, "realpath", lua_tostring(L, 1), errno);
+    lua_pushstring(L, state->paths[1]);
 #endif
     return 1;
 }
@@ -445,14 +480,28 @@ static int Rename(lua_State* L) {
     return 1;
 }
 
-static int MakeExecutable(lua_State* L) {
+static int Chmod(lua_State* L) {
+    bool add_execute = lua_type(L, 2) == LUA_TSTRING;
+    lua_Integer mode = 0;
+    if (add_execute) {
+        size_t size;
+        const char* symbolic = lua_tolstring(L, 2, &size);
+        luaL_argcheck(L, size == 2 && memcmp(symbolic, "+x", 2) == 0, 2, "expected numeric mode or '+x'");
+    } else {
+        mode = luaL_checkinteger(L, 2);
+        luaL_argcheck(L, mode >= 0 && mode <= 0777, 2, "expected permission bits between 0 and 0777");
+    }
     State* state = NewState(L);
     PathChar* path = Path(L, state, 0, 1);
 #ifndef _WIN32
-    struct stat info;
-    if (stat(path, &info) < 0) return Fail(L, "make_executable", lua_tostring(L, 1), errno);
-    if (chmod(path, info.st_mode | S_IXUSR | S_IXGRP | S_IXOTH) < 0)
-        return Fail(L, "make_executable", lua_tostring(L, 1), errno);
+    if (add_execute) {
+        struct stat info;
+        if (stat(path, &info) < 0) return Fail(L, "chmod", lua_tostring(L, 1), errno);
+        mode_t mask = umask(0);
+        umask(mask);
+        mode = info.st_mode | ((S_IXUSR | S_IXGRP | S_IXOTH) & ~mask);
+    }
+    if (chmod(path, (mode_t)mode) < 0) return Fail(L, "chmod", lua_tostring(L, 1), errno);
 #else
     (void)path;
 #endif
@@ -482,8 +531,8 @@ void RegisterFs(lua_State* L) {
     }
     lua_pop(L, 1);
     const luaL_Reg functions[] = {
-        {"stat", Stat}, {"list", List}, {"mkdir", Mkdir}, {"remove", Remove},
-        {"rename", Rename}, {"make_executable", MakeExecutable}, {NULL, NULL},
+        {"stat", Stat}, {"realpath", Realpath}, {"list", List}, {"mkdir", Mkdir}, {"remove", Remove},
+        {"rename", Rename}, {"chmod", Chmod}, {NULL, NULL},
     };
     luaL_newlib(L, functions);
     lua_setglobal(L, "fs");

@@ -47,7 +47,7 @@ return function(repo)
             GOCACHE = host.cache_dir .. '/go-build', GOOS = go_os, GOARCH = go_arch },
     }
     local certificate = work .. '/test CA ü.pem'
-    local server <close> = spawn { server_binary, certificate, repo .. '/test/projects/cached/sdk.zip',
+    local server <close> = spawn { server_binary, certificate, repo .. '/test/projects/cached/sdk.zip', repo .. '/.cmd',
         stdin = 'pipe', stdout = 'pipe', stderr = 'capture',
     }
     local server_url = server.stdout:read('l')
@@ -61,6 +61,7 @@ return function(repo)
         SSL_CERT_DIR = false, NO_PROXY = '*', no_proxy = '*',
     }
     t.write(work .. '/support.lua', t.read(repo .. '/test/support.lua'))
+    t.write(work .. '/main.lua', t.read(repo .. '/src/main.lua'))
     local function copy_project(from, to)
         fs.mkdir(to)
         for name in fs.list(from) do
@@ -72,7 +73,7 @@ return function(repo)
             end
         end
         t.write(to .. '/.cmd', launcher)
-        fs.make_executable(to .. '/.cmd')
+        fs.chmod(to .. '/.cmd', "+x")
     end
 
     local passed, failed = 0, 0

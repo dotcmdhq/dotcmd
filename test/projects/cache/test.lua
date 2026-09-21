@@ -24,7 +24,7 @@ local function check(root, env)
     local directory = root .. '/' .. version .. '/' .. host.os .. '-' .. host.arch
     fs.mkdir(directory)
     local binary = directory .. '/dotcmd' .. (windows and '.exe' or '')
-    t.write(binary, t.read(host.executable)); fs.make_executable(binary)
+    t.write(binary, t.read(host.executable)); fs.chmod(binary, "+x")
     local result = t.success(run(env))
     assert(t.normalized(result:gsub('\n$', '')) == t.normalized(root), result)
 end

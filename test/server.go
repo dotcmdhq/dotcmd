@@ -59,6 +59,25 @@ func main() {
 	mux.HandleFunc("/archive", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, os.Args[2])
 	})
+	mux.HandleFunc("/launcher/{version}", func(w http.ResponseWriter, r *http.Request) {
+		version := r.PathValue("version")
+		if version != "2.0.0" && version != "0.1.36" {
+			http.NotFound(w, r)
+			return
+		}
+		launcher, err := os.ReadFile(os.Args[3])
+		if err != nil {
+			panic(err)
+		}
+		_, rest, _ := strings.Cut(string(launcher), "\n")
+		io.WriteString(w, ":; version="+version+"\n"+rest)
+	})
+	mux.HandleFunc("/latest-release", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/tag/2.0.0", http.StatusFound)
+	})
+	mux.HandleFunc("/tag/2.0.0", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 
 	server := httptest.NewTLSServer(mux)
 	defer server.Close()

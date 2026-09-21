@@ -24,9 +24,10 @@
 ---@field check? boolean Raise on a final non-2xx response; defaults to false.
 
 ---@class dotcmd.HttpResponse
+---@field url string Final URL after redirects.
 ---@field status integer
 ---@field headers table<string, string[]> Lowercase names; values always arrays.
----@field body? string Binary-safe response body; absent when using path.
+---@field body string Binary-safe response body; absent when using path. Annotated as a string to avoid nil checks for in-memory responses.
 
 ---@class dotcmd.File
 ---@field path string
@@ -68,14 +69,16 @@
 ---@class dotcmd.Stat
 ---@field type "file"|"directory"|"symlink"|"other"
 ---@field size integer Bytes.
+---@field mode integer Unix permission bits (0777 mask); 0 on Windows, where chmod is a no-op.
 
 ---@class dotcmd.Fs
 ---@field stat fun(path: string, options?: {follow?: boolean}): dotcmd.Stat? Missing paths return nil; follow defaults to true.
+---@field realpath fun(path: string): string Absolute path with symlinks resolved; the path must exist. Raises on failure. Windows returns an extended-length path.
 ---@field list fun(path: string): fun(): string? Unsorted entry names for a generic for loop.
 ---@field mkdir fun(path: string) Creates parent directories too.
 ---@field remove fun(path: string, options?: {recursive?: boolean}) Ignores missing paths; never traverses symlinks.
 ---@field rename fun(from: string, to: string, options?: {if_exists?: dotcmd.IfExists}): boolean Atomic rename; if_exists defaults to error. Returns true on success, false when skipped; failures raise.
----@field make_executable fun(path: string) Adds Unix execute bits; no-op on Windows.
+---@field chmod fun(path: string, mode: integer|"+x") Sets Unix permission bits (0 through 0777), or adds execute bits allowed by umask with "+x"; no-op on Windows.
 
 ---@class dotcmd.Extraction
 ---@field strip_components? integer Leading path components to remove; defaults to 0.

@@ -70,8 +70,7 @@ set "PSModulePath="
 if errorlevel 1 exit /b 1
 endlocal
 :run
-"%binary%" --launcher "%~f0" %*
-exit /b %errorlevel%
+"%binary%" --launcher "%~f0" %* & call exit /b %%errorlevel%%
 :unsupported
 echo dotcmd: unsupported CPU architecture >&2
 exit /b 1

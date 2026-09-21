@@ -129,7 +129,7 @@ test('cached preparation supports file outputs and ignores return values', funct
         assert(t.read(source) == 'original bytes')
         assert(fs.stat(output) == nil)
         t.write(output, 'prepared bytes')
-        fs.make_executable(output)
+        fs.chmod(output, "+x")
         return 'this is not the output path'
     end
     local options = { url = 'https://127.0.0.1/file', name = 'script ü.cmd', sha256 = hash, prepare = prepare }

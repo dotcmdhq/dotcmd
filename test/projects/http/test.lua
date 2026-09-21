@@ -7,6 +7,7 @@ local bytes = 'hello\0\255world'
 test('http downloads binary responses in both argument forms', function()
     local response = http(url .. '/body')
     assert(response.status == 200 and response.body == bytes)
+    assert(response.url == url .. '/body')
     assert(response.headers['content-type'][1] == 'application/octet-stream')
     assert(http { url = url .. '/body', check = true }.body == bytes)
 end)
@@ -51,7 +52,13 @@ test('http follows redirects and keeps only the final response', function()
         local response = http(url .. '/redirect/302?to=' .. target)
         assert(response.status == 200 and response.body == bytes)
         assert(response.headers['x-redirect-only'] == nil and response.headers.location == nil)
+        assert(response.url == url .. '/body')
     end
+end)
+
+test('http exposes the final URL for HEAD requests', function()
+    local response = http { url = url .. '/redirect/302?to=/body', method = 'HEAD', check = true }
+    assert(response.url == url .. '/body' and response.body == '')
 end)
 
 test('http redirect status controls the method and body', function()

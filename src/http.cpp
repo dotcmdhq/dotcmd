@@ -359,7 +359,12 @@ static int Http(lua_State* L) {
         request->file = NULL;
         if (result != 0) return luaL_error(L, "http: cannot close output file: %s", strerror(errno));
     }
-    lua_createtable(L, 0, output ? 2 : 3);
+    char* effective_url = NULL;
+    code = curl_easy_getinfo(request->curl, CURLINFO_EFFECTIVE_URL, &effective_url);
+    if (code != CURLE_OK) return luaL_error(L, "http: %s", curl_easy_strerror(code));
+    lua_createtable(L, 0, output ? 3 : 4);
+    lua_pushstring(L, effective_url);
+    lua_setfield(L, -2, "url");
     lua_pushinteger(L, status);
     lua_setfield(L, -2, "status");
     ResponseHeaders(L, &request->response_headers);

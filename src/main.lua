@@ -230,9 +230,46 @@ local main_command = {
     },
 }
 
-local commands
+local commands, launcher
 
 local builtin_commands = {
+    __update = {
+        description = [[Update the project launcher to a release
+
+Replaces the entire launcher, including local edits, with the published release.
+Follows symlinks and updates their target, preserving the links.
+Accepts latest or an exact release tag; downgrades are allowed.
+Does nothing when the selected version matches the running dotcmd version.
+The next invocation downloads the selected binary if it is not already cached.]],
+        args = { { 'version', arity = '?', default = 'latest', description = 'Release version or latest',
+            parse = function(value)
+                if value ~= '' and value ~= '.' and value ~= '..' then return value end
+                return nil, 'expected a release tag'
+            end,
+        } },
+        run = function(version)
+            local target = fs.realpath(launcher)
+            local info = assert(fs.stat(target))
+            local base = 'https://github.com/vlaaad/dotcmd/releases/'
+            if version == 'latest' then
+                local response = http { url = base .. 'latest', method = 'HEAD', check = true }
+                local tag = assert(response.url:match('^https://github%.com/vlaaad/dotcmd/releases/tag/([^?#]+)$'),
+                    'could not resolve latest release tag')
+                version = tag:gsub('%%(%x%x)', function(hex) return string.char(tonumber(hex, 16)) end)
+            end
+            if version == host.version then
+                print(launcher .. ' is already up to date (' .. version .. ')')
+                return
+            end
+            local tag = version:gsub('[^%w._~-]', function(byte) return ('%%%02X'):format(byte:byte()) end)
+            local temp = target .. '.tmp-' .. ('%016x%016x'):format(math.random(0), math.random(0))
+            local cleanup <close> = setmetatable({}, { __close = function() fs.remove(temp) end })
+            http { url = base .. 'download/' .. tag .. '/dotcmd.cmd', path = temp, check = true }
+            fs.chmod(temp, info.mode)
+            fs.rename(temp, target, { if_exists = 'replace' })
+            print('Updated ' .. launcher .. ' to ' .. version)
+        end,
+    },
     __version = {
         description = 'Show dotcmd version',
         args = {},
@@ -379,7 +416,7 @@ function main(args)
     local opts = table.remove(parsed, 1)
     local name = table.remove(parsed, 1)
 
-    local launcher = opts.launcher or (host.cwd .. "/.cmd")
+    launcher = opts.launcher or (host.cwd .. "/.cmd")
     if host.os == "windows" then launcher = launcher:gsub("\\", "/") end
     if launcher:sub(1, 1) ~= "/" and not (host.os == "windows" and launcher:match("^%a:/")) then
         launcher = host.cwd .. "/" .. launcher

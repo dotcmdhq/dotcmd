@@ -62,6 +62,7 @@ return function(repo)
     }
     t.write(work .. '/support.lua', t.read(repo .. '/test/support.lua'))
     t.write(work .. '/main.lua', t.read(repo .. '/src/main.lua'))
+    t.write(work .. '/completion.powershell', t.read(repo .. '/src/completion.powershell'))
     local function copy_project(from, to)
         fs.mkdir(to)
         for name in fs.list(from) do

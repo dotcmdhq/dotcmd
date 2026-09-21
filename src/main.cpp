@@ -20,6 +20,10 @@ extern "C" {
 }
 #include "build_config.h"
 #include "main_lua.h"
+#include "completion_bash.h"
+#include "completion_zsh.h"
+#include "completion_fish.h"
+#include "completion_powershell.h"
 #include "licenses.h"
 #include "http.h"
 #include "exec.h"
@@ -157,12 +161,24 @@ static int Run(lua_State* L) {
     if (!path) return luaL_error(L, "cannot determine working directory");
     SetString(L, "cwd", path);
     free(path);
-    lua_pushlstring(L, (const char*)licenses, sizeof(licenses));
-    lua_setfield(L, -2, "licenses");
     lua_setglobal(L, "host");
     if (luaL_loadbufferx(L, (const char*)main_lua, sizeof(main_lua), "@embedded/main.lua", "t") != LUA_OK)
         return lua_error(L);
-    lua_call(L, 0, 0);
+    // Pass private resources as one table to the main.lua chunk.
+    lua_createtable(L, 0, 2);
+    lua_pushlstring(L, (const char*)licenses, sizeof(licenses));
+    lua_setfield(L, -2, "licenses");
+    lua_createtable(L, 0, 4);
+    lua_pushlstring(L, (const char*)completion_bash, sizeof(completion_bash));
+    lua_setfield(L, -2, "bash");
+    lua_pushlstring(L, (const char*)completion_zsh, sizeof(completion_zsh));
+    lua_setfield(L, -2, "zsh");
+    lua_pushlstring(L, (const char*)completion_fish, sizeof(completion_fish));
+    lua_setfield(L, -2, "fish");
+    lua_pushlstring(L, (const char*)completion_powershell, sizeof(completion_powershell));
+    lua_setfield(L, -2, "powershell");
+    lua_setfield(L, -2, "completion_scripts");
+    lua_call(L, 1, 0);
     lua_getglobal(L, "main");
     if (!lua_isfunction(L, -1)) return luaL_error(L, "main.lua must define main(args)");
     lua_createtable(L, invocation->argc - 1, 0);

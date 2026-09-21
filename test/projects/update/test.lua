@@ -48,7 +48,7 @@ local function run(options, ...)
         t.write(request.path, options.replacement or replacement)
         return {}
     end
-    assert(loadfile(host.project_dir .. '/../main.lua', 't', env))()
+    assert(loadfile(host.project_dir .. '/../main.lua', 't', env))({})
     local args = { ... }
     table.insert(args, 1, path)
     table.insert(args, 1, '--launcher')

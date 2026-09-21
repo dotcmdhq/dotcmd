@@ -42,7 +42,7 @@ test('CLI requires the launcher when invoked as a binary', function()
         local result = exec(command)
         assert(result.code == 2, result.stderr)
         assert(result.stdout == '', result.stdout)
-        assert(result.stderr == "dotcmd: invoke the project's .cmd launcher\n", result.stderr)
+        assert(result.stderr:gsub('\r\n', '\n') == "dotcmd: invoke the project's .cmd launcher\n", result.stderr)
     end
 end)
 test('CLI option errors use the shared parser', function()

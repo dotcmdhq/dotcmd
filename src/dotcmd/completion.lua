@@ -132,7 +132,7 @@ function completion.complete(all_commands, protocol, first, ...)
     local function values(spec, partial, before)
         if spec.parse then return end
         local kind = spec.type or 'string'
-        if type(kind) == 'table' then candidates(kind, spec.description, before, partial)
+        if type(kind) == 'table' then candidates(kind, nil, before, partial)
         elseif kind == 'boolean' then candidates({ 'false', 'true' }, spec.description, before, partial)
         elseif kind == 'directory' then emit('directory', before, partial)
         elseif kind == 'file' or kind == 'string' then emit('file', before, partial) end

@@ -32,9 +32,14 @@ test('command names, aliases, hidden commands and help', function()
     equal(values('--complete'), '')
     equal(values('b', '--help'), 'build-docs')
     equal(values('s', '-h'), 'stop')
-    equal(values('', '--setup-completions'), 'bash|zsh|fish|powershell|pwsh')
+    equal(values('c', '--setup'), 'completions')
+    equal(values('', '--setup', 'completions'), 'bash|zsh|fish|powershell|pwsh')
+    equal(values('c', '--help', '--setup'), 'completions')
+    equal(values('--setup-completions'), '')
+    assert(t.run_project(child, '--setup-completions').code == 1)
     local help = t.success(t.run_project(child, '--help'))
-    assert(not help:find('hidden', 1, true) and not help:find('--complete ', 1, true))
+    assert(not help:find('hidden', 1, true) and not help:find('--complete ', 1, true)
+        and not help:find('--setup-completions', 1, true))
     equal(t.success(t.run_project(child, 'secret')), 'hidden called\n')
 end)
 
@@ -106,11 +111,11 @@ end
 
 test('setup uses an optional shell enum and fails when detection is unavailable', function()
     local home, env = setup_env('detect')
-    t.failure(t.run_project(child, { env = env }, '--setup-completions'), 'cannot detect a supported shell')
+    t.failure(t.run_project(child, { env = env }, '--setup', 'completions'), 'cannot detect a supported shell')
     assert(not fs.stat(home .. '/config'))
-    assert(t.run_project(child, { env = env }, '--setup-completions', 'unknown').code == 2)
+    assert(t.run_project(child, { env = env }, '--setup', 'completions', 'unknown').code == 2)
     env.SHELL = '/usr/bin/fish'
-    t.success(t.run_project(child, { env = env }, '--setup-completions'))
+    t.success(t.run_project(child, { env = env }, '--setup', 'completions'))
     assert(fs.stat(home .. '/config/fish/completions/.cmd.fish'))
 end)
 
@@ -118,7 +123,7 @@ test('setup preserves profiles, updates its block, and is idempotent', function(
     local home, env = setup_env('bash')
     t.write(home .. '/.bashrc', '# keep\r\n')
     t.write(home .. '/.profile', '# login\n')
-    local args = { '--setup-completions', 'bash' }
+    local args = { '--setup', 'completions', 'bash' }
     t.success(t.run_project(child, { env = env }, table.unpack(args)))
     local first = t.read(home .. '/.bashrc')
     assert(first:sub(1, 8) == '# keep\r\n')
@@ -136,10 +141,10 @@ end)
 test('setup validates all profiles before writing and respects ZDOTDIR', function()
     local home, env = setup_env('profiles')
     t.write(home .. '/.bash_profile', '# >>> dotcmd completions >>>\nmissing end\n')
-    t.failure(t.run_project(child, { env = env }, '--setup-completions', 'bash'), 'malformed dotcmd completion block')
+    t.failure(t.run_project(child, { env = env }, '--setup', 'completions', 'bash'), 'malformed dotcmd completion block')
     assert(not fs.stat(home .. '/.bashrc') and not fs.stat(home .. '/config'))
     env.ZDOTDIR = home .. '/zsh'
-    t.success(t.run_project(child, { env = env }, '--setup-completions', 'zsh'))
+    t.success(t.run_project(child, { env = env }, '--setup', 'completions', 'zsh'))
     assert(fs.stat(env.ZDOTDIR .. '/.zshrc') and not fs.stat(home .. '/.zshrc'))
 end)
 
@@ -148,7 +153,7 @@ test('setup follows profile symlinks', function()
     local target = home .. '/profile'
     t.write(target, '# retained\n')
     if not t.symlink(target, home .. '/.zshrc') then return end
-    t.success(t.run_project(child, { env = env }, '--setup-completions', 'zsh'))
+    t.success(t.run_project(child, { env = env }, '--setup', 'completions', 'zsh'))
     equal(fs.stat(home .. '/.zshrc', { follow = false }).type, 'symlink')
     assert(t.read(target):find('# retained\n', 1, true))
     assert(t.read(target):find('dotcmd completions', 1, true))
@@ -173,20 +178,20 @@ test('PowerShell setup queries the selected runtime and preserves the reported p
         assert(loadfile(host.project_dir .. '/../main.lua', 't', env))({
             completion_scripts = { powershell = '# adapter\n' },
         })
-        equal(env.main({ '--launcher', child .. '/.cmd', '--setup-completions', shell }), 0)
+        equal(env.main({ '--launcher', child .. '/.cmd', '--setup', 'completions', shell }), 0)
         equal(query[1], shell == 'pwsh' and 'pwsh' or 'powershell.exe')
         assert(query[6]:find('$PROFILE.CurrentUserAllHosts', 1, true))
         local contents = t.read(profile)
         assert(contents:find("home '' ü", 1, true), contents)
         equal(contents:sub(1, 11), '\239\187\191# keep\r\n')
         equal(t.read(variables.XDG_CONFIG_HOME .. '/dotcmd/completions.ps1'), '# adapter\n')
-        equal(env.main({ '--launcher', child .. '/.cmd', '--setup-completions', shell }), 0)
+        equal(env.main({ '--launcher', child .. '/.cmd', '--setup', 'completions', shell }), 0)
         equal(t.read(profile), contents)
         local invalid = '# caf\233\r\n'
         t.write(profile, invalid)
         fs.remove(variables.XDG_CONFIG_HOME .. '/dotcmd/completions.ps1')
         t.assert_error('profile must use UTF-8', function()
-            env.main({ '--launcher', child .. '/.cmd', '--setup-completions', shell })
+            env.main({ '--launcher', child .. '/.cmd', '--setup', 'completions', shell })
         end)
         equal(t.read(profile), invalid)
         assert(not fs.stat(variables.XDG_CONFIG_HOME .. '/dotcmd/completions.ps1'))
@@ -228,7 +233,7 @@ for _, shell in ipairs({ 'bash', 'zsh', 'fish', 'pwsh', 'powershell' }) do
             -- Windows PowerShell reads BOM-less scripts using the ANSI code page.
             t.write(home .. '/check.ps1', '\239\187\191' .. t.read(host.project_dir .. '/check.ps1'))
         else
-            t.success(t.run_project(child, { env = env }, '--setup-completions', shell))
+            t.success(t.run_project(child, { env = env }, '--setup', 'completions', shell))
             adapter = env.XDG_CONFIG_HOME .. (shell == 'fish' and '/fish/completions/.cmd.fish'
                 or '/dotcmd/completions.' .. shell)
         end

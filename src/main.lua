@@ -2,6 +2,7 @@
 local _ENV = _ENV
 local internal = ...
 local args = require('dotcmd.args')
+local commands = require('dotcmd.commands')
 
 -- Projects return {name = function(...) ... end} or
 -- {name = {description = "...", run = function(...) ... end}} from .cmd.lua.
@@ -103,29 +104,34 @@ local main_command = {
     },
 }
 
-local commands, launcher
+local all_commands, launcher
 
 local builtin_commands = {
     __complete = {
         hidden = true,
         args = { { 'protocol' }, { 'prefix' }, { 'words', arity = '*' } },
         run = function(protocol, prefix, ...)
-            return require('dotcmd.completion').complete(commands, protocol, prefix, ...)
+            return require('dotcmd.completion').complete(all_commands, protocol, prefix, ...)
         end,
     },
-    __setup_completions = {
-        description = [[Install shell completions for the current user
+    __setup = {
+        description = 'Set up dotcmd integrations',
+        commands = {
+            completions = {
+                description = [[Install shell completions for the current user
 
 Supports command names, options, enum and boolean values, and paths from command schemas.
 The shell defaults to SHELL; specify it when using a different shell or when SHELL is unset.
 Use pwsh for PowerShell 7, or powershell for Windows PowerShell.
 Updates the adapter and its shell startup entry when run again.
 Open a new shell after setup.]],
-        args = { { 'shell', arity = '?', type = { 'bash', 'zsh', 'fish', 'powershell', 'pwsh' },
-            description = 'Shell to configure (default: SHELL)' } },
-        run = function(shell)
-            return require('dotcmd.completion').setup(internal.completion_scripts, shell)
-        end,
+                args = { { 'shell', arity = '?', type = { 'bash', 'zsh', 'fish', 'powershell', 'pwsh' },
+                    description = 'Shell to configure (default: SHELL)' } },
+                run = function(shell)
+                    return require('dotcmd.completion').setup(internal.completion_scripts, shell)
+                end,
+            },
+        },
     },
     __update = {
         description = [[Update the project launcher to a release
@@ -163,9 +169,9 @@ The next invocation downloads the selected binary if it is not already cached.]]
     __help = {
         aliases = { '-h', '-?' },
         description = 'Show help for a command, or list commands',
-        args = { { 'command', arity = '?', description = 'Command to describe' } },
-        run = function(name)
-            return require('dotcmd.help')(commands, main_command, name)
+        args = { { 'command', arity = '*', description = 'Command path to describe' } },
+        run = function(...)
+            return require('dotcmd.help')(all_commands, main_command, ...)
         end,
     },
 }
@@ -195,40 +201,44 @@ function main(argv)
     local command_definitions = ok and project or {}
     for key, command in pairs(builtin_commands) do command_definitions[key] = command end
 
-    commands = {}
-    for key, definition in pairs(command_definitions) do
-        local command = type(definition) == 'function' and { run = definition } or definition
-        local spelling = key:gsub('_', '-')
-        commands[spelling] = command
-        for _, alias in ipairs(command.aliases or {}) do
-            commands[alias] = commands[alias] or spelling
-        end
-    end
+    all_commands = commands.normalize(command_definitions)
 
-    local command = commands[name]
-    if type(command) == 'string' then command = commands[command] end
-    if command == nil then
+    local words = { name }
+    for _, word in ipairs(parsed) do words[#words + 1] = word end
+    local resolution, resolve_error, error_code = commands.resolve(all_commands, words)
+    if not resolution then
         if not ok then
             io.stderr:write('dotcmd: ' .. tostring(project) .. '\n')
         else
-            io.stderr:write("dotcmd: unknown command: " .. name .. "\nRun .cmd --help to list available commands.\n")
+            io.stderr:write('dotcmd: ' .. tostring(resolve_error) .. '\nRun .cmd --help to list available commands.\n')
         end
-        return 1
+        return error_code or 1
+    end
+    local command, arguments, path, inherited_opts =
+        resolution.command, resolution.arguments, resolution.path, resolution.opts
+    local schema = { opts = inherited_opts, args = command.commands and {} or command.args }
+    if command.commands and not command.run then
+        local _, message = args.parse(schema, arguments)
+        if message then
+            io.stderr:write('dotcmd ' .. table.concat(path, ' ') .. ': ' .. message .. '\n')
+            return 2
+        end
+        return require('dotcmd.help')(all_commands, main_command, table.unpack(path)) or 0
     end
     local code
-    if command.opts ~= nil or command.args ~= nil then
-        local parameters, message = args.parse(command, parsed)
+    if schema.opts ~= nil or schema.args ~= nil then
+        local parameters, message = args.parse(schema, arguments)
         if not parameters then
-            io.stderr:write('dotcmd ' .. name .. ': ' .. message .. '\n')
+            io.stderr:write('dotcmd ' .. table.concat(path, ' ') .. ': ' .. message .. '\n')
             return 2
         end
         code = command.run(table.unpack(parameters, 1, parameters.n))
     else
-        code = command.run(table.unpack(parsed))
+        code = command.run(table.unpack(arguments))
     end
     if code == nil then return 0 end
     if math.type(code) ~= "integer" or code < 0 or code > 255 then
-        error("command " .. name .. " must return nil or an integer exit code between 0 and 255")
+        error("command " .. table.concat(path, ' ') .. " must return nil or an integer exit code between 0 and 255")
     end
     return code
 end

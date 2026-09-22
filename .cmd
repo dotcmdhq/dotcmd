@@ -1,10 +1,10 @@
-:; version=0.1.41
-:; sha_linux_x64=371c05025b925e9bc819d863e35ff6b21a9d279701310e8d0ea404a129e73d42
-:; sha_linux_arm64=12f8e7b40bf48a14489febbf2d156d7657b113aa393e6e50245ee0a12d5ebf16
-:; sha_macos_x64=b7d1fe3a9eeb9b900b5e7fa3f6576f41e12c9e0b10f0f3fde4f5332c2833c899
-:; sha_macos_arm64=e3b4954ec450395a45f0b20b06c152abeae5d711e0a20cc91e7c86f71ee86aa6
-:; sha_windows_x64=0c59a52f7dc13fd27b248e8b8df145545778bea277c059cb7e61f98b97d937f5
-:; sha_windows_arm64=246910a7da190add71e90301db90db9489794649eeb9edc8e54bb3969d89629f
+:; version=0.1.45
+:; sha_linux_x64=5335e3d220a56f7e9343801fd971545b6bddffa5111cc9fd63078690b92bc0fb
+:; sha_linux_arm64=1f0bca75e0f9d567dc0c0cc5e46ab14c5b25a2b09cc588234387f64fd0ed83e7
+:; sha_macos_x64=02838e21e894c1e48f628955083028d7f4e7b0fca460a9dda6b6c22fec8acd07
+:; sha_macos_arm64=90a34ba489f6d5aaced9f2e2f05133530464349cf11076e42521d4a8e427ca1b
+:; sha_windows_x64=4fdf337a9b385fa76d001f05cf40fc91c1e8133a9bfa4bf461c926780056301e
+:; sha_windows_arm64=cb86d245f120522cbd19e9c357272c8184d88d63e16cb7cd894fd87868096791
 :; set -eu
 :; case "$(uname -s)" in Linux) os=linux;; Darwin) os=macos;; *) echo 'dotcmd: unsupported OS' >&2; exit 1;; esac
 :; case "$(uname -m)" in x86_64|amd64) arch=x64;; arm64|aarch64) arch=arm64;; *) echo 'dotcmd: unsupported CPU architecture' >&2; exit 1;; esac

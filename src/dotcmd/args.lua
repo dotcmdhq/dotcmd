@@ -13,14 +13,17 @@ end
 
 -- Read token structure without conversion, defaults, or required-value checks.
 -- pending is the key of an option awaiting a value; opts and positionals are raw.
-function args.scan(command, argv)
+function args.scan(command, argv, initial_options)
     local spellings = {}
     for key, spec in pairs(command.opts or {}) do
         spellings['--' .. key:gsub('_', '-')] = key
         for short in (spec.short or ''):gmatch('.') do spellings['-' .. short] = key end
     end
     local opts, positionals = {}, {}
-    local options, pending = command.opts ~= nil, nil
+    local options = command.opts ~= nil and initial_options ~= false
+    ---@type string?
+    local pending
+    local first_positional, separator
     local i = 1
     while i <= #argv do
         local text = argv[i]
@@ -28,6 +31,7 @@ function args.scan(command, argv)
         local key = spellings[spelling or text]
         if options and text == '--' then
             options = false
+            separator = true
         elseif options and option_like(text) and (key or not (command.args and command.args.end_opts)) then
             local spec = key and command.opts[key]
             if not spec then return nil, 'unknown option: ' .. text end
@@ -53,13 +57,15 @@ function args.scan(command, argv)
                 opts[key] = value
             end
         else
+            first_positional = first_positional or i
             positionals[#positionals + 1] = text
             if command.args and command.args.end_opts then options = false end
         end
         i = i + 1
     end
 
-    return { opts = opts, positionals = positionals, options = options, pending = pending, spellings = spellings }
+    return { opts = opts, positionals = positionals, options = options, pending = pending,
+        spellings = spellings, first_positional = first_positional, separator = separator }
 end
 
 local function convert(spec, text)

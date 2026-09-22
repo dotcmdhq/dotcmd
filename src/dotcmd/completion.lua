@@ -2,6 +2,7 @@
 local _ENV = _ENV
 
 local args = require('dotcmd.args')
+local commands = require('dotcmd.commands')
 local completion = {}
 
 -- Hex fields preserve argument boundaries across shells, including cmd.exe's
@@ -73,7 +74,7 @@ local function bash_words(line, wordbreaks)
     return words, word, quote and quoted_prefix or trim, quote
 end
 
-function completion.complete(commands, protocol, first, ...)
+function completion.complete(all_commands, protocol, first, ...)
     local prefix, words, trim, quote
     if protocol == 'bash' then
         words, prefix, trim, quote = bash_words(unhex(first), unhex((...)))
@@ -85,6 +86,7 @@ function completion.complete(commands, protocol, first, ...)
     else
         error('unknown completion format: ' .. protocol)
     end
+    ---@cast prefix string
     -- A fresh line also keeps output from project initialization separate.
     io.write('\n')
     if protocol == 'bash' then emit('quoting', trim, quote) end
@@ -96,26 +98,37 @@ function completion.complete(commands, protocol, first, ...)
             end
         end
     end
-    local function command_names()
+    local function command_names(commands_by_spelling)
         local names = {}
-        for name in pairs(commands) do names[#names + 1] = name end
+        for name in pairs(commands_by_spelling) do names[#names + 1] = name end
         table.sort(names)
         for _, name in ipairs(names) do
-            local spec = commands[name]
-            if type(spec) == 'string' then spec = commands[spec] end
-            if not spec.hidden then candidates({ name }, spec.description) end
+            local spec = commands.find(commands_by_spelling, name)
+            if spec and not spec.hidden then candidates({ name }, spec.description) end
         end
     end
-    if #words == 0 then command_names(); return end
-    local command = commands[words[1]]
-    if type(command) == 'string' then command = commands[command] end
-    if not command then return end
+    if #words == 0 then command_names(all_commands); return end
+    if commands.find(all_commands, words[1]) == commands.find(all_commands, '--help') then
+        local commands_by_spelling = all_commands
+        for i = 2, #words do
+            local command = commands.find(commands_by_spelling, words[i])
+            if not command then return end
+            commands_by_spelling = command.commands
+            if not commands_by_spelling then return end
+        end
+        command_names(commands_by_spelling)
+        return
+    end
+    local resolution = commands.resolve(all_commands, words)
+    if not resolution then return end
+    local command, flat, inherited_opts = resolution.command, resolution.arguments, resolution.opts
 
-    table.remove(words, 1)
-    local state = args.scan(command, words)
+    local schema = { opts = inherited_opts,
+        args = command.commands and { end_opts = true } or command.args }
+    local state = args.scan(schema, flat)
     if not state then return end
     local seen, positional, options, pending, spellings =
-        state.opts, #state.positionals, state.options, state.pending and command.opts[state.pending], state.spellings
+        state.opts, #state.positionals, state.options, state.pending and schema.opts[state.pending], state.spellings
     local function values(spec, partial, before)
         if spec.parse then return end
         local kind = spec.type or 'string'
@@ -132,21 +145,21 @@ function completion.complete(commands, protocol, first, ...)
         local spelling, attached = prefix:match('^([^=]+)=(.*)$')
         local key = spelling and spellings[spelling]
         if attached ~= nil then
-            local spec = key and command.opts[key]
+            local spec = key and schema.opts[key]
             if spec and not spec.flag and (not seen[key] or (spec.arity == '*' or spec.arity == '+')) then values(spec, attached, spelling .. '=') end
-            if spec or not (command.args and command.args.end_opts) then return end
+            if spec or not (schema.args and schema.args.end_opts) then return end
         end
         local names = {}
         for name in pairs(spellings) do names[#names + 1] = name end
         table.sort(names)
         for _, name in ipairs(names) do
             local key = spellings[name]
-            local spec = command.opts[key]
+            local spec = schema.opts[key]
             if not spec.hidden and (not seen[key] or (spec.arity == '*' or spec.arity == '+')) then candidates({ name }, spec.description) end
         end
-        if not (command.args and command.args.end_opts) then return end
+        if not (schema.args and schema.args.end_opts) then return end
     end
-    if command == commands['--help'] and positional == 0 then command_names(); return end
+    if command.commands then command_names(command.commands); return end
     if command.args == nil then emit('file', '', prefix); return end
     for i, spec in ipairs(command.args) do
         if i == positional + 1 or (spec.arity == '*' or spec.arity == '+') and positional >= i - 1 then
@@ -191,7 +204,7 @@ end
 function completion.setup(scripts, shell)
     shell = shell or ((env('SHELL') or ''):match('([^/\\]+)$') or ''):gsub('%.exe$', '')
     assert(scripts[shell] or shell == 'pwsh',
-        'cannot detect a supported shell; run .cmd --setup-completions bash, zsh, fish, powershell, or pwsh')
+        'cannot detect a supported shell; run .cmd --setup completions bash, zsh, fish, powershell, or pwsh')
     local family = shell == 'pwsh' and 'powershell' or shell
     local home = assert(env(host.os == 'windows' and 'USERPROFILE' or 'HOME'), 'home directory is not set')
     local config = env('XDG_CONFIG_HOME') or home .. '/.config'

@@ -1,5 +1,6 @@
 ---@type dotcmd.Env|_G
 local _ENV = _ENV
+local commands = require('dotcmd.commands')
 
 local function print_section(title, rows)
     if #rows == 0 then return end
@@ -67,14 +68,15 @@ local function print_options(opts)
     print_section('Options', rows)
 end
 
-local function usage(name, command)
+local function usage(name, command, opts)
     local usage = name
-    for _, spec in pairs(command.opts or {}) do
+    for _, spec in pairs(opts or command.opts or {}) do
         if not spec.hidden then
             usage = usage .. ' [options]'
             break
         end
     end
+    if command.commands then return usage .. (command.run and ' [command]' or ' <command>') end
     if command.args == nil then return usage .. ' [args...]' end
     for _, spec in ipairs(command.args) do
         local arity = spec.arity or '1'
@@ -86,16 +88,17 @@ local function usage(name, command)
     return usage
 end
 
-return function(commands, main_command, name)
-    if name == nil then
+return function(all_commands, main_command, ...)
+    local path = { ... }
+    if #path == 0 then
         print('Usage: .cmd <command> [args...]')
         local names, rows, builtin_rows = {}, {}, {}
-        for key, command in pairs(commands) do
+        for key, command in pairs(all_commands) do
             if type(command) ~= 'string' and not command.hidden then names[#names + 1] = key end
         end
         table.sort(names)
         for _, key in ipairs(names) do
-            local entry = commands[key]
+            local entry = all_commands[key]
             local description = entry.description
             local label = usage(key, entry)
             local builtin = key:sub(1, 2) == '--'
@@ -108,18 +111,31 @@ return function(commands, main_command, name)
         print_options(main_command.opts)
         return
     end
-    local command = commands[name]
-    if type(command) == 'string' then command = commands[command] end
+    local command, inherited_opts = commands.find(all_commands, path)
     if command == nil then
-        io.stderr:write('dotcmd: unknown command: ' .. name .. '\nRun .cmd --help to list available commands.\n')
+        io.stderr:write('dotcmd: unknown command: ' .. table.concat(path, ' ') .. '\nRun .cmd --help to list available commands.\n')
         return 1
     end
-    print('Usage: .cmd ' .. usage(name, command))
+    print('Usage: .cmd ' .. usage(table.concat(path, ' '), command, inherited_opts))
     local rows = {}
     for _, spec in ipairs(command.args or {}) do
         rows[#rows + 1] = { spec[1], description(spec, true) }
     end
     if command.description then print('\n' .. command.description:gsub('%s+$', '')) end
     print_section('Arguments', rows)
-    print_options(command.opts)
+    if command.commands then
+        local children, child_rows = {}, {}
+        for name, child in pairs(command.commands) do
+            if type(child) ~= 'string' and not child.hidden then children[#children + 1] = name end
+        end
+        table.sort(children)
+        for _, name in ipairs(children) do
+            local child = command.commands[name]
+            local label = usage(name, child)
+            for _, alias in ipairs(child.aliases or {}) do label = label .. ', ' .. alias end
+            child_rows[#child_rows + 1] = { label, child.description and child.description:match('^[^\r\n]*') }
+        end
+        print_section('Commands', child_rows)
+    end
+    print_options(inherited_opts)
 end

@@ -31,6 +31,8 @@ local function run(options, ...)
     env.host.cwd = project
     env.host.version = options.version or '1.0.0'
     local result = { stdout = '', stderr = '', path = path, requests = {} }
+    local stdout <close> = assert(io.tmpfile())
+    env.io.stdout = stdout
     env.print = function(value) result.stdout = result.stdout .. value .. '\n' end
     env.io.stderr = { write = function(_, value) result.stderr = result.stderr .. value end }
     env.io.open = function() error('updater must not access launcher contents through Lua') end
@@ -60,6 +62,8 @@ local function run(options, ...)
     local ok, code = pcall(env.main, args)
     result.code = ok and code or 1
     if not ok then result.stderr = result.stderr .. tostring(code) end
+    assert(stdout:seek('set') == 0)
+    result.stdout = result.stdout .. stdout:read('a')
     for name in fs.list(project) do
         assert(not name:find('.tmp-', 1, true), 'temporary update file was not removed: ' .. name)
     end

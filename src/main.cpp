@@ -31,6 +31,7 @@ extern "C" {
 #include "sha256.h"
 #include "fs.h"
 #include "extract.h"
+#include "terminal.h"
 #include <curl/curl.h>
 
 #if defined(_WIN32)
@@ -156,6 +157,7 @@ static int Run(lua_State* L) {
     RegisterSha256(L);
     RegisterFs(L);
     RegisterExtract(L);
+    RegisterTerminal(L);
     // Built-in modules remain available. Do not pick up an installed Lua tree.
     lua_getglobal(L, "package");
     SetString(L, "path", "");

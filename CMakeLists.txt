@@ -202,7 +202,7 @@ file(GENERATE OUTPUT "${generated}/$<CONFIG>/build_config.h" CONTENT
 # Compile the host and link static dependencies.
 # The host uses C++ syntax but no C++ standard library or runtime.
 set(CMAKE_CXX_IMPLICIT_LINK_LIBRARIES "")
-add_executable(dotcmd src/main.cpp src/http.cpp src/exec.cpp src/sha256.cpp src/fs.cpp src/extract.cpp)
+add_executable(dotcmd src/main.cpp src/http.cpp src/exec.cpp src/sha256.cpp src/fs.cpp src/extract.cpp src/terminal.cpp)
 add_dependencies(dotcmd dep_curl dep_archive)
 set_target_properties(dotcmd PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO LINKER_LANGUAGE C)
 target_include_directories(dotcmd PRIVATE "${generated}/$<CONFIG>" "${generated}"

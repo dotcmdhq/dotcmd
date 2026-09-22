@@ -104,6 +104,30 @@
 
 ---@alias dotcmd.Run fun(...: string): integer?
 
+---@alias dotcmd.Color "black"|"red"|"green"|"yellow"|"blue"|"magenta"|"cyan"|"white"|"bright_black"|"bright_red"|"bright_green"|"bright_yellow"|"bright_blue"|"bright_magenta"|"bright_cyan"|"bright_white"|integer|string
+
+---@class dotcmd.Style
+---@field fg? dotcmd.Color|false Named color, palette index from 0 to 255, #RRGGBB, or false for the default.
+---@field bg? dotcmd.Color|false Named color, palette index from 0 to 255, #RRGGBB, or false for the default.
+---@field bold? boolean
+---@field dim? boolean
+---@field underline? boolean
+
+---@alias dotcmd.Markup string|number|boolean|dotcmd.MarkupNode
+
+---@class dotcmd.MarkupNode: dotcmd.Style
+---@field style? dotcmd.Style Applied before keys directly on the node.
+---@field [integer] dotcmd.Markup
+
+---@class dotcmd.Format
+---@field plain fun(markup: dotcmd.Markup): string
+---@field ansi fun(markup: dotcmd.Markup): string
+---@field writer fun(file: file*): dotcmd.FormatWriter Detects terminal support once when constructed.
+
+---@class dotcmd.FormatWriter
+---@field write fun(self: dotcmd.FormatWriter, markup: dotcmd.Markup): dotcmd.FormatWriter
+---@field flush fun(self: dotcmd.FormatWriter): dotcmd.FormatWriter
+
 ---@alias dotcmd.Arity "1"|"?"|"+"|"*"
 ---@alias dotcmd.ArgType "string"|"number"|"integer"|"boolean"|"file"|"directory"|string[]
 ---@alias dotcmd.Parse fun(text: string): any?, string? Return nil and an optional message on invalid input; false is valid.

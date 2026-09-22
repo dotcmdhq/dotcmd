@@ -25,6 +25,12 @@ end
 local function equal(actual, expected) assert(actual == expected, ('expected %q, got %q'):format(expected, actual)) end
 
 test('command names, aliases, hidden commands and help', function()
+    local order = {}
+    for index, record in ipairs(request('words', '')) do order[record[2]] = index end
+    assert(order['build-docs'] < order.custom and order.custom < order.docs)
+    assert(order.stop < order['--cache-dir'])
+    assert(order['-?'] < order['--cache-dir'] and order['--cache-dir'] < order['-h']
+        and order['-h'] < order['--help'] and order['--help'] < order['--licenses'])
     equal(values('b'), 'build-docs')
     equal(values('d'), 'docs')
     equal(values('h'), '')

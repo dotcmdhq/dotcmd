@@ -101,7 +101,15 @@ function completion.complete(all_commands, protocol, first, ...)
     local function command_names(commands_by_spelling)
         local names = {}
         for name in pairs(commands_by_spelling) do names[#names + 1] = name end
-        table.sort(names)
+        table.sort(names, function(a, b)
+            local a_dash, b_dash = a:sub(1, 1) == '-', b:sub(1, 1) == '-'
+            if a_dash ~= b_dash then return not a_dash end
+            if a_dash then
+                local a_name, b_name = a:match('^%-*(.*)$'), b:match('^%-*(.*)$')
+                if a_name ~= b_name then return a_name < b_name end
+            end
+            return a < b
+        end)
         for _, name in ipairs(names) do
             local spec = commands.find(commands_by_spelling, name)
             if spec and not spec.hidden then candidates({ name }, spec.description) end

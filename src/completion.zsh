@@ -37,7 +37,7 @@ _dotcmd_complete() {
                 candidates+=("$REPLY")
                 item=$REPLY
                 _dotcmd_unhex "$b" || continue
-                descriptions+=("$item${REPLY:+ -- $REPLY}")
+                descriptions+=("$item${REPLY:+  $REPLY}")
                 ;;
             dotcmd:file|dotcmd:directory)
                 _dotcmd_unhex "$a" || continue
@@ -47,7 +47,7 @@ _dotcmd_complete() {
         esac
     done < <("$launcher" --complete "${request[@]}" 2>/dev/null)
     local ret=1
-    if (( ${#candidates} )); then compadd -d descriptions -- "${candidates[@]}" && ret=0; fi
+    if (( ${#candidates} )); then compadd -V dotcmd -d descriptions -- "${candidates[@]}" && ret=0; fi
     if [[ -n $path_kind ]]; then
         [[ -z $before ]] || compset -p "${#before}"
         if [[ $path_kind == dotcmd:directory ]]; then _path_files -/ && ret=0
@@ -60,4 +60,21 @@ if (( ! $+functions[compdef] )); then
     autoload -Uz compinit
     compinit
 fi
+
+_dotcmd_setup_colors() {
+    zmodload zsh/complist || return
+    local -a colors
+    zstyle -a ':completion:*:default' list-colors colors
+    local spec
+    for spec in "${colors[@]}"; do
+        [[ $spec == '(dotcmd)=(#b)(*)  (*)=0=1=2' ]] && return
+    done
+    zstyle ':completion:*:default' list-colors \
+        '(dotcmd)=(#b)(*)  (*)=0=1=2' \
+        '(dotcmd)=(#b)(*)=0=1' \
+        "${colors[@]}"
+}
+_dotcmd_setup_colors
+unfunction _dotcmd_setup_colors
+
 compdef _dotcmd_complete .cmd

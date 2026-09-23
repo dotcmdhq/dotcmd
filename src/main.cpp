@@ -32,7 +32,6 @@ extern "C" {
 #include "fs.h"
 #include "extract.h"
 #include "terminal.h"
-#include <curl/curl.h>
 
 #if defined(_WIN32)
 #define DOTCMD_OS "windows"
@@ -226,10 +225,8 @@ int wmain(int argc, wchar_t** argv) {
 #else
 int main(int argc, char** argv) {
 #endif
-    CURLcode init = curl_global_init(CURL_GLOBAL_DEFAULT);
-    if (init != CURLE_OK) { fprintf(stderr, "dotcmd: %s\n", curl_easy_strerror(init)); return 1; }
     lua_State* L = luaL_newstate();
-    if (!L) { fprintf(stderr, "dotcmd: cannot create Lua state\n"); curl_global_cleanup(); return 1; }
+    if (!L) { fprintf(stderr, "dotcmd: cannot create Lua state\n"); return 1; }
     Invocation invocation = {argc, argv};
     lua_pushcfunction(L, Traceback);
     lua_pushcfunction(L, Run);
@@ -241,6 +238,6 @@ int main(int argc, char** argv) {
         fprintf(stderr, "dotcmd: %s\n", lua_tostring(L, -1));
     }
     lua_close(L);
-    curl_global_cleanup();
+    CleanupHttp();
     return code;
 }

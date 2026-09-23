@@ -42,6 +42,8 @@ struct Request {
     char error[CURL_ERROR_SIZE];
 };
 
+static bool curl_initialized = false;
+
 // No Lua calls inside libcurl callbacks: a Lua allocation error must not jump
 // past libcurl's cleanup. The request owns every native allocation instead.
 static bool Append(Buffer* buffer, const char* data, size_t size) {
@@ -262,6 +264,12 @@ static int Http(lua_State* L) {
         body = lua_tolstring(L, -1, &body_length);
     }
 
+    if (!curl_initialized) {
+        CURLcode init = curl_global_init(CURL_GLOBAL_DEFAULT);
+        if (init != CURLE_OK) return luaL_error(L, "http: %s", curl_easy_strerror(init));
+        curl_initialized = true;
+    }
+
     Request* request = (Request*)lua_newuserdatauv(L, sizeof(Request), 0);
     memset(request, 0, sizeof(*request));
     luaL_setmetatable(L, "dotcmd.http.request");
@@ -395,4 +403,11 @@ void RegisterHttp(lua_State* L) {
     lua_pop(L, 1);
     lua_pushcfunction(L, Http);
     lua_setglobal(L, "http");
+}
+
+void CleanupHttp() {
+    if (curl_initialized) {
+        curl_global_cleanup();
+        curl_initialized = false;
+    }
 }

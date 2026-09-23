@@ -1,13 +1,14 @@
-:; version=0.1.47
-:; sha_linux_x64=55dd2584597dec932ba4ab29c4c988ac6e886f67ed5ee51434b46c716cbcb67e
-:; sha_linux_arm64=2d3b2cd3643aeac934eec9401c5efeee4f08b8aef9a949562cd8fd7c9d7f9fe4
-:; sha_macos_x64=1133b3c62bde5f38d48fdafd3eea9f27f08ea932f29b6ff4db6fe67004dd6e33
-:; sha_macos_arm64=6b39b7c7934f5ec7fe791f927ab9bee35606ddb09a18f7108f85f41494451488
-:; sha_windows_x64=9bdad1945b79b517692477f469c019c9f91fde5f64acd19e4693954c7c49e821
-:; sha_windows_arm64=406637a6ec6fa14b1ce94ee3832df4d60937a256acc865a158c90b08572a6342
+:; version=0.1.49
+:; sha_linux_x64=8426898daba0b499c56983c0c6c1f619c7b0f9c3c956a88f32a80473dcd1627b
+:; sha_linux_arm64=5234347980e919e24af5710eaa0d876eacd0bfe062969e5d198ff1e2ebf4b596
+:; sha_macos_x64=082162644e827e6784cd471860aebeac25cbd2f92b626b757f42e6c8263253be
+:; sha_macos_arm64=9277512f7d829466a481a3767f0cc61c2fc6984a973b1310cca65a6f1b5e512a
+:; sha_windows_x64=44f08f22e2066f081e29487a0e714803ff4240eb76d67ded8b8f8ce8b336ad05
+:; sha_windows_arm64=e116f66d069c3221b97da3191eb89e96d9e3d25dec12eef2dfdba6137ad32fe1
 :; set -eu
-:; case "$(uname -s)" in Linux) os=linux;; Darwin) os=macos;; *) echo 'dotcmd: unsupported OS' >&2; exit 1;; esac
-:; case "$(uname -m)" in x86_64|amd64) arch=x64;; arm64|aarch64) arch=arm64;; *) echo 'dotcmd: unsupported CPU architecture' >&2; exit 1;; esac
+:; platform=$(uname -sm)
+:; case "$platform" in Linux\ *) os=linux;; Darwin\ *) os=macos;; *) echo 'dotcmd: unsupported OS' >&2; exit 1;; esac
+:; case "${platform#* }" in x86_64|amd64) arch=x64;; arm64|aarch64) arch=arm64;; *) echo 'dotcmd: unsupported CPU architecture' >&2; exit 1;; esac
 :; cache=${DOTCMD_CACHE_DIR:-}
 :; case "$cache" in /*) ;; '') case "$os" in linux) case "${XDG_CACHE_HOME:-}" in /*) cache="$XDG_CACHE_HOME/dotcmd";; *) cache="${HOME:?dotcmd: HOME is not set}/.cache/dotcmd";; esac;; macos) cache="${HOME:?dotcmd: HOME is not set}/Library/Caches/dotcmd";; esac;; *) echo 'dotcmd: DOTCMD_CACHE_DIR must be an absolute path' >&2; exit 1;; esac
 :; cache="$cache/$version/$os-$arch"

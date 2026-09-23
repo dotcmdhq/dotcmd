@@ -18,3 +18,4 @@
 - Embed API documentation and LuaLS annotations for the pinned version. Add `--setup-luals` to extract definitions and scope them to `.cmd.lua` with `---@type dotcmd.Env|_G` and `local _ENV = _ENV`. Initially create `.luarc.json` only when absent; otherwise show the required setting. Automatic updates to existing JSON/JSONC need formatting- and comment-preserving edits.
 - Polish: colored outputs
 - json support?
+- Implement persistent completion caching. Normal invocations atomically cache the result of loading `.cmd.lua`: either completion metadata or failure. `--complete` reuses an existing cached result. If none exists, it loads `.cmd.lua` once and caches the outcome. Successful results provide project completions; failed results provide built-ins only.

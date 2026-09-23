@@ -18,6 +18,14 @@ check() {
     [[ "${(j:|:)result}" == "$expected" ]] || { print -r -- "$PREFIX: ${(j:|:)result}"; exit 1; }
 }
 check b build-docs
+check_bare_launcher() {
+    local PREFIX=b PATH="$PWD:$PATH"
+    local -a words=(.cmd "$PREFIX") result=()
+    local CURRENT=${#words}
+    _dotcmd_complete
+    [[ "${(j:|:)result}" == build-docs ]] || exit 1
+}
+check_bare_launcher
 [[ $display[1] == 'build-docs  Build documentation' ]] || exit 1
 typeset -a colors
 zstyle -a ':completion:*:default' list-colors colors

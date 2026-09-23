@@ -24,6 +24,7 @@ _dotcmd_complete() {
     local REPLY kind a b item before path_kind launcher=${(Q)words[1]}
     local -a request candidates descriptions
     integer i
+    [[ $launcher == */* ]] || launcher=${commands[$launcher]:-$launcher}
     _dotcmd_hex "${(Q)PREFIX}"
     request=(words "$REPLY")
     for ((i=2; i<CURRENT; i++)); do
@@ -45,7 +46,7 @@ _dotcmd_complete() {
                 path_kind=$kind
                 ;;
         esac
-    done < <("$launcher" --complete "${request[@]}" 2>/dev/null)
+    done < <(zsh "$launcher" --complete "${request[@]}" 2>/dev/null)
     local ret=1
     if (( ${#candidates} )); then compadd -V dotcmd -d descriptions -- "${candidates[@]}" && ret=0; fi
     if [[ -n $path_kind ]]; then

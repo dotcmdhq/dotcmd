@@ -1,6 +1,9 @@
 ---@type dotcmd.Env|_G
 local _ENV = _ENV
 
+-- The checked-in launcher still uses the older cached name while bootstrapping.
+local fetch = fetch or cached
+
 local root = host.project_dir
 local windows = host.os == 'windows'
 local suffix = windows and '.exe' or ''
@@ -71,7 +74,7 @@ local function build(mode)
             .. '/ninja-' .. ninja_config.name[host.os][host.arch] .. '.zip',
         sha256 = ninja_config.sha256[host.os][host.arch],
         prepare = function(input, output)
-            extract(input, output)
+            extract { path = input, to = output }
         end,
     }
     local ninja = ninja_dir .. '/ninja' .. suffix
@@ -81,7 +84,7 @@ local function build(mode)
         '-DCMAKE_MAKE_PROGRAM=' .. (windows and ninja:gsub('\\', '/') or ninja),
         '-DCMAKE_BUILD_TYPE=' .. (mode == 'debug' and 'Debug' or 'MinSizeRel'),
         '-DDOTCMD_VERSION=' .. (os.getenv('DOTCMD_VERSION') or 'dev'),
-        cwd = root, env = env,
+        cwd = root, env = env, check = true,
     }
 
     -- Supply the compiler. CMake uses Apple's installed toolchain on macOS.
@@ -133,7 +136,7 @@ local function build(mode)
     -- Configure and build locally; CMake owns dependencies and incremental builds.
 
     exec(args)
-    exec { cmake, '--build', output, '--parallel', '4', cwd = root, env = env }
+    exec { cmake, '--build', output, '--parallel', '4', cwd = root, env = env, check = true }
     return cmake
 end
 

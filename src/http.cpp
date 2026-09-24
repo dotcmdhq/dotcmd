@@ -250,11 +250,11 @@ static int Http(lua_State* L) {
     if (!url) return luaL_error(L, "http: url is required");
     const char* method = StringField(L, "method", "GET");
     if (!Token(method)) return luaL_error(L, "http: invalid method");
-    const char* output = StringField(L, "path", NULL);
+    const char* output = StringField(L, "to", NULL);
     long connect_timeout = TimeoutField(L, "connect_timeout", 30);
     long timeout = TimeoutField(L, "timeout", 0);
     lua_getfield(L, 1, "check");
-    bool check = lua_toboolean(L, -1);
+    bool check = lua_isnil(L, -1) || lua_toboolean(L, -1);
     lua_pop(L, 1);
     lua_getfield(L, 1, "body");
     size_t body_length = 0;

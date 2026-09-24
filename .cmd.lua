@@ -35,7 +35,7 @@ local function build(mode)
         },
     }
     local cmake_name = 'cmake-' .. cmake_config.version .. '-' .. cmake_config.name[host.os][host.arch]
-    local cmake_dir = cached {
+    local cmake_dir = fetch {
         url = 'https://github.com/Kitware/CMake/releases/download/v' .. cmake_config.version
             .. '/' .. cmake_name .. (windows and '.zip' or '.tar.gz'),
         sha256 = cmake_config.sha256[host.os][host.arch],
@@ -66,12 +66,12 @@ local function build(mode)
             windows = { x64 = 'win', arm64 = 'winarm64' },
         },
     }
-    local ninja_dir = cached {
+    local ninja_dir = fetch {
         url = 'https://github.com/ninja-build/ninja/releases/download/v' .. ninja_config.version
             .. '/ninja-' .. ninja_config.name[host.os][host.arch] .. '.zip',
         sha256 = ninja_config.sha256[host.os][host.arch],
         prepare = function(input, output)
-            extract { path = input, to = output }
+            extract(input, output)
         end,
     }
     local ninja = ninja_dir .. '/ninja' .. suffix
@@ -81,7 +81,7 @@ local function build(mode)
         '-DCMAKE_MAKE_PROGRAM=' .. (windows and ninja:gsub('\\', '/') or ninja),
         '-DCMAKE_BUILD_TYPE=' .. (mode == 'debug' and 'Debug' or 'MinSizeRel'),
         '-DDOTCMD_VERSION=' .. (os.getenv('DOTCMD_VERSION') or 'dev'),
-        cwd = root, env = env, check = true,
+        cwd = root, env = env,
     }
 
     -- Supply the compiler. CMake uses Apple's installed toolchain on macOS.
@@ -96,7 +96,7 @@ local function build(mode)
             },
         }
         local name = 'zig-' .. arch .. '-linux-' .. zig_config.version
-        local toolchain = cached {
+        local toolchain = fetch {
             url = 'https://ziglang.org/download/' .. zig_config.version .. '/' .. name .. '.tar.xz',
             sha256 = zig_config.sha256[host.arch],
             prepare = function(input, output)
@@ -117,7 +117,7 @@ local function build(mode)
             },
         }
         local name = 'llvm-mingw-' .. mingw_config.version .. '-ucrt-' .. arch
-        local toolchain = cached {
+        local toolchain = fetch {
             url = 'https://github.com/mstorsjo/llvm-mingw/releases/download/'
                 .. mingw_config.version .. '/' .. name .. '.zip',
             sha256 = mingw_config.sha256[host.arch],
@@ -133,7 +133,7 @@ local function build(mode)
     -- Configure and build locally; CMake owns dependencies and incremental builds.
 
     exec(args)
-    exec { cmake, '--build', output, '--parallel', '4', cwd = root, env = env, check = true }
+    exec { cmake, '--build', output, '--parallel', '4', cwd = root, env = env }
     return cmake
 end
 
@@ -153,7 +153,8 @@ Downloads the required build tools and builds into target/<mode>.
         description = 'Build and run the local dotcmd executable',
         run = function(...)
             build()
-            return exec(root .. '/target/release/dotcmd' .. suffix, '--launcher', root .. '/.cmd', ...).code
+            return exec { check = false, root .. '/target/release/dotcmd' .. suffix,
+                '--launcher', root .. '/.cmd', ... }.code
         end,
     },
     test = {
@@ -162,7 +163,7 @@ Downloads the required build tools and builds into target/<mode>.
         run = function()
             local cmake = build()
             return exec { cmake, '--build', root .. '/target/release', '--target', 'test',
-                cwd = root, env = { CTEST_OUTPUT_ON_FAILURE = '1' } }.code
+                cwd = root, env = { CTEST_OUTPUT_ON_FAILURE = '1' }, check = false }.code
         end,
     },
 }

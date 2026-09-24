@@ -746,6 +746,7 @@ static Process* NewProcess(lua_State* L, bool spawn) {
     if (!count) luaL_error(L, "exec: executable is required");
     Process* p = (Process*)lua_newuserdatauv(L, sizeof(Process), 1);
     memset(p, 0, sizeof(*p));
+    p->check = !spawn;
 #ifndef _WIN32
     p->error_pipe[0] = p->error_pipe[1] = -1;
     for (int i = 0; i < 3; ++i) p->streams[i].read = p->streams[i].write = -1;
@@ -851,7 +852,7 @@ static Process* GetProcess(lua_State* L) {
 
 static int Wait(lua_State* L) {
     Process* p = GetProcess(L);
-    bool check = false;
+    bool check = true;
     if (!lua_isnoneornil(L, 2)) {
         luaL_checktype(L, 2, LUA_TTABLE);
         lua_getfield(L, 2, "check");

@@ -61,7 +61,7 @@ func main() {
 	})
 	mux.HandleFunc("/plugin/values", func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `dotcmd_plugin_test_calls = (dotcmd_plugin_test_calls or 0) + 1
-return "value", nil, false, dotcmd_plugin_test_calls, type(cached) .. ":" .. host.os`)
+return "value", nil, false, dotcmd_plugin_test_calls, type(fetch) .. ":" .. host.os`)
 	})
 	mux.HandleFunc("/plugin/syntax", func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `return function(`)

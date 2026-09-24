@@ -223,7 +223,7 @@ for _, shell in ipairs({ 'bash', 'zsh', 'fish', 'pwsh', 'powershell' }) do
         local executable = shell == 'powershell' and 'powershell.exe' or shell
         local probe = powershell and { executable, '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', 'exit 0' }
             or { executable, '--version' }
-        probe.stdout, probe.stderr, probe.check = 'capture', 'capture', true
+        probe.stdout, probe.stderr = 'capture', 'capture'
         local available = pcall(exec, probe)
         if host.os == 'windows' then assert(available, shell .. ' is required for Windows completion tests') end
         if not available then print('SKIP ' .. shell .. ' is not installed'); return end

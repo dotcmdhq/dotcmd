@@ -39,6 +39,7 @@ test('CLI requires the launcher when invoked as a binary', function()
     for _, args in ipairs({ { 'nothing' }, { '--launcher=', 'nothing' } }) do
         local command = { host.executable, table.unpack(args) }
         command.cwd, command.stdout, command.stderr = child, 'capture', 'capture'
+        command.check = false
         local result = exec(command)
         assert(result.code == 2, result.stderr)
         assert(result.stdout == '', result.stdout)
@@ -52,6 +53,7 @@ test('CLI option errors use the shared parser', function()
     }) do
         local command = { host.executable, table.unpack(case, 2) }
         command.stdout, command.stderr = 'capture', 'capture'
+        command.check = false
         local result = exec(command)
         assert(result.code == 2, result.stderr)
         assert(result.stdout == '', result.stdout)

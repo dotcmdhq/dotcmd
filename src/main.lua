@@ -37,8 +37,9 @@ end
 host.cache_dir = cache_dir()
 
 -- Completed entries are trusted; only fresh downloads are verified.
-function cached(options)
-    local hash = options.sha256
+function fetch(options, hash)
+    if type(options) == "string" then options = { url = options, sha256 = hash } end
+    hash = options.sha256
     local prepare = options.prepare
     local name = options.name
     if not name then
@@ -54,10 +55,10 @@ function cached(options)
     local prepared_dir
     if prepare ~= nil then
         local ok, bytecode = pcall(string.dump, prepare, true)
-        assert(ok, "cached: prepare must be a Lua function")
+        assert(ok, "fetch: prepare must be a Lua function")
         -- Captured values and ambient state are the caller's responsibility.
-        prepared_dir = host.cache_dir .. "/prepared/" .. sha256(hash .. "\0" .. name
-            .. "\0" .. host.os .. "\0" .. host.arch .. "\0" .. bytecode)
+        prepared_dir = host.cache_dir .. "/prepared/" .. sha256 { bytes = hash .. "\0" .. name
+            .. "\0" .. host.os .. "\0" .. host.arch .. "\0" .. bytecode }
     end
     local result_path = prepared_dir and (prepared_dir .. "/" .. name) or download_path
     if fs.stat(result_path) then
@@ -72,8 +73,8 @@ function cached(options)
                 fs.remove(temp)
             end,
         })
-        http { url = options.url, path = temp, check = true }
-        assert(sha256 { path = temp } == hash, "cached: SHA-256 mismatch for " .. options.url)
+        http { url = options.url, to = temp }
+        assert(sha256 { path = temp } == hash, "fetch: SHA-256 mismatch for " .. options.url)
         fs.rename(temp, download_path, { if_exists = "skip" })
     end
 
@@ -90,18 +91,21 @@ function cached(options)
         prepare(download_path, output)
         local stat = fs.stat(output, { follow = false })
         assert(stat and (stat.type == "file" or stat.type == "directory"),
-            "cached: prepare must create the output file or directory")
+            "fetch: prepare must create the output file or directory")
         -- Publish the whole entry atomically; a concurrent winner is reused.
         fs.rename(temp, prepared_dir, { if_exists = "skip" })
     end
     return result_path
 end
 
-function plugin(url, hash)
-    local path = cached { url = url, sha256 = hash }
+function plugin(options, hash)
+    if type(options) == "string" then options = { url = options, sha256 = hash } end
+    local url = options.url
+    hash = options.sha256
+    local path = fetch { url = url, sha256 = hash }
     local file <close> = assert(io.open(path, "rb"))
     local source = assert(file:read("a"))
-    assert(sha256(source) == hash, "plugin: SHA-256 mismatch for " .. url)
+    assert(sha256 { bytes = source } == hash, "plugin: SHA-256 mismatch for " .. url)
     return assert(load(source, "@" .. url, "t"))()
 end
 

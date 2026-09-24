@@ -1,18 +1,19 @@
 # TODO
 
+- Support C functions as `fetch` preparation callbacks, including `prepare = extract`. Preparation currently hashes Lua bytecode, so native functions need a general, stable cache identity.
 - Fix Windows `exec` path resolution to use the child's `cwd`: with a parent on `C:` and child on `D:`, redirected `\out.txt` must resolve to `D:\out.txt`. Check executable paths and `PATH` entries too, and add Windows regression tests.
 - Test symlink metadata, dangling links, and recursive removal around links/cycles. Needs symlink creation in the native filesystem API, including Windows directory links/junctions.
 - Test fresh bootstrap downloads, SHA-256 rejection, and cache reuse. Needs a controlled download source for the launcher.
 - Add reusable Lua plugins for downloading SDKs or checking installed versions, starting with our build tools and later Java. Support platform-specific URLs and hashes.
   Experimental streaming Lua parser for statically discovering plugin calls: [lua_recipe_parser.cpp](https://gist.github.com/vlaaad/59c7b500fec8b699da6b3880abe69e1c).
-- Generate LuaLS definitions from installed plugins for the global `plugin(url, sha)` function. Collect overloads with literal URLs and source SHA-256s in one definition file, using each plugin chunk's return type, so callers need no type annotation. Keep `@return any` before the overloads and leave the generic parameters unannotated: broad `@param url string`/`@param sha string` annotations suppress literal argument suggestions. This shape supports URL and SHA completion and plugin-specific return-type narrowing. Example (replace hash placeholders with the installed plugins' actual hashes):
+- Generate LuaLS definitions from installed plugins for the global `plugin(url, sha256)` function. Collect overloads with literal URLs and source SHA-256s in one definition file, using each plugin chunk's return type, so callers need no type annotation. Keep `@return any` before the overloads and leave the generic parameters unannotated: broad `@param url string`/`@param sha256 string` annotations suppress literal argument suggestions. This shape supports URL and SHA-256 completion and plugin-specific return-type narrowing. Example (replace hash placeholders with the installed plugins' actual hashes):
 
   ```lua
   ---@meta
   ---@return any
-  ---@overload fun(url: "https://example.com/jdk.lua", sha: "<jdk-source-sha256>"): JdkPlugin
-  ---@overload fun(url: "https://example.com/clj.lua", sha: "<clj-source-sha256>"): CljPlugin
-  function plugin(...) end
+  ---@overload fun(url: "https://example.com/jdk.lua", sha256: "<jdk-source-sha256>"): JdkPlugin
+  ---@overload fun(url: "https://example.com/clj.lua", sha256: "<clj-source-sha256>"): CljPlugin
+  function plugin(url, sha256) end
   ```
 
   Include the plugins' `JdkPlugin`/`CljPlugin` type definitions alongside these overloads.

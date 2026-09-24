@@ -17,6 +17,7 @@ local function run(env)
         or { '/bin/sh', '-c', '"$@"', 'dotcmd-test', project .. '/.cmd', '--cache-dir' }
     options.cwd = project; options.env = env
     options.stdout = 'capture'; options.stderr = 'capture'
+    options.check = false
     return exec(options)
 end
 local function check(root, env)

@@ -17,16 +17,20 @@
 ---@field method? string Defaults to GET.
 ---@field headers? table<string, string|string[]> Arrays send repeated headers.
 ---@field body? string Binary-safe request body.
----@field path? string Output file, relative to cwd. Only a successful 2xx response replaces it.
+---@field to? string Output file, relative to cwd. Only a successful 2xx response replaces it.
 ---@field connect_timeout? integer Seconds; defaults to 30.
 ---@field timeout? integer Seconds; defaults to 0 (unlimited).
----@field check? boolean Raise on a final non-2xx response; defaults to false.
+---@field check? false Disable checking the final HTTP status; non-2xx responses raise by default.
 
 ---@class dotcmd.HttpResponse
 ---@field url string Final URL after redirects.
 ---@field status integer
 ---@field headers table<string, string[]> Lowercase names; values always arrays.
----@field body string Binary-safe response body; absent when using path. Annotated as a string to avoid nil checks for in-memory responses.
+---@field body string Binary-safe response body; absent when using to. Annotated as a string to avoid nil checks for in-memory responses.
+
+---@class dotcmd.Sha256Options
+---@field bytes? string Binary-safe contents; mutually exclusive with path. Exactly one is required.
+---@field path? string File to hash; mutually exclusive with bytes.
 
 ---@class dotcmd.File
 ---@field path string
@@ -41,7 +45,7 @@
 ---@field stdin? dotcmd.Input Defaults to inherit. File paths are relative to the child's cwd.
 ---@field stdout? dotcmd.Output Defaults to inherit. File paths are relative to the child's cwd.
 ---@field stderr? dotcmd.Output|"stdout" Defaults to inherit; stdout merges into standard output.
----@field check? boolean Raise on a nonzero exit; defaults to false.
+---@field check? false Disable checking the exit code; nonzero exits raise by default.
 
 ---@class dotcmd.ExecResult
 ---@field code integer Exit code.
@@ -60,7 +64,7 @@
 ---@field stdin file* Present when stdin is piped. Writes block; close it to send EOF.
 ---@field stdout file* Present when stdout is piped. Reads block; callers must drain piped output.
 ---@field stderr file* Present when stderr is piped. Reads block; callers must drain piped output.
----@field wait fun(self: dotcmd.Process, options?: {check?: boolean}): dotcmd.ExecResult Wait for exit and captured output. check defaults to false; true raises on nonzero exit.
+---@field wait fun(self: dotcmd.Process, options?: {check?: false}): dotcmd.ExecResult Wait for exit and captured output. check defaults to true; false returns nonzero exits without raising.
 ---@field poll fun(self: dotcmd.Process): dotcmd.ExecResult? Return the completed result, or nil while running or collecting output.
 ---@field kill fun(self: dotcmd.Process) Force-stop the direct child if running, without waiting.
 ---@field close fun(self: dotcmd.Process) Stop the direct child, wait, and close pipes. Also called by <close>; safe to repeat.
@@ -79,15 +83,13 @@
 ---@field rename fun(from: string, to: string, options?: {if_exists?: dotcmd.IfExists}): boolean Atomic rename; if_exists defaults to error. Returns true on success, false when skipped; failures raise.
 ---@field chmod fun(path: string, mode: integer|"+x") Sets Unix permission bits (0 through 0777), or adds execute bits allowed by umask with "+x"; no-op on Windows.
 
----@class dotcmd.Extraction
----@field strip_components? integer Leading path components to remove; defaults to 0.
----@field include? string[] Exact archive paths or directory prefixes, matched before stripping.
-
 ---@alias dotcmd.IfExists "error"|"skip"|"replace"
 
----@class dotcmd.ExtractOptions: dotcmd.Extraction
+---@class dotcmd.ExtractOptions
 ---@field if_exists? dotcmd.IfExists Defaults to error. Replacement swaps trees on Unix; Windows moves the old tree aside before publication.
+---@field include? string[] Exact archive paths or directory prefixes, matched before stripping.
 ---@field path string Archive file; format detected by contents.
+---@field strip_components? integer Leading path components to remove; defaults to 0.
 ---@field to? string New destination directory; defaults to the archive path without its suffix.
 
 ---Creates output as a file or directory. Its parent exists; output does not.
@@ -96,9 +98,11 @@
 ---Cache identity includes stripped Lua bytecode, not captured values or ambient state.
 ---@alias dotcmd.Prepare fun(input: string, output: string)
 
----@class dotcmd.CachedOptions
+---@class dotcmd.PinnedSource
 ---@field url string HTTPS download URL.
----@field sha256 string Pinned download hash. Verified only when downloading; cache hits are trusted.
+---@field sha256 string Pinned download hash.
+
+---@class dotcmd.FetchOptions: dotcmd.PinnedSource
 ---@field name? string Download filename; defaults to the URL filename, or download.
 ---@field prepare? dotcmd.Prepare Run only on a prepared-cache miss. Must be a Lua function; errors discard partial output.
 
@@ -171,8 +175,8 @@
 ---@field http fun(options: string|dotcmd.HttpOptions): dotcmd.HttpResponse HTTPS requests; transport/filesystem failures raise. SSL_CERT_FILE selects a PEM trust bundle.
 ---@field exec fun(program: string|dotcmd.ExecOptions, ...: string): dotcmd.ExecResult Executes without a shell; returns the exit code and captured output.
 ---@field spawn fun(program: string|dotcmd.SpawnOptions, ...: string): dotcmd.Process Starts without a shell and returns immediately. Startup failures raise; captured output is drained automatically.
----@field sha256 fun(input: string|dotcmd.File): string Hash bytes or a file; returns lowercase hexadecimal.
+---@field sha256 fun(options: dotcmd.Sha256Options): string Hash bytes or a file; returns lowercase hexadecimal.
 ---@field fs dotcmd.Fs
----@field extract fun(options: string|dotcmd.ExtractOptions): boolean Extract ZIP, tar, tar.gz, or tar.xz. Returns true on success, false when skipped; parent must exist.
----@field cached fun(options: dotcmd.CachedOptions): string Absolute download path, or prepared file/directory path when prepare is supplied.
----@field plugin fun(url, sha256): any Download and execute a SHA-256-pinned Lua plugin in the normal global environment. Returns every value returned by the plugin chunk.
+---@field extract fun(options: string|dotcmd.ExtractOptions, to?: string): boolean Accepts (path, to?) or an options table. Extracts ZIP, tar, tar.gz, or tar.xz. Returns true on success, false when skipped; parent must exist.
+---@field fetch fun(options: string|dotcmd.FetchOptions, sha256?: string): string Accepts (url, sha256) or an options table. Returns an absolute download or prepared path. Downloads are verified; cache hits are trusted.
+---@field plugin fun(options: string|dotcmd.PinnedSource, sha256?: string): any Accepts (url, sha256) or an options table. Caches the download, reverifies and executes the source on every call in the normal global environment. Returns every value returned by the plugin chunk.

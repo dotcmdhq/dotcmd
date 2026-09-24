@@ -312,8 +312,10 @@ static void FinishEntry(lua_State* L, State* s, struct archive_entry* entry, boo
 }
 
 static int Extract(lua_State* L) {
-    if (lua_gettop(L) != 1) return luaL_error(L, "extract expects a path or options table");
+    int supplied = lua_gettop(L);
     bool options = lua_istable(L, 1);
+    if (supplied < 1 || supplied > (options ? 1 : 2))
+        return luaL_error(L, "extract expects a path, a path and destination, or an options table");
     if (options) lua_getfield(L, 1, "path"); else lua_pushvalue(L, 1);
     const char* input = String(L, -1);
     State* s = (State*)lua_newuserdatauv(L, sizeof(State), 0);
@@ -328,7 +330,8 @@ static int Extract(lua_State* L) {
         lua_pop(L, 1);
         if (strip < 0) return luaL_error(L, "extract: strip_components must be nonnegative");
         lua_getfield(L, 1, "to");
-    } else lua_pushnil(L);
+    } else if (supplied == 2) lua_pushvalue(L, 2);
+    else lua_pushnil(L);
     if (lua_isnil(L, -1)) {
         Copy(L, &s->scratch[3], input);
         char* path = s->scratch[3]; size_t size = strlen(path);

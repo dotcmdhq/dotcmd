@@ -9,7 +9,7 @@ test('http downloads binary responses in both argument forms', function()
     assert(response.status == 200 and response.body == bytes)
     assert(response.url == url .. '/body')
     assert(response.headers['content-type'][1] == 'application/octet-stream')
-    assert(http { url = url .. '/body', check = true }.body == bytes)
+    assert(http { url = url .. '/body' }.body == bytes)
 end)
 
 test('http sends methods and binary request bodies', function()
@@ -33,16 +33,16 @@ test('http HEAD and 204 responses have no body', function()
     local response = http { url = url .. '/body', method = 'HEAD' }
     assert(response.status == 200 and response.body == '')
     assert(tonumber(response.headers['content-length'][1]) == #bytes)
-    response = http { url = url .. '/status/204', check = true }
+    response = http { url = url .. '/status/204' }
     assert(response.status == 204 and response.body == '')
 end)
 
-test('http returns error statuses unless check is enabled', function()
+test('http checks error statuses by default and can disable checking', function()
     for _, code in ipairs { 404, 500 } do
-        local response = http(url .. '/status/' .. code)
+        local response = http { url = url .. '/status/' .. code, check = false }
         assert(response.status == code and response.body == 'status body')
         t.assert_error('HTTP status ' .. code, function()
-            http { url = url .. '/status/' .. code, check = true }
+            http(url .. '/status/' .. code)
         end)
     end
 end)
@@ -57,7 +57,7 @@ test('http follows redirects and keeps only the final response', function()
 end)
 
 test('http exposes the final URL for HEAD requests', function()
-    local response = http { url = url .. '/redirect/302?to=/body', method = 'HEAD', check = true }
+    local response = http { url = url .. '/redirect/302?to=/body', method = 'HEAD' }
     assert(response.url == url .. '/body' and response.body == '')
 end)
 
@@ -79,7 +79,7 @@ end)
 test('http saves downloads relative to cwd and replaces existing files', function()
     local path = 'download ü.bin'
     t.write(path, string.rep('old contents', 100))
-    local response = http { url = url .. '/redirect/302?to=/body', path = path, check = true }
+    local response = http { url = url .. '/redirect/302?to=/body', to = path }
     assert(response.status == 200 and response.body == nil and t.read(path) == bytes)
     assert(response.headers['x-redirect-only'] == nil)
 end)
@@ -88,10 +88,10 @@ test('http failed statuses preserve files and remove temporary downloads', funct
     fs.mkdir('status')
     t.write('status/existing', 'keep me')
     for _, path in ipairs { 'status/existing', 'status/missing' } do
-        local response = http { url = url .. '/status/404', path = path }
+        local response = http { url = url .. '/status/404', to = path, check = false }
         assert(response.status == 404 and response.body == nil)
         t.assert_error('HTTP status 500', function()
-            http { url = url .. '/status/500', path = path, check = true }
+            http { url = url .. '/status/500', to = path }
         end)
     end
     assert(t.read('status/existing') == 'keep me' and fs.stat('status/missing') == nil)
@@ -104,7 +104,7 @@ test('http timeouts and interrupted downloads preserve files and clean up', func
     for _, endpoint in ipairs { '/slow', '/truncated' } do
         t.assert_error('http:', function() http { url = url .. endpoint, timeout = 1 } end)
         for _, path in ipairs { 'interrupted/existing', 'interrupted/missing' } do
-            t.assert_error('http:', function() http { url = url .. endpoint, path = path, timeout = 1 } end)
+            t.assert_error('http:', function() http { url = url .. endpoint, to = path, timeout = 1 } end)
         end
     end
     assert(t.read('interrupted/existing') == 'keep me' and fs.stat('interrupted/missing') == nil)
@@ -112,9 +112,9 @@ test('http timeouts and interrupted downloads preserve files and clean up', func
 end)
 
 test('http reports output file errors', function()
-    t.assert_error('http:', function() http { url = url .. '/body', path = 'missing-parent/out' } end)
+    t.assert_error('http:', function() http { url = url .. '/body', to = 'missing-parent/out' } end)
     fs.mkdir('directory')
-    t.assert_error('http:', function() http { url = url .. '/body', path = 'directory' } end)
+    t.assert_error('http:', function() http { url = url .. '/body', to = 'directory' } end)
     assert(fs.stat('directory').type == 'directory')
 end)
 

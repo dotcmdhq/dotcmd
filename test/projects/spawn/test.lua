@@ -24,7 +24,7 @@ test('spawn returns before exit and exposes blocking Lua pipe handles', function
     assert(process.stdout:read('l'):gsub('\r$', '') == 'ready')
     assert(process:poll() == nil)
     assert(process.stdin:write('continue\n')); assert(process.stdin:flush())
-    local result = process:wait { check = true }
+    local result = process:wait()
     assert(result.code == 0 and result.stdout == nil and result.stderr == nil)
     assert(process:wait() == result and process:poll() == result)
 end)
@@ -34,7 +34,7 @@ test('spawn pipes binary stdin and sends EOF on close', function()
     local process <close> = spawn(options)
     assert(process.stdin:write('input\0\255')); assert(process.stdin:close())
     assert(process.stdout:read('a') == 'input\0\255')
-    assert(process:wait { check = true }.code == 0)
+    assert(process:wait().code == 0)
 end)
 
 test('spawn exposes stderr separately and can merge it into stdout', function()
@@ -58,7 +58,7 @@ test('spawn drains captured output while Lua is reading another pipe', function(
     assert(process.stderr:read('l'):gsub('\r$', '') == 'ready')
     assert(process:poll() == nil)
     process.stdin:close()
-    local result = process:wait { check = true }
+    local result = process:wait()
     assert(result.stdout == string.rep('o', 4194304) and result.stderr == nil)
 end)
 
@@ -66,7 +66,7 @@ test('spawn captures large stdout and stderr concurrently', function()
     local options = t.command(child, 'large'); options.stdout = 'capture'; options.stderr = 'capture'
     local process <close> = spawn(options)
     assert(process.stdout == nil and process.stderr == nil)
-    local result = process:wait { check = true }
+    local result = process:wait()
     assert(result.stdout == string.rep('o', 4194304) and result.stderr == string.rep('e', 4194304))
 end)
 
@@ -108,22 +108,22 @@ test('spawn preserves arguments, cwd, and environment overrides', function()
     options.cwd = cwd; options.env = { DOTCMD_SPAWN_SET = 'value ü', USERPROFILE = false }
     options.stdout = 'capture'
     local process <close> = spawn(options)
-    local output = process:wait { check = true }.stdout:gsub('\r\n', '\n')
+    local output = process:wait().stdout:gsub('\r\n', '\n')
     local directory, rest = output:match('([^\n]+)\n(.*)')
     assert(t.normalized(directory) == t.normalized(cwd))
     assert(rest == 'value ü\n<missing>\ntwo words\0ü\0\0')
 end)
 
-test('spawn checks exit status only when wait requests it', function()
+test('spawn wait checks exit status by default and can disable checking', function()
     local options = t.command(child, 'status'); options.stderr = 'capture'
     local process <close> = spawn(options)
-    local result = process:wait()
+    t.assert_error('child failure', function() process:wait() end)
+    local result = process:wait { check = false }
     assert(result.code == 17 and result.stderr == 'child failure')
     assert(process:poll() == result)
-    t.assert_error('child failure', function() process:wait { check = true } end)
     assert(process:wait { check = false } == result)
     process:close(); process:close(); process:kill()
-    assert(process:wait() == result)
+    assert(process:wait { check = false } == result)
 end)
 
 test('spawn kill stops the direct child and can be repeated', function()
@@ -131,7 +131,7 @@ test('spawn kill stops the direct child and can be repeated', function()
     local process <close> = spawn(options)
     assert(process.stdout:read('l'):gsub('\r$', '') == 'ready')
     process:kill(); process:kill()
-    assert(process:wait().code ~= 0)
+    assert(process:wait { check = false }.code ~= 0)
     process:kill()
 end)
 
@@ -140,7 +140,7 @@ test('spawn close stops the child and closes exposed files', function()
     local process = spawn(options)
     assert(process.stdout:read('l'):gsub('\r$', '') == 'ready')
     process:close(); process:close()
-    assert(process:wait().code ~= 0)
+    assert(process:wait { check = false }.code ~= 0)
     assert(io.type(process.stdin) == 'closed file' and io.type(process.stdout) == 'closed file')
 end)
 

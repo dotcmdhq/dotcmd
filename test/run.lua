@@ -32,7 +32,7 @@ return function(repo)
     local go_os = host.os == 'macos' and 'darwin' or host.os
     local go_arch = host.arch == 'x64' and 'amd64' or host.arch
     print('Preparing HTTPS test server...')
-    local go = cached {
+    local go = fetch {
         url = 'https://go.dev/dl/go' .. go_config.version .. '.' .. go_os .. '-' .. go_arch
             .. (windows and '.zip' or '.tar.gz'),
         sha256 = go_config.sha256[host.os][host.arch],
@@ -42,12 +42,12 @@ return function(repo)
     }
     local server_binary = work .. '/http-server' .. (windows and '.exe' or '')
     exec { go .. '/bin/go' .. (windows and '.exe' or ''), 'build', '-trimpath', '-o', server_binary,
-        repo .. '/test/server.go', check = true,
+        repo .. '/test/server.go',
         env = { GOROOT = go, GOTOOLCHAIN = 'local', GOENV = 'off', CGO_ENABLED = '0',
             GOCACHE = host.cache_dir .. '/go-build', GOOS = go_os, GOARCH = go_arch },
     }
     local certificate = work .. '/test CA ü.pem'
-    local server <close> = spawn { server_binary, certificate, repo .. '/test/projects/cached/sdk.zip', repo .. '/.cmd',
+    local server <close> = spawn { server_binary, certificate, repo .. '/test/projects/fetch/sdk.zip', repo .. '/.cmd',
         stdin = 'pipe', stdout = 'pipe', stderr = 'capture',
     }
     local server_url = server.stdout:read('l')
@@ -101,7 +101,7 @@ local test = t.test
         end
     end
     server.stdin:close()
-    server:wait { check = true }
+    server:wait()
     print(('%d suites passed, %d failed'):format(passed, failed))
     return failed == 0 and 0 or 1
 end

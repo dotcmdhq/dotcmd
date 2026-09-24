@@ -67,9 +67,16 @@ test('exec exit codes, check, and start failures', function()
     local options = t.command(child, 'status', '17'); options.stderr = 'capture'; options.check = false
     local result = exec(options)
     assert(result.code == 17 and result.stdout == nil and result.stderr == 'child failure')
-    options.check = true
+    options.check = nil
     t.assert_error('child failure', function() exec(options) end)
     t.assert_error('exec:', function() exec('dotcmd-executable-that-does-not-exist') end)
     options = t.command(child, 'emit'); options.cwd = 'missing-directory'
     t.assert_error('exec:', function() exec(options) end)
+end)
+
+test('exec positional calls check nonzero exits by default', function()
+    local project = t.project('default check', ([[return {test = function()
+        exec(host.executable, '--launcher', %q, 'status', '17')
+    end}]]):format(child .. '/.cmd'))
+    t.failure(t.run_project(project, 'test'), 'exec:')
 end)

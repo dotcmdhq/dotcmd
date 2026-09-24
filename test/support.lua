@@ -28,6 +28,7 @@ function t.symlink(target, path, directory)
         command = { 'ln', '-s', target, path }
     end
     command.stdout, command.stderr = 'capture', 'capture'
+    command.check = false
     local result = exec(command)
     if host.os == 'windows' and result.code ~= 0
         and (result.stdout .. result.stderr):lower():find('privilege', 1, true) then

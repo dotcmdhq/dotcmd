@@ -59,10 +59,14 @@ static void Update(lua_State* L, Hash* hash, const char* data, size_t size) {
 }
 
 static int Sha256(lua_State* L) {
-    if (lua_gettop(L) != 1) return luaL_error(L, "sha256 expects a string or {path=...}");
-    bool from_file = lua_istable(L, 1);
-    if (from_file) lua_getfield(L, 1, "path");
-    int input = lua_gettop(L);
+    if (lua_gettop(L) != 1) return luaL_error(L, "sha256 expects {bytes=...} or {path=...}");
+    luaL_checktype(L, 1, LUA_TTABLE);
+    lua_getfield(L, 1, "bytes");
+    lua_getfield(L, 1, "path");
+    bool from_file = !lua_isnil(L, -1);
+    if (from_file == !lua_isnil(L, -2))
+        return luaL_error(L, "sha256: specify exactly one of 'bytes' or 'path'");
+    int input = lua_gettop(L) - (from_file ? 0 : 1);
     luaL_checktype(L, input, LUA_TSTRING);
     size_t size;
     const char* value = lua_tolstring(L, input, &size);

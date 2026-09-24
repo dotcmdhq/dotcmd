@@ -44,15 +44,15 @@ local function run(options, ...)
     end
     env.http = function(request)
         result.requests[#result.requests + 1] = request.url
-        assert(request.check)
+        assert(request.check ~= false)
         if request.url == base .. 'latest' then
-            assert(request.method == 'HEAD' and request.path == nil)
+            assert(request.method == 'HEAD' and request.to == nil)
             if options.lookup_error then error('lookup failed') end
             return { url = options.latest_url or base .. 'tag/2.0.0' }
         end
-        assert(request.path and request.method == nil)
+        assert(request.to and request.method == nil)
         if options.download then return options.download(request, path) end
-        t.write(request.path, options.replacement or replacement)
+        t.write(request.to, options.replacement or replacement)
         return {}
     end
     assert(loadfile(host.project_dir .. '/../main.lua', 't', env))({})
@@ -178,7 +178,7 @@ end)
 test('update leaves the launcher intact on download and publication failures', function()
     for _, options in ipairs({
         { download = function() error('download failed') end },
-        { download = function(request) t.write(request.path, 'partial'); error('download failed') end },
+        { download = function(request) t.write(request.to, 'partial'); error('download failed') end },
         { fs = { chmod = function() error('chmod failed') end, rename = function() error('rename failed') end } },
         { fs = { rename = function() error('rename failed') end } },
     }) do
@@ -274,6 +274,7 @@ return {}
         command.cwd = project
         command.env = { DOTCMD_CACHE_DIR = cache }
         command.stdout, command.stderr = 'capture', 'capture'
+        command.check = false
         return exec(command)
     end
     for _, version in ipairs({ 'latest', '0.1.36' }) do

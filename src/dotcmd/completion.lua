@@ -236,7 +236,7 @@ function completion.setup(scripts, shell)
         local executable = shell == 'powershell' and host.os == 'windows' and 'powershell.exe' or 'pwsh'
         local result = exec { executable, '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
             '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding; [Console]::Write($PROFILE.CurrentUserAllHosts)',
-            stdout = 'capture', stderr = 'capture', check = true }
+            stdout = 'capture', stderr = 'capture' }
         assert(result.stdout ~= '', 'PowerShell did not report a profile path')
         profiles = { result.stdout }
         source = '. ' .. quote(target, 'powershell')

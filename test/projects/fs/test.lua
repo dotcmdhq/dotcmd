@@ -51,7 +51,7 @@ if host.os == 'windows' then
         fs.mkdir('junction-target')
         t.write('junction-target/file', 'contents')
         exec { 'cmd.exe', '/d', '/c', 'mklink', '/J', 'junction', host.cwd .. '/junction-target',
-            stdout = 'discard', check = true }
+            stdout = 'discard' }
         assert(fs.realpath('junction') == fs.realpath('junction-target'))
         assert(fs.realpath('junction/file') == fs.realpath('junction-target/file'))
     end)

@@ -4,6 +4,7 @@
 - Test symlink metadata, dangling links, and recursive removal around links/cycles. Needs symlink creation in the native filesystem API, including Windows directory links/junctions.
 - Test fresh bootstrap downloads, SHA-256 rejection, and cache reuse. Needs a controlled download source for the launcher.
 - Add reusable Lua recipes for downloading SDKs or checking installed versions, starting with our build tools and later Java. Support platform-specific URLs and hashes.
+  Experimental streaming Lua parser for statically discovering recipe calls: [lua_recipe_parser.cpp](https://gist.github.com/vlaaad/59c7b500fec8b699da6b3880abe69e1c).
 - Generate LuaLS definitions from installed recipes for a global `recipe(url, sha, ...)` function. Collect overloads with literal URLs and source SHA-256s in one definition file, including each recipe's arguments and return type, so callers need no type annotation. Keep `@return any` before the overloads and leave the generic parameters unannotated: broad `@param url string`/`@param sha string` annotations suppress literal argument suggestions. This shape supports URL and SHA completion, recipe-specific parameter hints, and return-type narrowing (verified with LuaLS 3.19.1). Example (replace hash placeholders with the installed recipes' actual hashes):
 
   ```lua

@@ -22,11 +22,12 @@
 :; verify_sha() { case "$os" in linux) actual=$("$sha_path" < "$1") || return;; macos) actual=$("$sha_path" -a 256 < "$1") || return;; esac; if [ "${actual%% *}" != "$expected" ]; then echo "dotcmd: SHA-256 mismatch: $1" >&2; return 1; fi; }
 :; curl_path=$(command -v curl || true)
 :; if [ -z "$curl_path" ] && [ -x /usr/bin/curl ]; then curl_path=/usr/bin/curl; fi
-:; if [ -z "$curl_path" ]; then echo 'dotcmd: curl is required to download dotcmd; install curl or add it to PATH.' >&2; exit 127; fi
+:; if [ -z "$curl_path" ]; then wget_path=$(command -v wget || true); if [ -z "$wget_path" ] && [ -x /usr/bin/wget ]; then wget_path=/usr/bin/wget; fi; if [ -z "$wget_path" ]; then echo 'dotcmd: curl or wget is required to download dotcmd.' >&2; exit 127; fi; fi
 :; mkdir -p "$cache"
 :; tmp=$(mktemp "$cache/.download.XXXXXX")
 :; trap 'rm -f "$tmp"' EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
-:; "$curl_path" --fail --location --retry 3 --silent --show-error "https://github.com/vlaaad/dotcmd/releases/download/$version/dotcmd-$os-$arch" -o "$tmp"
+:; url="https://github.com/vlaaad/dotcmd/releases/download/$version/dotcmd-$os-$arch"
+:; if [ -n "$curl_path" ]; then "$curl_path" --fail --location --retry 3 --silent --show-error "$url" -o "$tmp"; else "$wget_path" -O "$tmp" "$url"; fi
 :; verify_sha "$tmp"
 :; chmod +x "$tmp"
 :; mv -f "$tmp" "$binary"
@@ -61,10 +62,10 @@ set "binary=%cache%\dotcmd.exe"
 if exist "%binary%" goto run
 set "dotcmd_expected_sha="
 for /f "tokens=2 delims==" %%H in ('findstr /b /c:":; sha_windows_%arch%=" "%~f0"') do set "dotcmd_expected_sha=%%H"
+set "dotcmd_url=https://github.com/vlaaad/dotcmd/releases/download/%version%/dotcmd-windows-%arch%.exe"
 for %%P in (powershell.exe) do set "powershell_path=%%~$PATH:P"
 if not defined powershell_path if defined SystemRoot if exist "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" set "powershell_path=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
-if not defined powershell_path goto missing_powershell
-set "dotcmd_url=https://github.com/vlaaad/dotcmd/releases/download/%version%/dotcmd-windows-%arch%.exe"
+if not defined powershell_path goto curl_fallback
 setlocal
 set "PSModulePath="
 "%powershell_path%" -NoLogo -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; $tmp = Join-Path $env:cache ('.download-' + [Guid]::NewGuid() + '.exe'); try { [void][IO.Directory]::CreateDirectory($env:cache); Invoke-WebRequest -UseBasicParsing -Uri $env:dotcmd_url -OutFile $tmp; if ((Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash -ne $env:dotcmd_expected_sha) { throw 'SHA-256 mismatch' }; Move-Item -LiteralPath $tmp -Destination $env:binary -Force } catch { [Console]::Error.WriteLine('dotcmd: ' + $_.Exception.Message); exit 1 } finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }; exit 0"
@@ -78,6 +79,10 @@ exit /b 1
 :missing_cache
 echo dotcmd: neither LOCALAPPDATA nor USERPROFILE is set >&2
 exit /b 1
-:missing_powershell
-echo dotcmd: Windows PowerShell is required to download and verify dotcmd. >&2
-exit /b 127
+:curl_fallback
+for %%P in (curl.exe certutil.exe) do if "%%~$PATH:P"=="" (echo dotcmd: Windows PowerShell or both curl.exe and certutil.exe are required. >&2 & exit /b 127)
+set "tmp=%binary%.%RANDOM%%RANDOM%.tmp"
+curl.exe --create-dirs --fail --location --retry 3 --silent --show-error "%dotcmd_url%" -o "%tmp%" || (del /q "%tmp%" 2>nul & exit /b 1)
+certutil.exe -hashfile "%tmp%" SHA256 | findstr /i /l /x /c:"%dotcmd_expected_sha%" >nul || (del /q "%tmp%" 2>nul & echo dotcmd: SHA-256 verification failed >&2 & exit /b 1)
+move /y "%tmp%" "%binary%" >nul || (del /q "%tmp%" 2>nul & exit /b 1)
+goto run

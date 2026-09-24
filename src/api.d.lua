@@ -175,3 +175,4 @@
 ---@field fs dotcmd.Fs
 ---@field extract fun(options: string|dotcmd.ExtractOptions): boolean Extract ZIP, tar, tar.gz, or tar.xz. Returns true on success, false when skipped; parent must exist.
 ---@field cached fun(options: dotcmd.CachedOptions): string Absolute download path, or prepared file/directory path when prepare is supplied.
+---@field plugin fun(url, sha256): any Download and execute a SHA-256-pinned Lua plugin in the normal global environment. Returns every value returned by the plugin chunk.

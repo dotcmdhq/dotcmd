@@ -59,6 +59,16 @@ func main() {
 	mux.HandleFunc("/archive", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, os.Args[2])
 	})
+	mux.HandleFunc("/plugin/values", func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `dotcmd_plugin_test_calls = (dotcmd_plugin_test_calls or 0) + 1
+return "value", nil, false, dotcmd_plugin_test_calls, type(cached) .. ":" .. host.os`)
+	})
+	mux.HandleFunc("/plugin/syntax", func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `return function(`)
+	})
+	mux.HandleFunc("/plugin/runtime", func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `error("plugin runtime failure")`)
+	})
 	mux.HandleFunc("/launcher/{version}", func(w http.ResponseWriter, r *http.Request) {
 		version := r.PathValue("version")
 		if version != "2.0.0" && version != "0.1.36" {

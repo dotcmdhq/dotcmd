@@ -42,7 +42,7 @@ end)
 
 test('cached rejects an incorrect download hash without publishing files', function()
     local hash = string.rep('0', 64)
-    t.assert_error('SHA-256 mismatch', function()
+    t.assert_error('SHA-256 mismatch for ' .. url .. '/body', function()
         cached { url = url .. '/body', sha256 = hash, name = 'wrong.bin' }
     end)
     for name in fs.list(host.cache_dir .. '/downloads/' .. hash) do error('leftover file: ' .. name) end

@@ -73,7 +73,7 @@ function cached(options)
             end,
         })
         http { url = options.url, path = temp, check = true }
-        assert(sha256 { path = temp } == hash, "cached: SHA-256 mismatch")
+        assert(sha256 { path = temp } == hash, "cached: SHA-256 mismatch for " .. options.url)
         fs.rename(temp, download_path, { if_exists = "skip" })
     end
 
@@ -95,6 +95,14 @@ function cached(options)
         fs.rename(temp, prepared_dir, { if_exists = "skip" })
     end
     return result_path
+end
+
+function plugin(url, hash)
+    local path = cached { url = url, sha256 = hash }
+    local file <close> = assert(io.open(path, "rb"))
+    local source = assert(file:read("a"))
+    assert(sha256(source) == hash, "plugin: SHA-256 mismatch for " .. url)
+    return assert(load(source, "@" .. url, "t"))()
 end
 
 local main_command = {

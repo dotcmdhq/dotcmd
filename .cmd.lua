@@ -4,6 +4,26 @@ local _ENV = _ENV
 local root = host.project_dir
 local windows = host.os == 'windows'
 local suffix = windows and '.exe' or ''
+local ninja = plugin(
+    'https://raw.githubusercontent.com/dotcmdhq/plugins/933db43177f39ff4865e50081d8e050beb70532e/ninja.lua',
+    '08bcba03d5c18d393bd2837b8d86f6382b61702d5c214a8b24396297e71a2467'
+) {
+    version = '1.13.2',
+    sha256 = {
+        linux = {
+            x64 = '5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6',
+            arm64 = 'fd2cacc8050a7f12a16a2e48f9e06fca5c14fc4c2bee2babb67b58be17a607fc',
+        },
+        macos = {
+            x64 = 'c99048673aa765960a99cf10c6ddb9f1fad506099ff0a0e137ad8960a88f321b',
+            arm64 = 'c99048673aa765960a99cf10c6ddb9f1fad506099ff0a0e137ad8960a88f321b',
+        },
+        windows = {
+            x64 = '07fc8261b42b20e71d1720b39068c2e14ffcee6396b76fb7a795fb460b78dc65',
+            arm64 = 'e52f0bdef9dfb1003229dbd6508a508c4073fd017247002adc66e5e806cb0391',
+        },
+    },
+}
 
 local function build(mode)
     mode = mode or 'release'
@@ -44,37 +64,6 @@ local function build(mode)
         end,
     }
     local cmake = cmake_dir .. (host.os == 'macos' and '/CMake.app/Contents/bin/cmake' or '/bin/cmake' .. suffix)
-    local ninja_config = {
-        version = '1.13.2',
-        sha256 = {
-            linux = {
-                x64 = '5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6',
-                arm64 = 'fd2cacc8050a7f12a16a2e48f9e06fca5c14fc4c2bee2babb67b58be17a607fc',
-            },
-            macos = {
-                x64 = 'c99048673aa765960a99cf10c6ddb9f1fad506099ff0a0e137ad8960a88f321b',
-                arm64 = 'c99048673aa765960a99cf10c6ddb9f1fad506099ff0a0e137ad8960a88f321b',
-            },
-            windows = {
-                x64 = '07fc8261b42b20e71d1720b39068c2e14ffcee6396b76fb7a795fb460b78dc65',
-                arm64 = 'e52f0bdef9dfb1003229dbd6508a508c4073fd017247002adc66e5e806cb0391',
-            },
-        },
-        name = {
-            linux = { x64 = 'linux', arm64 = 'linux-aarch64' },
-            macos = { x64 = 'mac', arm64 = 'mac' },
-            windows = { x64 = 'win', arm64 = 'winarm64' },
-        },
-    }
-    local ninja_dir = fetch {
-        url = 'https://github.com/ninja-build/ninja/releases/download/v' .. ninja_config.version
-            .. '/ninja-' .. ninja_config.name[host.os][host.arch] .. '.zip',
-        sha256 = ninja_config.sha256[host.os][host.arch],
-        prepare = function(input, output)
-            extract(input, output)
-        end,
-    }
-    local ninja = ninja_dir .. '/ninja' .. suffix
     local args = {
         cmake, '-S', windows and root:gsub('\\', '/') or root,
         '-B', windows and output:gsub('\\', '/') or output, '-G', 'Ninja',

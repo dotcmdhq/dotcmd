@@ -5,8 +5,8 @@ local root = host.project_dir
 local windows = host.os == 'windows'
 local suffix = windows and '.exe' or ''
 local ninja = plugin(
-    'https://raw.githubusercontent.com/dotcmdhq/plugins/933db43177f39ff4865e50081d8e050beb70532e/ninja.lua',
-    '08bcba03d5c18d393bd2837b8d86f6382b61702d5c214a8b24396297e71a2467'
+    'https://raw.githubusercontent.com/dotcmdhq/plugins/1551b5f7ee5562017a59721d98ae3c3a9c8ed253/ninja.lua',
+    'be468f1613b02dc5a12c40b5900cdef5cfc5770841878ba9c1e1511eba69738e'
 ) {
     version = '1.13.2',
     sha256 = {

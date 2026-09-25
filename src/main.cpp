@@ -128,9 +128,30 @@ static void SetString(lua_State* L, const char* key, const char* value) {
     lua_setfield(L, -2, key);
 }
 
-static int Traceback(lua_State* L) {
-    const char* message = luaL_tolstring(L, 1, NULL);
-    luaL_traceback(L, L, message ? message : "Lua raised a non-string error", 1);
+static int FormatError(lua_State* L) {
+    if (lua_istable(L, 1)) {
+        // Read actual fields, without invoking an error object's __index.
+        lua_pushliteral(L, "exit_code");
+        lua_rawget(L, 1);
+        lua_pushliteral(L, "message");
+        lua_rawget(L, 1);
+        if (!lua_isnil(L, -2) || !lua_isnil(L, -1)) {
+            lua_Integer code = lua_isinteger(L, -2) ? lua_tointeger(L, -2) : 1;
+            if (code < 0 || code > 255) code = 1;
+            if (!lua_isnil(L, -1)) {
+                luaL_tolstring(L, -1, NULL);
+                lua_remove(L, -2);
+            }
+            // Copy the fields before unwinding: __close handlers may mutate the original.
+            lua_createtable(L, 0, 2);
+            lua_pushinteger(L, code);
+            lua_setfield(L, -2, "exit_code");
+            lua_pushvalue(L, -2);
+            lua_setfield(L, -2, "message");
+            return 1;
+        }
+    }
+    luaL_tolstring(L, 1, NULL);
     return 1;
 }
 
@@ -231,12 +252,24 @@ int main(int argc, char** argv) {
     lua_State* L = luaL_newstate();
     if (!L) { fprintf(stderr, "dotcmd: cannot create Lua state\n"); return 1; }
     Invocation invocation = {argc, argv};
-    lua_pushcfunction(L, Traceback);
+    lua_pushcfunction(L, FormatError);
     lua_pushcfunction(L, Run);
     lua_pushlightuserdata(L, &invocation);
     int code = 1;
     if (lua_pcall(L, 1, 1, 1) == LUA_OK) {
         code = (int)lua_tointeger(L, -1);
+    } else if (lua_istable(L, -1)) {
+        lua_getfield(L, -1, "exit_code");
+        code = (int)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "message");
+        if (!lua_isnil(L, -1)) {
+            size_t size;
+            const char* message = lua_tolstring(L, -1, &size);
+            fputs("dotcmd: ", stderr);
+            fwrite(message, 1, size, stderr);
+            fputc('\n', stderr);
+        }
     } else {
         fprintf(stderr, "dotcmd: %s\n", lua_tostring(L, -1));
     }

@@ -7,9 +7,8 @@ return {
         io.stdout:setvbuf('full', 4096); io.stderr:setvbuf('full', 4096)
         io.write('before:'); io.stderr:write('before:')
         local process <close> = spawn(t.command(host.project_dir, 'emit'))
-        local result = process:wait()
+        process:wait()
         io.write(':after'); io.stderr:write(':after')
-        return result.code
     end,
     noop = function() end,
     emit = function()
@@ -39,6 +38,6 @@ return {
         for i = 1, select('#', ...) do io.write(select(i, ...), '\0') end
     end,
     status = function()
-        io.stderr:write('child failure'); return 17
+        io.stderr:write('child failure'); error({ exit_code = 17 })
     end,
 }

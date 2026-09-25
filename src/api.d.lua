@@ -64,7 +64,7 @@
 ---@field stdin file* Present when stdin is piped. Writes block; close it to send EOF.
 ---@field stdout file* Present when stdout is piped. Reads block; callers must drain piped output.
 ---@field stderr file* Present when stderr is piped. Reads block; callers must drain piped output.
----@field wait fun(self: dotcmd.Process, options?: {check?: false}): dotcmd.ExecResult Wait for exit and captured output. check defaults to true; false returns nonzero exits without raising.
+---@field wait fun(self: dotcmd.Process, options?: {check?: false}): dotcmd.ExecResult Wait for exit and captured output. check defaults to true; nonzero exits raise a table with message and exit_code. false returns nonzero exits without raising.
 ---@field poll fun(self: dotcmd.Process): dotcmd.ExecResult? Return the completed result, or nil while running or collecting output.
 ---@field kill fun(self: dotcmd.Process) Force-stop the direct child if running, without waiting.
 ---@field close fun(self: dotcmd.Process) Stop the direct child, wait, and close pipes. Also called by <close>; safe to repeat.
@@ -106,7 +106,7 @@
 ---@field name? string Download filename; defaults to the URL filename, or download.
 ---@field prepare? dotcmd.Prepare Run only on a prepared-cache miss. Accepts a function; errors discard partial output.
 
----@alias dotcmd.Run fun(...: string): integer?
+---@alias dotcmd.Run fun(...: string): any
 
 ---@alias dotcmd.Color "black"|"red"|"green"|"yellow"|"blue"|"magenta"|"cyan"|"white"|"bright_black"|"bright_red"|"bright_green"|"bright_yellow"|"bright_blue"|"bright_magenta"|"bright_cyan"|"bright_white"|integer|string
 
@@ -158,6 +158,9 @@
 ---@field [integer] dotcmd.Argument
 ---@field end_opts? boolean The first token that is not a declared option or -- starts the positionals and ends option recognition. Defaults to false; positional parsing still applies.
 
+---Errors print without an added traceback and default to exit 1. For a custom status, raise
+---error({message = "...", exit_code = 2}). message is optional and converted with tostring;
+---exit_code must be an integer from 0 to 255, otherwise it falls back to 1.
 ---@class dotcmd.Command
 ---@field hidden? boolean Omit this command and its aliases from help listings and completion suggestions; it remains callable.
 ---@field aliases? string[] Additional literal CLI names, listed after the primary name in help.
@@ -165,7 +168,7 @@
 ---@field opts? table<string, dotcmd.Option> Result keys; underscores become hyphens in long-option spellings. Inherited by descendants; their option spellings must not conflict.
 ---@field args? dotcmd.Arguments Leaf positional schema; omitted means unrestricted strings, empty means no positionals. Cannot be combined with commands.
 ---@field commands? dotcmd.Commands Named child commands. May be combined with opts and a run for bare invocation, but not args.
----@field run? fun(...: any): integer? Required on leaves. Receives one combined opts table first when this command or an ancestor declares opts, then individual positionals. On a group, runs only when no child is selected; omitting it shows group help. Returns nil or an exit code from 0 to 255.
+---@field run? fun(...: any): any Required on leaves. Receives one combined opts table first when this command or an ancestor declares opts, then individual positionals. On a group, runs only when no child is selected; omitting it shows group help. Every returned value is printed on its own line using print, including nil; returning no values prints nothing. Normal completion exits 0. Raise an error for failure.
 
 ---@alias dotcmd.Commands table<string, dotcmd.Run|dotcmd.Command> Underscores in keys become hyphens in CLI command names at every level.
 
@@ -173,7 +176,7 @@
 ---@class dotcmd.Env
 ---@field host dotcmd.Host
 ---@field http fun(options: string|dotcmd.HttpOptions): dotcmd.HttpResponse HTTPS requests; transport/filesystem failures raise. SSL_CERT_FILE selects a PEM trust bundle.
----@field exec fun(program: string|dotcmd.ExecOptions, ...: string): dotcmd.ExecResult Executes without a shell; returns the exit code and captured output.
+---@field exec fun(program: string|dotcmd.ExecOptions, ...: string): dotcmd.ExecResult Executes without a shell; returns the exit code and captured output. Checked nonzero exits raise a table with the child's exit_code and a message.
 ---@field spawn fun(program: string|dotcmd.SpawnOptions, ...: string): dotcmd.Process Starts without a shell and returns immediately. Startup failures raise; captured output is drained automatically.
 ---@field sha256 fun(options: dotcmd.Sha256Options): string Hash bytes or a file; returns lowercase hexadecimal.
 ---@field fs dotcmd.Fs

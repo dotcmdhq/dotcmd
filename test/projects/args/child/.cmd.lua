@@ -109,5 +109,6 @@ return {
         parse = function() error('parser bug') end,
     } } }),
     cli_errors = command({ opts = { name = {}, debug = { flag = true } } }, { name = '-', debug = false }, '-'),
-    status = { opts = {}, args = {}, run = function() return 42 end },
+    status = { opts = {}, args = {}, run = function() error({ exit_code = 42 }) end },
+    results = { opts = {}, args = {}, run = function() return 42, nil, false end },
 }

@@ -22,10 +22,54 @@ return {
         for i = 1, select('#', ...) do print(hex(select(i, ...))) end
     end},
     context = function() print(host.cwd); print(host.project_dir); print(host.os); print(host.arch) end,
-    status = function(code) return tonumber(code) end,
+    status = function(code) error({ exit_code = tonumber(code) }) end,
     nothing = function() end,
-    invalid = function() return false end,
+    values = function()
+        print('printed')
+        return 'hello', 3, false, nil, '', 'two\nlines', nil
+    end,
+    nil_value = function() return nil end,
+    objects = function()
+        return setmetatable({}, { __tostring = function() return 'custom display' end }), {}
+    end,
+    structured_error = function(code, message)
+        error({ exit_code = tonumber(code), message = message })
+    end,
+    invalid_error = function(kind)
+        local errors = {
+            string_code = { exit_code = '2' },
+            fraction = { exit_code = 1.5 },
+            negative = { exit_code = -1 },
+            large = { exit_code = 256 },
+            message = { message = setmetatable({}, { __tostring = function() return 'original failure' end }) },
+        }
+        local value = errors[kind]
+        value.message = value.message or 'original failure'
+        error(value)
+    end,
+    object_error = function()
+        error(setmetatable({}, { __tostring = function() return 'ordinary object error' end }))
+    end,
+    rethrow = function()
+        local value = { exit_code = 23, message = 'caught error' }
+        local ok, caught = pcall(error, value)
+        assert(not ok and caught == value)
+        error(caught)
+    end,
+    unwind = function(path)
+        local value = { exit_code = 19, message = 'before cleanup' }
+        local cleanup <close> = setmetatable({}, { __close = function()
+            local file <close> = assert(io.open(path, 'w'))
+            file:write('closed')
+            value.exit_code, value.message = 99, 'after cleanup'
+        end })
+        error(value)
+    end,
     crash = function() error('intentional project error') end,
+    equivalent_error = function(kind)
+        if kind == 'table' then error({ message = 'same failure' }) end
+        error('same failure')
+    end,
     deploy = {
         description = [[Deploy files
 

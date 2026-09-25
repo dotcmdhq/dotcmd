@@ -83,7 +83,9 @@ local passed, failed = 0, 0
 function t.assert_error(expected, fn)
     local ok, message = pcall(fn)
     assert(not ok, 'expected an error')
-    assert(tostring(message):find(expected, 1, true), tostring(message))
+    local text = type(message) == 'table' and message.message or tostring(message)
+    assert(text:find(expected, 1, true), text)
+    return message
 end
 
 function t.test(name, fn)
@@ -91,13 +93,14 @@ function t.test(name, fn)
     if ok then
         passed = passed + 1; print('PASS ' .. name)
     else
-        failed = failed + 1; io.stderr:write('FAIL ' .. name .. '\n' .. message .. '\n')
+        local text = type(message) == 'table' and message.message or tostring(message)
+        failed = failed + 1; io.stderr:write('FAIL ' .. name .. '\n' .. text .. '\n')
     end
 end
 
 function t.finish()
     print(('%d passed, %d failed'):format(passed, failed))
-    return failed == 0 and 0 or 1
+    if failed > 0 then error({ exit_code = 1 }) end
 end
 
 return t

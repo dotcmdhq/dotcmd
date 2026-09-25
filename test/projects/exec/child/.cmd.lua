@@ -6,13 +6,12 @@ return {
         local t = assert(loadfile(host.project_dir .. '/../../support.lua'))()
         io.stdout:setvbuf('full', 4096); io.stderr:setvbuf('full', 4096)
         io.write('before:'); io.stderr:write('before:')
-        local result = exec(t.command(host.project_dir, 'emit'))
+        exec(t.command(host.project_dir, 'emit'))
         io.write(':after'); io.stderr:write(':after')
-        return result.code
     end,
     inherit = function()
         local t = assert(loadfile(host.project_dir .. '/../../support.lua'))()
-        return exec(t.command(host.project_dir, 'emit')).code
+        exec(t.command(host.project_dir, 'emit'))
     end,
     emit = function()
         io.write('OUT\0\255'); io.stderr:write('ERR\0\254')
@@ -28,6 +27,6 @@ return {
     end,
     cwd = function() print(host.cwd) end,
     status = function(code)
-        io.stderr:write('child failure'); return tonumber(code)
+        io.stderr:write('child failure'); error({ exit_code = tonumber(code) })
     end,
 }

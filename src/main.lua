@@ -224,6 +224,7 @@ function main(argv)
     local resolution, resolve_error, error_code = commands.resolve(all_commands, words)
     if not resolution then
         if not ok then
+            if type(project) == 'table' then error(project) end
             io.stderr:write('dotcmd: ' .. tostring(project) .. '\n')
         else
             io.stderr:write('dotcmd: ' .. tostring(resolve_error) .. '\nRun .cmd --help to list available commands.\n')
@@ -241,20 +242,17 @@ function main(argv)
         end
         return require('dotcmd.help')(all_commands, main_command, table.unpack(path)) or 0
     end
-    local code
+    local results
     if schema.opts ~= nil or schema.args ~= nil then
         local parameters, message = args.parse(schema, arguments)
         if not parameters then
             io.stderr:write('dotcmd ' .. table.concat(path, ' ') .. ': ' .. message .. '\n')
             return 2
         end
-        code = command.run(table.unpack(parameters, 1, parameters.n))
+        results = table.pack(command.run(table.unpack(parameters, 1, parameters.n)))
     else
-        code = command.run(table.unpack(arguments))
+        results = table.pack(command.run(table.unpack(arguments)))
     end
-    if code == nil then return 0 end
-    if math.type(code) ~= "integer" or code < 0 or code > 255 then
-        error("command " .. table.concat(path, ' ') .. " must return nil or an integer exit code between 0 and 255")
-    end
-    return code
+    for i = 1, results.n do print(results[i]) end
+    return 0
 end

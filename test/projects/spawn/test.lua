@@ -117,7 +117,8 @@ end)
 test('spawn wait checks exit status by default and can disable checking', function()
     local options = t.command(child, 'status'); options.stderr = 'capture'
     local process <close> = spawn(options)
-    t.assert_error('child failure', function() process:wait() end)
+    local err = t.assert_error('child failure', function() process:wait() end)
+    assert(type(err) == 'table' and err.exit_code == 17)
     local result = process:wait { check = false }
     assert(result.code == 17 and result.stderr == 'child failure')
     assert(process:poll() == result)

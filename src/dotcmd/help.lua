@@ -144,8 +144,8 @@ return function(all_commands, main_command, ...)
     end
     local command, inherited_opts = commands.find(all_commands, path)
     if command == nil then
-        io.stderr:write('dotcmd: unknown command: ' .. table.concat(path, ' ') .. '\nRun .cmd --help to list available commands.\n')
-        return 1
+        error('unknown command: ' .. table.concat(path, ' ')
+            .. '\nRun .cmd --help to list available commands.')
     end
     output:write({ keyword('Usage:'), ' .cmd ', format.plain(usage(table.concat(path, ' '), command, inherited_opts)), '\n' })
     local rows = {}

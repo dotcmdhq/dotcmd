@@ -175,6 +175,10 @@ test('parsed commands preserve exit status', function()
     assert(t.run_project(child, 'status').code == 42)
 end)
 
+test('parsed commands print returned values independently of exit status', function()
+    assert(t.success(t.run_project(child, 'results')) == '42\nnil\nfalse\n')
+end)
+
 test('help describes positional arities and defaults without parsing', function()
     for _, case in ipairs({
         { 'one_arg', '<first>' }, { 'optional_arg', '<first> [last]' },

@@ -103,5 +103,5 @@ local test = t.test
     server.stdin:close()
     server:wait()
     print(('%d suites passed, %d failed'):format(passed, failed))
-    return failed == 0 and 0 or 1
+    if failed > 0 then error({ exit_code = 1 }) end
 end

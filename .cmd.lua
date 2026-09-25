@@ -142,8 +142,8 @@ Downloads the required build tools and builds into target/<mode>.
         description = 'Build and run the local dotcmd executable',
         run = function(...)
             build()
-            return exec { check = false, root .. '/target/release/dotcmd' .. suffix,
-                '--launcher', root .. '/.cmd', ... }.code
+            exec { root .. '/target/release/dotcmd' .. suffix,
+                '--launcher', root .. '/.cmd', ... }
         end,
     },
     test = {
@@ -151,8 +151,8 @@ Downloads the required build tools and builds into target/<mode>.
         args = {},
         run = function()
             local cmake = build()
-            return exec { cmake, '--build', root .. '/target/release', '--target', 'test',
-                cwd = root, env = { CTEST_OUTPUT_ON_FAILURE = '1' }, check = false }.code
+            exec { cmake, '--build', root .. '/target/release', '--target', 'test',
+                cwd = root, env = { CTEST_OUTPUT_ON_FAILURE = '1' } }
         end,
     },
 }

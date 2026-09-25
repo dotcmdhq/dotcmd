@@ -1,4 +1,5 @@
 #include "exec.h"
+#include "api.h"
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -924,8 +925,6 @@ void RegisterExec(lua_State* L) {
         lua_pushcfunction(L, Cleanup); lua_setfield(L, -2, "__gc");
     }
     lua_pop(L, 1);
-    lua_pushcfunction(L, Exec);
-    lua_setglobal(L, "exec");
-    lua_pushcfunction(L, Spawn);
-    lua_setglobal(L, "spawn");
+    RegisterFunction(L, "exec", Exec);
+    RegisterFunction(L, "spawn", Spawn);
 }

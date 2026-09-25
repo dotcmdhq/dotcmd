@@ -54,11 +54,15 @@ function fetch(options, hash)
     local download_path = download_dir .. "/" .. name
     local prepared_dir
     if prepare ~= nil then
-        local ok, bytecode = pcall(string.dump, prepare, true)
-        assert(ok, "fetch: prepare must be a Lua function")
+        local ok, identity = pcall(string.dump, prepare, true)
+        if not ok then
+            local native_name = internal.native_function_name(prepare)
+            identity = native_name and ("\0native\0" .. native_name)
+        end
+        assert(identity, "fetch: prepare must be a Lua function or named native function")
         -- Captured values and ambient state are the caller's responsibility.
         prepared_dir = host.cache_dir .. "/prepared/" .. sha256 { bytes = hash .. "\0" .. name
-            .. "\0" .. host.os .. "\0" .. host.arch .. "\0" .. bytecode }
+            .. "\0" .. host.os .. "\0" .. host.arch .. "\0" .. identity }
     end
     local result_path = prepared_dir and (prepared_dir .. "/" .. name) or download_path
     if fs.stat(result_path) then

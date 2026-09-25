@@ -1,4 +1,5 @@
 #include "extract.h"
+#include "api.h"
 #include "fs.h"
 #include <archive.h>
 #include <archive_entry.h>
@@ -518,5 +519,5 @@ void RegisterExtract(lua_State* L) {
         lua_pushcfunction(L, Cleanup); lua_setfield(L, -2, "__gc");
     }
     lua_pop(L, 1);
-    lua_pushcfunction(L, Extract); lua_setglobal(L, "extract");
+    RegisterFunction(L, "extract", Extract);
 }

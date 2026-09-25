@@ -1,6 +1,5 @@
 # TODO
 
-- Support C functions as `fetch` preparation callbacks, including `prepare = extract`. Use the symbolic API name already supplied when registering each native function as its stable cache identity, so the same generic registration path automatically covers future native functions without a separate identity list.
 - Fix Windows `exec` path resolution to use the child's `cwd`: with a parent on `C:` and child on `D:`, redirected `\out.txt` must resolve to `D:\out.txt`. Check executable paths and `PATH` entries too, and add Windows regression tests.
 - Test symlink metadata, dangling links, and recursive removal around links/cycles. Needs symlink creation in the native filesystem API, including Windows directory links/junctions.
 - Test fresh bootstrap downloads, SHA-256 rejection, and cache reuse. Needs a controlled download source for the launcher.

@@ -19,6 +19,7 @@ extern "C" {
 #include "lualib.h"
 }
 #include "build_config.h"
+#include "api.h"
 #include "main_lua.h"
 #include "lua_modules.h"
 #include "completion_bash.h"
@@ -184,7 +185,9 @@ static int Run(lua_State* L) {
     if (luaL_loadbufferx(L, (const char*)main_lua, sizeof(main_lua), "@embedded/main.lua", "t") != LUA_OK)
         return lua_error(L);
     // Pass private resources as one table to the main.lua chunk.
-    lua_createtable(L, 0, 2);
+    lua_createtable(L, 0, 3);
+    lua_pushcfunction(L, NativeFunctionName);
+    lua_setfield(L, -2, "native_function_name");
     lua_pushlstring(L, (const char*)licenses, sizeof(licenses));
     lua_setfield(L, -2, "licenses");
     lua_createtable(L, 0, 4);

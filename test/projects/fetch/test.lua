@@ -153,6 +153,18 @@ test('fetch preparation is invalidated by callback bytecode', function()
     assert(t.read(unstripped .. '/sdk/lib/value') == 'library')
 end)
 
+test('fetch supports named native preparation callbacks across processes', function()
+    local input, hash = seed(archive, 'native.zip')
+    local options = { url = 'https://127.0.0.1/native.zip', sha256 = hash, prepare = extract }
+    local output = fetch(options)
+    assert(t.read(output .. '/sdk/lib/value') == 'library')
+    fs.remove(input)
+    local project = t.project('native preparation consumer', ([[return {test = function()
+    print(fetch {url='https://127.0.0.1/native.zip', sha256=%q, prepare=extract})
+end}]]):format(hash))
+    assert(t.success(t.run_project(project, 'test')) == output .. '\n')
+end)
+
 test('fetch preparation is invalidated by download contents and filename', function()
     local function prepare(input, output) t.write(output, t.read(input)) end
     local _, a = seed('first source', 'first.txt')
@@ -234,9 +246,9 @@ test('fetch rejects missing outputs and invalid prepare callbacks', function()
     local before = prepared_entries()
     t.assert_error('prepare must create the output file or directory', function() fetch(options) end)
     assert_entries_unchanged(before)
-    for _, prepare in ipairs { false, 'script.lua', {}, print, extract } do
+    for _, prepare in ipairs { false, 'script.lua', {}, print } do
         options.prepare = prepare
-        t.assert_error('prepare must be a Lua function', function() fetch(options) end)
+        t.assert_error('prepare must be a Lua function or named native function', function() fetch(options) end)
     end
 end)
 

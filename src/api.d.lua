@@ -104,7 +104,7 @@
 
 ---@class dotcmd.FetchOptions: dotcmd.PinnedSource
 ---@field name? string Download filename; defaults to the URL filename, or download.
----@field prepare? dotcmd.Prepare Run only on a prepared-cache miss. Must be a Lua function; errors discard partial output.
+---@field prepare? dotcmd.Prepare Run only on a prepared-cache miss. Accepts a function; errors discard partial output.
 
 ---@alias dotcmd.Run fun(...: string): integer?
 

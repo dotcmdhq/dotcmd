@@ -1,4 +1,5 @@
 #include "sha256.h"
+#include "api.h"
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
@@ -133,6 +134,5 @@ void RegisterSha256(lua_State* L) {
         lua_pushcfunction(L, Cleanup); lua_setfield(L, -2, "__gc");
     }
     lua_pop(L, 1);
-    lua_pushcfunction(L, Sha256);
-    lua_setglobal(L, "sha256");
+    RegisterFunction(L, "sha256", Sha256);
 }

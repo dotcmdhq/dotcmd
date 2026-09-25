@@ -1,4 +1,5 @@
 #include "http.h"
+#include "api.h"
 #include <curl/curl.h>
 #include <errno.h>
 #include <limits.h>
@@ -401,8 +402,7 @@ void RegisterHttp(lua_State* L) {
         lua_setfield(L, -2, "__close");
     }
     lua_pop(L, 1);
-    lua_pushcfunction(L, Http);
-    lua_setglobal(L, "http");
+    RegisterFunction(L, "http", Http);
 }
 
 void CleanupHttp() {

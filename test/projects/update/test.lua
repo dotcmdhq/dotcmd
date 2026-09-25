@@ -6,7 +6,7 @@ local function release(version)
     return (template:gsub('^:; version=[^\n]+', function() return ':; version=' .. version end))
 end
 local original, replacement = release('1.0.0'), release('2.0.0')
-local base = 'https://github.com/vlaaad/dotcmd/releases/'
+local base = 'https://github.com/dotcmdhq/dotcmd/releases/'
 
 -- Isolate dispatcher globals and downloads, while using the native filesystem.
 local function run(options, ...)
@@ -248,7 +248,7 @@ http = function(options)
     if options.method == 'HEAD' then
         options.url = server .. '/latest-release'
         local response = request(options)
-        response.url = 'https://github.com/vlaaad/dotcmd/releases/' .. response.url:sub(#server + 2)
+        response.url = 'https://github.com/dotcmdhq/dotcmd/releases/' .. response.url:sub(#server + 2)
         return response
     end
     options.url = server .. '/launcher/' .. assert(options.url:match('/download/([^/]+)/dotcmd.cmd$'))

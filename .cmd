@@ -26,7 +26,7 @@
 :; mkdir -p "$cache"
 :; tmp=$(mktemp "$cache/.download.XXXXXX")
 :; trap 'rm -f "$tmp"' EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
-:; url="https://github.com/vlaaad/dotcmd/releases/download/$version/dotcmd-$os-$arch"
+:; url="https://github.com/dotcmdhq/dotcmd/releases/download/$version/dotcmd-$os-$arch"
 :; if [ -n "$curl_path" ]; then "$curl_path" --fail --location --retry 3 --silent --show-error "$url" -o "$tmp"; else "$wget_path" -O "$tmp" "$url"; fi
 :; verify_sha "$tmp"
 :; chmod +x "$tmp"
@@ -62,7 +62,7 @@ set "binary=%cache%\dotcmd.exe"
 if exist "%binary%" goto run
 set "dotcmd_expected_sha="
 for /f "tokens=2 delims==" %%H in ('findstr /b /c:":; sha_windows_%arch%=" "%~f0"') do set "dotcmd_expected_sha=%%H"
-set "dotcmd_url=https://github.com/vlaaad/dotcmd/releases/download/%version%/dotcmd-windows-%arch%.exe"
+set "dotcmd_url=https://github.com/dotcmdhq/dotcmd/releases/download/%version%/dotcmd-windows-%arch%.exe"
 for %%P in (powershell.exe) do set "powershell_path=%%~$PATH:P"
 if not defined powershell_path if defined SystemRoot if exist "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" set "powershell_path=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 if not defined powershell_path goto curl_fallback

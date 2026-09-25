@@ -4,10 +4,10 @@ local _ENV = _ENV
 return function(launcher, version)
     local target = fs.realpath(launcher)
     local info = assert(fs.stat(target))
-    local base = 'https://github.com/vlaaad/dotcmd/releases/'
+    local base = 'https://github.com/dotcmdhq/dotcmd/releases/'
     if version == 'latest' then
         local response = http { url = base .. 'latest', method = 'HEAD' }
-        local tag = assert(response.url:match('^https://github%.com/vlaaad/dotcmd/releases/tag/([^?#]+)$'),
+        local tag = assert(response.url:match('^https://github%.com/dotcmdhq/dotcmd/releases/tag/([^?#]+)$'),
             'could not resolve latest release tag')
         version = tag:gsub('%%(%x%x)', function(hex) return string.char(tonumber(hex, 16)) end)
     end

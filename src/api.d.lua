@@ -172,12 +172,18 @@
 
 ---@alias dotcmd.Commands table<string, dotcmd.Run|dotcmd.Command> Underscores in keys become hyphens in CLI command names at every level.
 
+---@class dotcmd.Json
+---@field decode fun(text: string): any Decode strict JSON. Objects and arrays become tables; null becomes nil. Invalid input raises.
+
 -- Globals provided by the dotcmd runtime.
 ---@type dotcmd.Host
 host = nil
 
 ---@type dotcmd.Fs
 fs = nil
+
+---@type dotcmd.Json
+json = nil
 
 ---HTTPS requests; transport/filesystem failures raise. SSL_CERT_FILE selects a PEM trust bundle.
 ---@param options string|dotcmd.HttpOptions

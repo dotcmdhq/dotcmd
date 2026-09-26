@@ -30,6 +30,7 @@ extern "C" {
 #include "http.h"
 #include "exec.h"
 #include "sha256.h"
+#include "json.h"
 #include "fs.h"
 #include "extract.h"
 #include "terminal.h"
@@ -157,9 +158,10 @@ static int FormatError(lua_State* L) {
 
 static int SearchBuiltin(lua_State* L) {
     const char* name = luaL_checkstring(L, 1);
-    for (const auto& module : lua_modules) {
-        if (strcmp(name, module.name) != 0) continue;
-        if (luaL_loadbufferx(L, (const char*)module.source, module.size, module.path, "t") != LUA_OK)
+    for (size_t i = 0; i < sizeof(lua_modules) / sizeof(lua_modules[0]); ++i) {
+        const EmbeddedModule* module = &lua_modules[i];
+        if (strcmp(name, module->name) != 0) continue;
+        if (luaL_loadbufferx(L, (const char*)module->source, module->size, module->path, "t") != LUA_OK)
             return lua_error(L);
         return 1;
     }
@@ -176,6 +178,7 @@ static int Run(lua_State* L) {
     RegisterHttp(L);
     RegisterExec(L);
     RegisterSha256(L);
+    RegisterJson(L);
     RegisterFs(L);
     RegisterExtract(L);
     RegisterTerminal(L);

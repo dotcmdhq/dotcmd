@@ -87,6 +87,24 @@ if(UNIX)
     target_compile_definitions(lua PRIVATE LUA_USE_POSIX)
 endif()
 
+# JSON decoding. Build only yyjson's strict reader.
+set(yyjson_source "${deps}/yyjson-src/src/yyjson.c")
+ExternalProject_Add(dep_yyjson
+    PREFIX "${deps}/yyjson-ep" SOURCE_DIR "${deps}/yyjson-src"
+    DOWNLOAD_DIR "${deps}/downloads"
+    URL "https://github.com/ibireme/yyjson/archive/refs/tags/0.12.0.tar.gz"
+    URL_HASH "SHA256=b16246f617b2a136c78d73e5e2647c6f1de1313e46678062985bdcf1f40bb75d" TLS_VERIFY ON
+    CONFIGURE_COMMAND "" BUILD_COMMAND "" INSTALL_COMMAND ""
+    BUILD_BYPRODUCTS "${yyjson_source}")
+set_source_files_properties("${yyjson_source}" PROPERTIES GENERATED TRUE)
+add_library(yyjson STATIC "${yyjson_source}")
+add_dependencies(yyjson dep_yyjson)
+target_include_directories(yyjson PUBLIC "${deps}/yyjson-src/src")
+target_compile_definitions(yyjson PRIVATE
+    YYJSON_DISABLE_WRITER=1 YYJSON_DISABLE_UTILS=1 YYJSON_DISABLE_INCR_READER=1
+    YYJSON_DISABLE_NON_STANDARD=1)
+set_target_properties(yyjson PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES)
+
 # HTTPS: Schannel on Windows, LibreSSL on Unix, and system trust on macOS.
 set(curl_library "${deps}/lib/libcurl${suffix}")
 set(http_options
@@ -184,12 +202,13 @@ foreach(path IN LISTS lua_modules)
 endforeach()
 file(CONFIGURE OUTPUT "${generated}/lua_modules.h" CONTENT
     "${module_includes}
-static const struct {
+struct EmbeddedModule {
     const char* name;
     const char* path;
     const unsigned char* source;
     size_t size;
-} lua_modules[] = {
+};
+static const EmbeddedModule lua_modules[] = {
 ${module_entries}};
 " @ONLY)
 foreach(shell bash zsh fish powershell)
@@ -202,19 +221,21 @@ file(GENERATE OUTPUT "${generated}/$<CONFIG>/build_config.h" CONTENT
 # Compile the host and link static dependencies.
 # The host uses C++ syntax but no C++ standard library or runtime.
 set(CMAKE_CXX_IMPLICIT_LINK_LIBRARIES "")
-add_executable(dotcmd src/main.cpp src/api.cpp src/http.cpp src/exec.cpp src/sha256.cpp src/fs.cpp src/extract.cpp src/terminal.cpp)
+add_executable(dotcmd src/main.cpp src/api.cpp src/http.cpp src/exec.cpp src/sha256.cpp src/json.cpp src/fs.cpp src/extract.cpp src/terminal.cpp)
 add_dependencies(dotcmd dep_curl dep_archive)
 set_target_properties(dotcmd PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO LINKER_LANGUAGE C)
 target_include_directories(dotcmd PRIVATE "${generated}/$<CONFIG>" "${generated}"
     "${deps}/curl-src/include" "${deps}/archive-src/libarchive")
 target_compile_definitions(dotcmd PRIVATE CURL_STATICLIB LIBARCHIVE_STATIC)
-target_link_libraries(dotcmd PRIVATE lua "${curl_library}" ${tls_libraries}
+target_link_libraries(dotcmd PRIVATE lua yyjson "${curl_library}" ${tls_libraries}
     "${archive_library}" "${lzma_library}" "${zlib_library}")
 if(MSVC)
+    target_compile_options(yyjson PRIVATE /Gy)
     target_compile_options(dotcmd PRIVATE /W4 /WX /GR- /EHs-c-)
     target_link_options(dotcmd PRIVATE /OPT:REF)
 else()
     target_compile_options(lua PRIVATE -ffunction-sections -fdata-sections)
+    target_compile_options(yyjson PRIVATE -ffunction-sections -fdata-sections)
     target_compile_options(dotcmd PRIVATE -Wall -Wextra -Werror -fno-exceptions -fno-rtti
         -ffunction-sections -fdata-sections)
     if(APPLE)

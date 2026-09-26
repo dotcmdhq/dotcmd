@@ -1,6 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 local url = assert(os.getenv('DOTCMD_TEST_URL'))
 local values_source = [[dotcmd_plugin_test_calls = (dotcmd_plugin_test_calls or 0) + 1
 return "value", nil, false, dotcmd_plugin_test_calls, type(fetch) .. ":" .. host.os]]

@@ -1,6 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 local function seed(bytes, name)
     local hash = sha256 { bytes = bytes }
     local directory = host.cache_dir .. '/downloads/' .. hash

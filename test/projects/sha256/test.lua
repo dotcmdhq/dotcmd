@@ -1,6 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 test('sha256 known vectors and binary strings', function()
     assert(sha256 { bytes = '' } == 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
     assert(sha256 { bytes = 'abc' } == 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')

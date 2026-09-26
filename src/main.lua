@@ -1,5 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
 local internal = ...
 local args = require('dotcmd.args')
 local commands = require('dotcmd.commands')

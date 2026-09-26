@@ -1,6 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 test('fs metadata and missing paths', function()
     t.write('data-ü', 'abc')
     local info = fs.stat('data-ü')

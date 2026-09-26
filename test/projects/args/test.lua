@@ -1,6 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 local child = host.project_dir .. '/child'
 local args = require('dotcmd.args')
 

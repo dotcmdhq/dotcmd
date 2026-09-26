@@ -1,6 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 local template = t.read(host.project_dir .. '/.cmd')
 local function release(version)
     return (template:gsub('^:; version=[^\n]+', function() return ':; version=' .. version end))

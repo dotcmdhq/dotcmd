@@ -1,6 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 local tar = assert(loadfile(host.project_dir .. '/tar.lua'))()
 local function fixture(name, entries)
     t.write(name .. '.tar', tar(entries))

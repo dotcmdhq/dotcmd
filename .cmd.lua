@@ -1,29 +1,27 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 local root = host.project_dir
 local windows = host.os == 'windows'
 local suffix = windows and '.exe' or ''
 local ninja = plugin(
-    'https://raw.githubusercontent.com/dotcmdhq/plugins/1551b5f7ee5562017a59721d98ae3c3a9c8ed253/ninja.lua',
-    'be468f1613b02dc5a12c40b5900cdef5cfc5770841878ba9c1e1511eba69738e'
-) {
-    version = '1.13.2',
-    sha256 = {
-        linux = {
-            x64 = '5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6',
-            arm64 = 'fd2cacc8050a7f12a16a2e48f9e06fca5c14fc4c2bee2babb67b58be17a607fc',
+    'https://raw.githubusercontent.com/dotcmdhq/plugins/a66620bb164770f910a76792f3d5c5307ccd8f74/ninja.lua',
+    '6b060dd5fda87e5e33853f5811cada2cbf2e80dde91055d96d2423baae8fe35a',
+    {
+        version = '1.13.2',
+        sha256 = {
+            linux = {
+                x64 = '5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6',
+                arm64 = 'fd2cacc8050a7f12a16a2e48f9e06fca5c14fc4c2bee2babb67b58be17a607fc',
+            },
+            macos = {
+                x64 = 'c99048673aa765960a99cf10c6ddb9f1fad506099ff0a0e137ad8960a88f321b',
+                arm64 = 'c99048673aa765960a99cf10c6ddb9f1fad506099ff0a0e137ad8960a88f321b',
+            },
+            windows = {
+                x64 = '07fc8261b42b20e71d1720b39068c2e14ffcee6396b76fb7a795fb460b78dc65',
+                arm64 = 'e52f0bdef9dfb1003229dbd6508a508c4073fd017247002adc66e5e806cb0391',
+            },
         },
-        macos = {
-            x64 = 'c99048673aa765960a99cf10c6ddb9f1fad506099ff0a0e137ad8960a88f321b',
-            arm64 = 'c99048673aa765960a99cf10c6ddb9f1fad506099ff0a0e137ad8960a88f321b',
-        },
-        windows = {
-            x64 = '07fc8261b42b20e71d1720b39068c2e14ffcee6396b76fb7a795fb460b78dc65',
-            arm64 = 'e52f0bdef9dfb1003229dbd6508a508c4073fd017247002adc66e5e806cb0391',
-        },
-    },
-}
+    }
+)
 
 local function build(mode)
     mode = mode or 'release'

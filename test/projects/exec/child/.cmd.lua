@@ -1,6 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 return {
     ordered = function()
         local t = assert(loadfile(host.project_dir .. '/../../support.lua'))()

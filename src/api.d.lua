@@ -172,14 +172,55 @@
 
 ---@alias dotcmd.Commands table<string, dotcmd.Run|dotcmd.Command> Underscores in keys become hyphens in CLI command names at every level.
 
--- Opt in per file with: ---@type dotcmd.Env|_G followed by local _ENV = _ENV.
----@class dotcmd.Env
----@field host dotcmd.Host
----@field http fun(options: string|dotcmd.HttpOptions): dotcmd.HttpResponse HTTPS requests; transport/filesystem failures raise. SSL_CERT_FILE selects a PEM trust bundle.
----@field exec fun(program: string|dotcmd.ExecOptions, ...: string): dotcmd.ExecResult Executes without a shell; returns the exit code and captured output. Checked nonzero exits raise a table with the child's exit_code and a message.
----@field spawn fun(program: string|dotcmd.SpawnOptions, ...: string): dotcmd.Process Starts without a shell and returns immediately. Startup failures raise; captured output is drained automatically.
----@field sha256 fun(options: dotcmd.Sha256Options): string Hash bytes or a file; returns lowercase hexadecimal.
----@field fs dotcmd.Fs
----@field extract fun(options: string|dotcmd.ExtractOptions, to?: string): boolean Accepts (path, to?) or an options table. Extracts ZIP, tar, tar.gz, or tar.xz. Returns true on success, false when skipped; parent must exist.
----@field fetch fun(options: string|dotcmd.FetchOptions, sha256?: string): string Accepts (url, sha256) or an options table. Returns an absolute download or prepared path. Downloads are verified; cache hits are trusted.
----@field plugin fun(url: string, sha256: string, ...: any): any Forwards arguments after url and sha256 to the plugin chunk. Caches the download, reverifies and executes the source on every call in the normal global environment. Returns every value returned by the plugin chunk.
+-- Globals provided by the dotcmd runtime.
+---@type dotcmd.Host
+host = nil
+
+---@type dotcmd.Fs
+fs = nil
+
+---HTTPS requests; transport/filesystem failures raise. SSL_CERT_FILE selects a PEM trust bundle.
+---@param options string|dotcmd.HttpOptions
+---@return dotcmd.HttpResponse
+function http(options) end
+
+---Executes without a shell; returns the exit code and captured output.
+---Checked nonzero exits raise a table with the child's exit_code and a message.
+---@param program string|dotcmd.ExecOptions
+---@param ... string
+---@return dotcmd.ExecResult
+function exec(program, ...) end
+
+---Starts without a shell and returns immediately. Startup failures raise; captured output is drained automatically.
+---@param program string|dotcmd.SpawnOptions
+---@param ... string
+---@return dotcmd.Process
+function spawn(program, ...) end
+
+---Hash bytes or a file; returns lowercase hexadecimal.
+---@param options dotcmd.Sha256Options
+---@return string
+function sha256(options) end
+
+---Accepts (path, to?) or an options table. Extracts ZIP, tar, tar.gz, or tar.xz.
+---Returns true on success, false when skipped; parent must exist.
+---@param options string|dotcmd.ExtractOptions
+---@param to? string
+---@return boolean
+function extract(options, to) end
+
+---Accepts (url, sha256) or an options table. Returns an absolute download or prepared path.
+---Downloads are verified; cache hits are trusted.
+---@param options string|dotcmd.FetchOptions
+---@param sha256? string
+---@return string
+function fetch(options, sha256) end
+
+---Forwards arguments after url and sha256 to the plugin chunk.
+---Caches the download, reverifies and executes the source on every call in the normal global environment.
+---Returns every value returned by the plugin chunk.
+---@param url string
+---@param sha256 string
+---@param ... any
+---@return any
+function plugin(url, sha256, ...) end

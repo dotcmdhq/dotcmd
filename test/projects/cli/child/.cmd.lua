@@ -1,6 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 assert(type(host) == 'table') -- Available while loading the project, not just in commands.
 assert(select('#', ...) == 0)
 local function hex(value)

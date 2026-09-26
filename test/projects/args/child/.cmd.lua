@@ -1,6 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 local function equal(actual, expected)
     assert(type(actual) == type(expected), 'value type mismatch')
     if type(expected) == 'table' then

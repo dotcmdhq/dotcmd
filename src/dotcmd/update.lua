@@ -1,6 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 return function(launcher, version)
     local target = fs.realpath(launcher)
     local info = assert(fs.stat(target))

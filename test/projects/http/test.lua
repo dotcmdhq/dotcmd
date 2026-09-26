@@ -1,6 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 local url = assert(os.getenv('DOTCMD_TEST_URL'))
 local bytes = 'hello\0\255world'
 

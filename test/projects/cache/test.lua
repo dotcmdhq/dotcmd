@@ -1,6 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 local windows = host.os == 'windows'
 local project = t.project('child')
 local home = host.project_dir .. '/home'

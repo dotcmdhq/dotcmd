@@ -1,6 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 local success, failure = t.success, t.failure
 local child = host.project_dir .. '/child'
 local normalized = t.normalized

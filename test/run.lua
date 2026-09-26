@@ -1,6 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
-
 -- Discover suites and run each project's commands with the local binary.
 return function(repo)
     local t = assert(loadfile(repo .. '/test/support.lua'))()

@@ -1,5 +1,3 @@
----@type dotcmd.Env|_G
-local _ENV = _ENV
 local commands = require('dotcmd.commands')
 local format = require('dotcmd.format')
 local output = format.writer(io.stdout)

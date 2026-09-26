@@ -182,4 +182,4 @@
 ---@field fs dotcmd.Fs
 ---@field extract fun(options: string|dotcmd.ExtractOptions, to?: string): boolean Accepts (path, to?) or an options table. Extracts ZIP, tar, tar.gz, or tar.xz. Returns true on success, false when skipped; parent must exist.
 ---@field fetch fun(options: string|dotcmd.FetchOptions, sha256?: string): string Accepts (url, sha256) or an options table. Returns an absolute download or prepared path. Downloads are verified; cache hits are trusted.
----@field plugin fun(options: string|dotcmd.PinnedSource, sha256?: string): any Accepts (url, sha256) or an options table. Caches the download, reverifies and executes the source on every call in the normal global environment. Returns every value returned by the plugin chunk.
+---@field plugin fun(url: string, sha256: string, ...: any): any Forwards arguments after url and sha256 to the plugin chunk. Caches the download, reverifies and executes the source on every call in the normal global environment. Returns every value returned by the plugin chunk.

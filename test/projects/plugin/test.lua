@@ -20,8 +20,33 @@ test('plugin downloads text source and returns all of its values', function()
     assert(values[4] == 1 and values[5] == 'function:' .. host.os)
 
     -- The source download is cached, but the chunk is evaluated on every call.
-    values = table.pack(plugin { url = url .. '/plugin/values', sha256 = hash })
+    values = table.pack(plugin(url .. '/plugin/values', hash))
     assert(values.n == 5 and values[4] == 2)
+end)
+
+test('plugin forwards chunk arguments, preserving nils and identity', function()
+    local hash = sha256 { bytes = 'return ...' }
+    local config = { version = '27' }
+    local callback = function() return config end
+    local cases = {
+        table.pack(),
+        table.pack(nil),
+        table.pack(config),
+        table.pack(nil, config, 'value', 27, false, callback, nil),
+    }
+    for _, inputs in ipairs(cases) do
+        local values = table.pack(plugin(url .. '/plugin/arguments', hash, table.unpack(inputs, 1, inputs.n)))
+        assert(values.n == inputs.n)
+        for i = 1, inputs.n do
+            assert(values[i] == inputs[i])
+        end
+    end
+end)
+
+test('plugin rejects source tables and missing hashes', function()
+    local hash = sha256 { bytes = values_source }
+    assert(not pcall(plugin, { url = url .. '/plugin/values', sha256 = hash }))
+    assert(not pcall(plugin, url .. '/plugin/values'))
 end)
 
 test('plugin rejects wrong hashes without executing source', function()
@@ -38,7 +63,7 @@ test('plugin rejects corrupted cached source', function()
     assert(select(4, plugin(url .. '/plugin/values', hash)) == 1)
     t.write(cache_path(hash, 'values'), 'return "corrupted"')
     t.assert_error('SHA-256 mismatch for ' .. url .. '/plugin/values', function()
-        plugin { url = url .. '/plugin/values', sha256 = hash }
+        plugin(url .. '/plugin/values', hash)
     end)
     assert(dotcmd_plugin_test_calls == 1)
 end)

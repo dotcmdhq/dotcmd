@@ -102,15 +102,12 @@ function fetch(options, hash)
     return result_path
 end
 
-function plugin(options, hash)
-    if type(options) == "string" then options = { url = options, sha256 = hash } end
-    local url = options.url
-    hash = options.sha256
+function plugin(url, hash, ...)
     local path = fetch { url = url, sha256 = hash }
     local file <close> = assert(io.open(path, "rb"))
     local source = assert(file:read("a"))
     assert(sha256 { bytes = source } == hash, "plugin: SHA-256 mismatch for " .. url)
-    return assert(load(source, "@" .. url, "t"))()
+    return assert(load(source, "@" .. url, "t"))(...)
 end
 
 local main_command = {

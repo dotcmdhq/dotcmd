@@ -92,7 +92,126 @@ test('CLI prints all returned values on separate lines, preserving nils', functi
     assert(success(t.run_project(child, 'nothing')) == '')
     assert(success(t.run_project(child, 'nil-value')) == 'nil\n')
     assert(success(t.run_project(child, 'values')) == 'printed\nhello\n3\nfalse\nnil\n\ntwo\nlines\nnil\n')
-    assert(success(t.run_project(child, 'objects')):match('^custom display\ntable: [^\n]+\n$'))
+    assert(success(t.run_project(child, 'objects')) == 'custom display\n{}\n')
+end)
+
+test('CLI pretty-prints nested tables with scalar fields before nested fields', function()
+    local expected = [[{
+    version = "1.13.2",
+    sha256 = {
+        linux = {
+            arm64 = "linux-arm64",
+            x64 = "linux-x64"
+        },
+        macos = {
+            arm64 = "macos-arm64",
+            x64 = "macos-x64"
+        },
+        windows = {
+            arm64 = "windows-arm64",
+            x64 = "windows-x64"
+        }
+    }
+}
+]]
+    assert(success(t.run_project(child, 'pretty-nested')) == expected)
+end)
+
+test('CLI pretty-printing orders named keys deterministically by value and key type', function()
+    local expected = [[{
+    alpha = 2,
+    zebra = 1,
+    [2] = "two",
+    [10] = "ten",
+    [false] = "no",
+    [true] = "yes",
+    a_table = {
+        value = 2
+    },
+    z_table = {
+        value = 1
+    }
+}
+]]
+    assert(success(t.run_project(child, 'pretty-order')) == expected)
+end)
+
+test('CLI pretty-printing supports arrays mixed with named entries and empty tables', function()
+    local output = success(t.run_project(child, 'pretty-array'))
+    local expected = [[{
+    "one",
+    "two",
+    map = "value",
+    [4] = "four",
+    nested = {}
+}
+]]
+    assert(output == expected, output)
+    assert(not output:match(',\n%s*}'), output)
+    assert(success(t.run_project(child, 'objects')):sub(-3) == '{}\n')
+end)
+
+test('CLI pretty-printing double-quotes strings and quotes reserved and non-identifier keys', function()
+    local output = success(t.run_project(child, 'pretty-strings'))
+    local expected = [[{
+    ["end"] = "reserved",
+    text = "quote \" slash \\ newline\n tab\t nul\000",
+    ["two words"] = "spaced"
+}
+]]
+    assert(output == expected, output)
+    local chunk, message = load('return ' .. output, 'pretty output', 't', {})
+    assert(chunk, message)
+    local value = chunk()
+    assert(value.text == 'quote " slash \\ newline\n tab\t nul\0')
+end)
+
+test('CLI pretty-printing expands repeated table references independently', function()
+    local expected = [[{
+    left = {
+        x = 1
+    },
+    right = {
+        x = 1
+    }
+}
+]]
+    assert(success(t.run_project(child, 'pretty-repeated')) == expected)
+end)
+
+test('CLI pretty-printing uses raw iteration', function()
+    assert(success(t.run_project(child, 'pretty-raw')) == '{\n    visible = true\n}\n')
+end)
+
+test('CLI pretty-printing shows cycles and table keys as pseudo-Lua', function()
+    local output = success(t.run_project(child, 'pretty-cycle'))
+    assert(output:find('parent = <table: ', 1, true), output)
+    assert(output:sub(-8) == '    }\n}\n', output)
+
+    output = success(t.run_project(child, 'pretty-table-key'))
+    assert(output:find('[<table: ', 1, true), output)
+    assert(output:find('>] = "value"', 1, true), output)
+end)
+
+test('CLI pretty-printing shows unsupported nested values as pseudo-Lua', function()
+    local expected = {
+        ['function'] = 'bad = <function: ',
+        userdata = 'bad = <file ',
+        thread = 'bad = <thread: ',
+    }
+    for kind, fragment in pairs(expected) do
+        local output = success(t.run_project(child, 'pretty-bad-value', kind))
+        assert(output:sub(1, 9) == 'before\n{\n', output)
+        assert(output:find(fragment, 1, true), output)
+        assert(output:sub(-8) == '    }\n}\n', output)
+    end
+end)
+
+test('CLI pretty-printing shows non-finite numeric values and keys as pseudo-Lua', function()
+    for _, kind in ipairs({ 'nan', 'infinity', 'key' }) do
+        local output = success(t.run_project(child, 'pretty-bad-number', kind))
+        assert(output:find('<', 1, true) and output:find('>', 1, true), output)
+    end
 end)
 
 test('CLI structured errors have custom exit codes and optional clean diagnostics', function()

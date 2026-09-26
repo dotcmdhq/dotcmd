@@ -29,6 +29,67 @@ return {
     objects = function()
         return setmetatable({}, { __tostring = function() return 'custom display' end }), {}
     end,
+    pretty_nested = function()
+        return {
+            sha256 = {
+                windows = { x64 = 'windows-x64', arm64 = 'windows-arm64' },
+                linux = { x64 = 'linux-x64', arm64 = 'linux-arm64' },
+                macos = { x64 = 'macos-x64', arm64 = 'macos-arm64' },
+            },
+            version = '1.13.2',
+        }
+    end,
+    pretty_order = function()
+        local value = {}
+        value.zebra = 1
+        value.alpha = 2
+        value[10] = 'ten'
+        value[2] = 'two'
+        value[true] = 'yes'
+        value[false] = 'no'
+        value.z_table = { value = 1 }
+        value.a_table = { value = 2 }
+        return value
+    end,
+    pretty_array = function()
+        return { 'one', 'two', [4] = 'four', map = 'value', nested = {} }
+    end,
+    pretty_strings = function()
+        return {
+            text = 'quote " slash \\ newline\n tab\t nul\0',
+            ['end'] = 'reserved',
+            ['two words'] = 'spaced',
+        }
+    end,
+    pretty_repeated = function()
+        local shared = { x = 1 }
+        return { right = shared, left = shared }
+    end,
+    pretty_raw = function()
+        return setmetatable({ visible = true }, {
+            __pairs = function() error('__pairs must not be called') end,
+        })
+    end,
+    pretty_cycle = function()
+        local value = { child = {} }
+        value.child.parent = value
+        return value
+    end,
+    pretty_table_key = function()
+        return { [{ identity = true }] = 'value' }
+    end,
+    pretty_bad_value = function(kind)
+        local values = {
+            ['function'] = function() end,
+            userdata = io.stdout,
+            thread = coroutine.create(function() end),
+        }
+        return 'before', { outer = { bad = values[kind] } }
+    end,
+    pretty_bad_number = function(kind)
+        if kind == 'key' then return { [math.huge] = true } end
+        return { bad = kind == 'nan' and (0 / 0) or math.huge }
+    end,
     structured_error = function(code, message)
         error({ exit_code = tonumber(code), message = message })
     end,

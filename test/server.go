@@ -19,6 +19,7 @@ func main() {
 	})
 	mux.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Method", r.Method)
+		w.Header().Set("X-User-Agent", r.UserAgent())
 		for _, value := range r.Header.Values("X-Test") {
 			w.Header().Add("X-Seen", value)
 		}

@@ -1,4 +1,5 @@
 local format = require('dotcmd.format')
+local pretty = require('dotcmd.pretty')
 
 test('plain strips styles and preserves nested text', function()
     local style = { fg = 'red', bold = true }
@@ -20,6 +21,54 @@ test('style tables support colors and direct keys take precedence', function()
     assert(format.ansi(markup) == '\27[2;38;2;1;2;3;48;5;17mx\27[22;39;49m')
     assert(format.ansi({ fg = 'bright_blue', bg = 'bright_white', 'x' })
         == '\27[94;107mx\27[39;49m')
+end)
+
+test('pretty markup styles values, literal keys, and separators without styling braces', function()
+    local markup = pretty {
+        name = 'dotcmd',
+        version = 1.13,
+        enabled = true,
+        metadata = { stable = false, count = 42 },
+    }
+    local plain = [[{
+    enabled = true,
+    name = "dotcmd",
+    version = 1.13,
+    metadata = {
+        count = 42,
+        stable = false
+    }
+}]]
+    assert(format.plain(markup) == plain)
+
+    local ansi = format.ansi(markup)
+    assert(ansi:sub(1, 2) == '{\n', ansi)
+    assert(ansi:sub(-1) == '}', ansi)
+    assert(ansi:find('enabled \27[2m= \27[22m\27[36mtrue\27[39m\27[2m,\27[22m', 1, true), ansi)
+    assert(ansi:find('name \27[2m= \27[22m\27[32m"dotcmd"\27[39m\27[2m,\27[22m', 1, true), ansi)
+    assert(ansi:find('version \27[2m= \27[22m\27[36m1.13\27[39m\27[2m,\27[22m', 1, true), ansi)
+    assert(ansi:find('metadata \27[2m= \27[22m{\n', 1, true), ansi)
+    assert(ansi:find('count \27[2m= \27[22m\27[36m42\27[39m\27[2m,\27[22m', 1, true), ansi)
+    assert(ansi:find('stable \27[2m= \27[22m\27[36mfalse\27[39m', 1, true), ansi)
+
+    local keyed = pretty { ['do'] = 1, [4] = 2, [false] = 3 }
+    assert(format.plain(keyed) == [[{
+    ["do"] = 1,
+    [4] = 2,
+    [false] = 3
+}]])
+    local keyed_ansi = format.ansi(keyed)
+    assert(keyed_ansi:find('[\27[32m"do"\27[39m] \27[2m= \27[22m', 1, true), keyed_ansi)
+    assert(keyed_ansi:find('[\27[36m4\27[39m] \27[2m= \27[22m', 1, true), keyed_ansi)
+    assert(keyed_ansi:find('[\27[36mfalse\27[39m] \27[2m= \27[22m', 1, true), keyed_ansi)
+
+    local runtime = pretty { assert = assert }
+    assert(format.plain(runtime):find('assert = <function: ', 1, true))
+    assert(format.ansi(runtime):find(
+        'assert \27[2m= \27[22m\27[36m<function: ', 1, true))
+
+    assert(format.ansi(pretty(nil)) == '\27[36mnil\27[39m')
+    assert(format.ansi(pretty('text')) == 'text')
 end)
 
 test('writer detects a regular file once and writes plain text', function()

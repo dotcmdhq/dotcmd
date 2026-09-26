@@ -1,6 +1,9 @@
 local internal = ...
 local args = require('dotcmd.args')
 local commands = require('dotcmd.commands')
+local format = require('dotcmd.format')
+local pretty = require('dotcmd.pretty')
+local output = format.writer(io.stdout)
 
 -- Projects return {name = function(...) ... end} or
 -- {name = {description = "...", run = function(...) ... end}} from .cmd.lua.
@@ -248,6 +251,7 @@ function main(argv)
     else
         results = table.pack(command.run(table.unpack(arguments)))
     end
-    for i = 1, results.n do print(results[i]) end
+    for i = 1, results.n do output:write({ pretty(results[i]), '\n' }) end
+    output:flush()
     return 0
 end

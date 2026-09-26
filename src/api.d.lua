@@ -15,7 +15,7 @@
 ---@class dotcmd.HttpOptions
 ---@field url string HTTPS URL.
 ---@field method? string Defaults to GET.
----@field headers? table<string, string|string[]> Arrays send repeated headers.
+---@field headers? table<string, string|string[]> Arrays send repeated headers. User-Agent defaults to dotcmd/<version>.
 ---@field body? string Binary-safe request body.
 ---@field to? string Output file, relative to cwd. Only a successful 2xx response replaces it.
 ---@field connect_timeout? integer Seconds; defaults to 30.
@@ -168,7 +168,7 @@
 ---@field opts? table<string, dotcmd.Option> Result keys; underscores become hyphens in long-option spellings. Inherited by descendants; their option spellings must not conflict.
 ---@field args? dotcmd.Arguments Leaf positional schema; omitted means unrestricted strings, empty means no positionals. Cannot be combined with commands.
 ---@field commands? dotcmd.Commands Named child commands. May be combined with opts and a run for bare invocation, but not args.
----@field run? fun(...: any): any Required on leaves. Receives one combined opts table first when this command or an ancestor declares opts, then individual positionals. On a group, runs only when no child is selected; omitting it shows group help. Every returned value is printed on its own line using print, including nil; returning no values prints nothing. Normal completion exits 0. Raise an error for failure.
+---@field run? fun(...: any): any Required on leaves. Receives one combined opts table first when this command or an ancestor declares opts, then individual positionals. On a group, runs only when no child is selected; omitting it shows group help. Every returned value is printed on its own line, including nil; returning no values prints nothing. Plain tables are printed deterministically; tables with a __tostring metamethod and all non-table values retain print behavior. Return values are syntax-colored on terminals unless NO_COLOR is set or TERM is dumb; redirected output remains plain. Values and keys that have no Lua literal representation, including functions, userdata, threads, cycles, table keys, and non-finite numbers, are shown as angle-bracketed tostring pseudo-values. Normal completion exits 0. Raise an error for failure.
 
 ---@alias dotcmd.Commands table<string, dotcmd.Run|dotcmd.Command> Underscores in keys become hyphens in CLI command names at every level.
 

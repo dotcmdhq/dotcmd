@@ -1,5 +1,6 @@
 #include "http.h"
 #include "api.h"
+#include "build_config.h"
 #include <curl/curl.h>
 #include <errno.h>
 #include <limits.h>
@@ -283,6 +284,7 @@ static int Http(lua_State* L) {
     if (code != CURLE_OK) return luaL_error(L, "http: %s", curl_easy_strerror(code)); \
 } while (0)
     OPTION(CURLOPT_ERRORBUFFER, request->error);
+    OPTION(CURLOPT_USERAGENT, "dotcmd/" DOTCMD_VERSION);
     OPTION(CURLOPT_URL, url);
     OPTION(CURLOPT_PROTOCOLS_STR, "https");
     OPTION(CURLOPT_REDIR_PROTOCOLS_STR, "https");

@@ -1,8 +1,8 @@
 local internal = ...
-local args = require('dotcmd.args')
-local commands = require('dotcmd.commands')
-local format = require('dotcmd.format')
-local pretty = require('dotcmd.pretty')
+local args = require("dotcmd.args")
+local commands = require("dotcmd.commands")
+local format = require("dotcmd.format")
+local pretty = require("dotcmd.pretty")
 local output = format.writer(io.stdout)
 
 -- Projects return {name = function(...) ... end} or
@@ -11,29 +11,29 @@ local output = format.writer(io.stdout)
 local function cache_dir()
     local function env(name)
         local value = os.getenv(name)
-        return value ~= '' and value or nil
+        return value ~= "" and value or nil
     end
-    local override = env('DOTCMD_CACHE_DIR')
+    local override = env("DOTCMD_CACHE_DIR")
     if override then
-        local absolute = host.os == 'windows'
-            and (override:match('^%a:[/\\]') or override:match('^[/\\][/\\]'))
-            or (host.os ~= 'windows' and override:sub(1, 1) == '/')
-        assert(absolute, 'DOTCMD_CACHE_DIR must be an absolute path')
+        local absolute = host.os == "windows"
+            and (override:match("^%a:[/\\]") or override:match("^[/\\][/\\]"))
+            or (host.os ~= "windows" and override:sub(1, 1) == "/")
+        assert(absolute, "DOTCMD_CACHE_DIR must be an absolute path")
         return override
     end
-    if host.os == 'windows' then
-        local base = env('LOCALAPPDATA')
+    if host.os == "windows" then
+        local base = env("LOCALAPPDATA")
         if not base then
-            base = assert(env('USERPROFILE'), 'neither LOCALAPPDATA nor USERPROFILE is set') .. '/AppData/Local'
+            base = assert(env("USERPROFILE"), "neither LOCALAPPDATA nor USERPROFILE is set") .. "/AppData/Local"
         end
-        return base .. '/dotcmd/Cache'
+        return base .. "/dotcmd/Cache"
     end
-    if host.os == 'linux' then
-        local xdg = env('XDG_CACHE_HOME')
-        if xdg and xdg:sub(1, 1) == '/' then return xdg .. '/dotcmd' end
+    if host.os == "linux" then
+        local xdg = env("XDG_CACHE_HOME")
+        if xdg and xdg:sub(1, 1) == "/" then return xdg .. "/dotcmd" end
     end
-    return assert(env('HOME'), 'HOME is not set')
-        .. (host.os == 'macos' and '/Library/Caches/dotcmd' or '/.cache/dotcmd')
+    return assert(env("HOME"), "HOME is not set")
+        .. (host.os == "macos" and "/Library/Caches/dotcmd" or "/.cache/dotcmd")
 end
 host.cache_dir = cache_dir()
 
@@ -112,7 +112,7 @@ function plugin(url, hash, ...)
 end
 
 local main_command = {
-    args = { end_opts = true, { 'args', arity = '*', default = { '--help' } } },
+    args = { end_opts = true, { "args", arity = "*", default = { "--help" } } },
     opts = {
         launcher = { hidden = true },
     },
@@ -123,13 +123,13 @@ local all_commands, launcher
 local builtin_commands = {
     __complete = {
         hidden = true,
-        args = { { 'protocol' }, { 'prefix' }, { 'words', arity = '*' } },
+        args = { { "protocol" }, { "prefix" }, { "words", arity = "*" } },
         run = function(protocol, prefix, ...)
-            return require('dotcmd.completion').complete(all_commands, protocol, prefix, ...)
+            return require("dotcmd.completion").complete(all_commands, protocol, prefix, ...)
         end,
     },
     __setup = {
-        description = 'Set up dotcmd integrations',
+        description = "Set up dotcmd integrations",
         commands = {
             completions = {
                 description = [[Install shell completions for the current user
@@ -139,10 +139,10 @@ The shell defaults to SHELL; specify it when using a different shell or when SHE
 Use pwsh for PowerShell 7, or powershell for Windows PowerShell.
 Updates the adapter and its shell startup entry when run again.
 Open a new shell after setup.]],
-                args = { { 'shell', arity = '?', type = { 'bash', 'zsh', 'fish', 'powershell', 'pwsh' },
-                    description = 'Shell to configure (default: SHELL)' } },
+                args = { { "shell", arity = "?", type = { "bash", "zsh", "fish", "powershell", "pwsh" },
+                    description = "Shell to configure (default: SHELL)" } },
                 run = function(shell)
-                    return require('dotcmd.completion').setup(internal.completion_scripts, shell)
+                    return require("dotcmd.completion").setup(internal.completion_scripts, shell)
                 end,
             },
         },
@@ -155,37 +155,37 @@ Follows symlinks and updates their target, preserving the links.
 Accepts latest or an exact release tag; downgrades are allowed.
 Does nothing when the selected version matches the running dotcmd version.
 The next invocation downloads the selected binary if it is not already cached.]],
-        args = { { 'version', arity = '?', default = 'latest', description = 'Release version or latest',
+        args = { { "version", arity = "?", default = "latest", description = "Release version or latest",
             parse = function(value)
-                if value ~= '' and value ~= '.' and value ~= '..' then return value end
-                return nil, 'expected a release tag'
+                if value ~= "" and value ~= "." and value ~= ".." then return value end
+                return nil, "expected a release tag"
             end,
         } },
         run = function(version)
-            return require('dotcmd.update')(launcher, version)
+            return require("dotcmd.update")(launcher, version)
         end,
     },
     __version = {
-        description = 'Show dotcmd version',
+        description = "Show dotcmd version",
         args = {},
-        run = function() print('dotcmd ' .. host.version) end,
+        run = function() print("dotcmd " .. host.version) end,
     },
     __cache_dir = {
-        description = 'Show shared cache directory',
+        description = "Show shared cache directory",
         args = {},
         run = function() print(host.cache_dir) end,
     },
     __licenses = {
-        description = 'Show dependency licenses',
+        description = "Show dependency licenses",
         args = {},
         run = function() io.write(internal.licenses) end,
     },
     __help = {
-        aliases = { '-h', '-?' },
-        description = 'Show help for a command, or list commands',
-        args = { { 'command', arity = '*', description = 'Command path to describe' } },
+        aliases = { "-h", "-?" },
+        description = "Show help for a command, or list commands",
+        args = { { "command", arity = "*", description = "Command path to describe" } },
         run = function(...)
-            return require('dotcmd.help')(all_commands, main_command, ...)
+            return require("dotcmd.help")(all_commands, main_command, ...)
         end,
     },
 }
@@ -193,13 +193,13 @@ The next invocation downloads the selected binary if it is not already cached.]]
 function main(argv)
     local parsed, message = args.parse(main_command, argv)
     if not parsed then
-        io.stderr:write('dotcmd: ' .. message .. '\n')
+        io.stderr:write("dotcmd: " .. message .. "\n")
         return 2
     end
     local opts = table.remove(parsed, 1)
     local name = table.remove(parsed, 1)
 
-    if not opts.launcher or opts.launcher == '' then
+    if not opts.launcher or opts.launcher == "" then
         io.stderr:write("dotcmd: invoke the project's .cmd launcher\n")
         return 2
     end
@@ -211,7 +211,7 @@ function main(argv)
     host.project_dir = launcher:match("^(.*)/")
     if host.project_dir == "" then host.project_dir = "/" end
     local path = host.project_dir .. "/.cmd.lua"
-    local ok, project = pcall(function() return assert(loadfile(path, 't'))() end)
+    local ok, project = pcall(function() return assert(loadfile(path, "t"))() end)
     local command_definitions = ok and project or {}
     for key, command in pairs(builtin_commands) do command_definitions[key] = command end
 
@@ -222,10 +222,10 @@ function main(argv)
     local resolution, resolve_error, error_code = commands.resolve(all_commands, words)
     if not resolution then
         if not ok then
-            if type(project) == 'table' then error(project) end
-            io.stderr:write('dotcmd: ' .. tostring(project) .. '\n')
+            if type(project) == "table" then error(project) end
+            io.stderr:write("dotcmd: " .. tostring(project) .. "\n")
         else
-            io.stderr:write('dotcmd: ' .. tostring(resolve_error) .. '\nRun .cmd --help to list available commands.\n')
+            io.stderr:write("dotcmd: " .. tostring(resolve_error) .. "\nRun .cmd --help to list available commands.\n")
         end
         return error_code or 1
     end
@@ -235,23 +235,23 @@ function main(argv)
     if command.commands and not command.run then
         local _, message = args.parse(schema, arguments)
         if message then
-            io.stderr:write('dotcmd ' .. table.concat(path, ' ') .. ': ' .. message .. '\n')
+            io.stderr:write("dotcmd " .. table.concat(path, " ") .. ": " .. message .. "\n")
             return 2
         end
-        return require('dotcmd.help')(all_commands, main_command, table.unpack(path)) or 0
+        return require("dotcmd.help")(all_commands, main_command, table.unpack(path)) or 0
     end
     local results
     if schema.opts ~= nil or schema.args ~= nil then
         local parameters, message = args.parse(schema, arguments)
         if not parameters then
-            io.stderr:write('dotcmd ' .. table.concat(path, ' ') .. ': ' .. message .. '\n')
+            io.stderr:write("dotcmd " .. table.concat(path, " ") .. ": " .. message .. "\n")
             return 2
         end
         results = table.pack(command.run(table.unpack(parameters, 1, parameters.n)))
     else
         results = table.pack(command.run(table.unpack(arguments)))
     end
-    for i = 1, results.n do output:write({ pretty(results[i]), '\n' }) end
+    for i = 1, results.n do output:write({ pretty(results[i]), "\n" }) end
     output:flush()
     return 0
 end

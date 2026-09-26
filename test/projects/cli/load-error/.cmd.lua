@@ -1,1 +1,1 @@
-error('intentional project load error')
+error("intentional project load error")

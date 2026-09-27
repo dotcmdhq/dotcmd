@@ -79,7 +79,14 @@ test("positionals, option boundaries and path directives", function()
     equal(values("--", "stop", "first"), "--literal")
     equal(values("f", "stop", "--anything"), "first")
     equal(values("", "empty"), "")
+    equal(values("", "text"), "")
+    equal(values("path", "text"), "")
+    equal(values("path", "text", "--name"), "")
+    equal(values("--name=path", "text"), "")
     for _, case in ipairs({
+        { { "path", "text", "first" }, "file", "", "path" },
+        { { "path", "text", "--output" }, "file", "", "path" },
+        { { "--output=path", "text" }, "file", "--output=", "path" },
         { { "path", "docs", "local" }, "file", "", "path" },
         { { "path", "docs", "local", "another" }, "file", "", "path" },
         { { "--file=two w", "docs" }, "file", "--file=", "two w" },

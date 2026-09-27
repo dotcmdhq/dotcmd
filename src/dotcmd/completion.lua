@@ -136,11 +136,11 @@ function completion.complete(all_commands, protocol, first, ...)
         state.opts, #state.positionals, state.options, state.pending and schema.opts[state.pending], state.spellings
     local function values(spec, partial, before)
         if spec.parse then return end
-        local kind = spec.type or "string"
+        local kind = spec.type or "file"
         if type(kind) == "table" then candidates(kind, nil, before, partial)
         elseif kind == "boolean" then candidates({ "false", "true" }, spec.description, before, partial)
         elseif kind == "directory" then emit("directory", before, partial)
-        elseif kind == "file" or kind == "string" then emit("file", before, partial) end
+        elseif kind == "file" then emit("file", before, partial) end
     end
     if pending then
         if #prefix <= 1 or prefix:sub(1, 1) ~= "-" or tonumber(prefix) ~= nil then values(pending, prefix, "") end

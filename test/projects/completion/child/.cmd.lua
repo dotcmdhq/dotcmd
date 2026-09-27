@@ -21,6 +21,11 @@ return {
     literal = { args = { { "values", arity = "*", type = { "--literal", "first" } } }, run = unexpected },
     empty = { args = {}, run = unexpected },
     custom = { args = { { "value", parse = unexpected } }, run = unexpected },
+    text = {
+        opts = { name = { type = "string" }, output = {} },
+        args = { { "value", type = "string" }, { "rest", arity = "*" } },
+        run = unexpected,
+    },
     forward = { opts = { verbose = { flag = true } },
         args = { end_opts = true, { "values", arity = "*" } }, run = unexpected },
     raw = unexpected,

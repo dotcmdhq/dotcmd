@@ -87,7 +87,7 @@ if(UNIX)
     target_compile_definitions(lua PRIVATE LUA_USE_POSIX)
 endif()
 
-# JSON decoding. Build only yyjson's strict reader.
+# JSON encoding and decoding. Build yyjson's strict reader and writer.
 set(yyjson_source "${deps}/yyjson-src/src/yyjson.c")
 ExternalProject_Add(dep_yyjson
     PREFIX "${deps}/yyjson-ep" SOURCE_DIR "${deps}/yyjson-src"
@@ -101,7 +101,7 @@ add_library(yyjson STATIC "${yyjson_source}")
 add_dependencies(yyjson dep_yyjson)
 target_include_directories(yyjson PUBLIC "${deps}/yyjson-src/src")
 target_compile_definitions(yyjson PRIVATE
-    YYJSON_DISABLE_WRITER=1 YYJSON_DISABLE_UTILS=1 YYJSON_DISABLE_INCR_READER=1
+    YYJSON_DISABLE_UTILS=1 YYJSON_DISABLE_INCR_READER=1
     YYJSON_DISABLE_NON_STANDARD=1)
 set_target_properties(yyjson PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES)
 

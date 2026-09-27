@@ -172,8 +172,16 @@
 
 ---@alias dotcmd.Commands table<string, dotcmd.Run|dotcmd.Command> Underscores in keys become hyphens in CLI command names at every level.
 
+---@class dotcmd.JsonEncodeOptions
+---@field pretty? boolean Use two-space indentation; defaults to compact JSON. No trailing newline.
+
+---Table metatables may specify __jsontype = "array" or "object". Hints are enforced:
+---arrays require consecutive integer keys starting at 1; objects require string keys.
+---Nonempty untagged tables are inferred from their keys; empty untagged tables raise.
+---Use json.decode("[]") or json.decode("{}") to create an empty table with a hint.
 ---@class dotcmd.Json
----@field decode fun(text: string): any Decode strict JSON. Objects and arrays become tables; null becomes nil. Invalid input raises.
+---@field decode fun(text: string): any Decode strict JSON. Objects and arrays become tables with __jsontype metatable hints; null becomes nil. Invalid input raises. Nulls are not preserved for re-encoding.
+---@field encode fun(value: any, options?: dotcmd.JsonEncodeOptions): string Encode nil as null, booleans, finite numbers, UTF-8 strings, and tables. Object keys are sorted by bytes. Cycles, sparse arrays, incompatible keys, invalid hints, and unsupported values raise. Shared tables are allowed.
 
 -- Globals provided by the dotcmd runtime.
 ---@type dotcmd.Host

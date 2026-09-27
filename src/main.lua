@@ -125,7 +125,7 @@ local main_command = {
     },
 }
 
-local all_commands, launcher
+local all_commands, launcher, project_path, project_missing
 
 local builtin_commands = {
     __complete = {
@@ -153,6 +153,28 @@ Open a new shell after setup.]],
                 end,
             },
         },
+    },
+    __init = {
+        description = [[Create the project's .cmd.lua file
+
+Writes a minimal file that returns an empty command table.
+Does not overwrite an existing .cmd.lua.]],
+        args = {},
+        run = function()
+            assert(not fs.stat(project_path, { follow = false }), project_path .. " already exists")
+            local temp = project_path .. ".tmp-" .. ("%016x%016x"):format(math.random(0), math.random(0))
+            local cleanup <close> = setmetatable({}, { __close = function() fs.remove(temp) end })
+            do
+                local file <close> = assert(io.open(temp, "wb"))
+                assert(file:write([[---@type dotcmd.Commands
+return {}
+]]))
+                assert(file:flush())
+            end
+            fs.rename(temp, project_path)
+            output:write({ "Created ", project_path, "\nOptional: run ",
+                { bold = true, ".cmd --setup completions" }, " to enable shell completions.\n" }):flush()
+        end,
     },
     __update = {
         description = [[Update the project launcher to a release
@@ -192,7 +214,7 @@ The next invocation downloads the selected binary if it is not already cached.]]
         description = "Show help for a command, or list commands",
         args = { { "command", arity = "*", description = "Command path to describe" } },
         run = function(...)
-            return require("dotcmd.help")(all_commands, main_command, ...)
+            return require("dotcmd.help")(all_commands, main_command, project_missing, ...)
         end,
     },
 }
@@ -217,8 +239,12 @@ function main(argv)
     end
     host.project_dir = launcher:match("^(.*)/")
     if host.project_dir == "" then host.project_dir = "/" end
-    local path = host.project_dir .. "/.cmd.lua"
-    local ok, project = pcall(function() return assert(loadfile(path, "t"))() end)
+    project_path = host.project_dir .. "/.cmd.lua"
+    local ok, project, missing = pcall(function()
+        if not fs.stat(project_path, { follow = false }) then return {}, true end
+        return assert(loadfile(project_path, "t"))(), false
+    end)
+    project_missing = missing or false
     local command_definitions = ok and project or {}
     for key, command in pairs(builtin_commands) do command_definitions[key] = command end
 
@@ -245,7 +271,7 @@ function main(argv)
             io.stderr:write("dotcmd " .. table.concat(path, " ") .. ": " .. message .. "\n")
             return 2
         end
-        return require("dotcmd.help")(all_commands, main_command, table.unpack(path)) or 0
+        return require("dotcmd.help")(all_commands, main_command, project_missing, table.unpack(path)) or 0
     end
     local results
     if schema.opts ~= nil or schema.args ~= nil then

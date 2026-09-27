@@ -13,6 +13,28 @@ test("CLI help without a project", function()
         assert(not output:find("Arguments:", 1, true), output)
         assert(not output:find("Project commands:", 1, true), output)
         assert(output:find("Built-in commands:", 1, true), output)
+        assert(output:find("No .cmd.lua found. Run .cmd --init to create one.", 1, true), output)
+    end
+end)
+test("CLI initializes a missing project and suggests setup", function()
+    local project = t.project("initialize")
+    local path = project .. "/.cmd.lua"
+    local output = success(t.run_project(project, "--init"))
+    assert(output:find("Created " .. path, 1, true), output)
+    assert(output:find("Optional: run .cmd --setup completions to enable shell completions.", 1, true), output)
+    local source = t.read(path)
+    assert(source == "---@type dotcmd.Commands\nreturn {}\n", source)
+    local help = success(t.run_project(project, "--help"))
+    assert(not help:find("Run .cmd --init", 1, true), help)
+    assert(failure(t.run_project(project, "--init"), path .. " already exists"))
+    assert(t.read(path) == source)
+end)
+test("CLI init refuses existing and broken project files", function()
+    for _, project in ipairs({ child, broken }) do
+        local path = project .. "/.cmd.lua"
+        local source = t.read(path)
+        assert(failure(t.run_project(project, "--init"), path .. " already exists"))
+        assert(t.read(path) == source)
     end
 end)
 test("CLI launcher accepts separate and attached values before commands", function()
@@ -75,12 +97,37 @@ test("CLI built-ins work when project loading fails", function()
         end
     end
 end)
+test("CLI built-ins work when checking the project file fails", function()
+    local project_path = child .. "/.cmd.lua"
+    local env = setmetatable({}, { __index = _ENV })
+    env._G = env
+    env.host = setmetatable({}, { __index = host })
+    env.fs = setmetatable({ stat = function(path, options)
+        if path == project_path then error("stat failure") end
+        return fs.stat(path, options)
+    end }, { __index = fs })
+    assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({})
+    assert(env.main({ "--launcher", child .. "/.cmd", "--version" }) == 0)
+end)
 test("CLI clean errors for missing project and unknown command", function()
-    assert(not failure(t.run_project(empty, "unknown"), ".cmd.lua"):find("stack traceback", 1, true))
+    assert(not failure(t.run_project(empty, "unknown"), "unknown command"):find("stack traceback", 1, true))
     assert(not failure(t.run_project(broken, "unknown"), ".cmd.lua"):find("stack traceback", 1, true))
     assert(not failure(t.run_project(load_error, "unknown"), "intentional project load error"):find("stack traceback", 1, true))
     assert(not failure(t.run_project(child, "unknown"), "unknown command"):find("stack traceback", 1, true))
     assert(not failure(t.run_project(child, "--unknown"), "unknown command: --unknown"):find("stack traceback", 1, true))
+end)
+test("CLI preserves built-in resolution errors without a project file", function()
+    local subcommand = t.run_project(empty, "--setup", "nonexistent")
+    assert(subcommand.code == 1, subcommand.stderr)
+    assert(subcommand.stderr:gsub("\r\n", "\n") == [[dotcmd: unknown subcommand: nonexistent
+Run .cmd --help to list available commands.
+]], subcommand.stderr)
+
+    local option = t.run_project(empty, "--setup", "--bogus")
+    assert(option.code == 2, option.stderr)
+    assert(option.stderr:gsub("\r\n", "\n") == [[dotcmd: unknown option: --bogus
+Run .cmd --help to list available commands.
+]], option.stderr)
 end)
 test("CLI definitions, descriptions, and Lua errors", function()
     assert(success(t.run_project(child, "--help")):match("args %[args%.%.%.%]%s+Print arguments as hex"))

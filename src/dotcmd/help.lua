@@ -113,7 +113,7 @@ local function usage(name, command, opts)
     return result
 end
 
-return function(all_commands, main_command, ...)
+return function(all_commands, main_command, project_missing, ...)
     local path = { ... }
     if #path == 0 then
         output:write({ keyword("Usage:"), " .cmd <command> [args...]\n" })
@@ -137,6 +137,9 @@ return function(all_commands, main_command, ...)
         print_section("Project commands", rows)
         print_section("Built-in commands", builtin_rows)
         print_options(main_command.opts)
+        if project_missing then
+            output:write({ "\nNo .cmd.lua found. Run ", keyword(".cmd --init"), " to create one.\n" })
+        end
         output:flush()
         return
     end

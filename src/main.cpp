@@ -6,7 +6,9 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <tlhelp32.h>
 #include <direct.h>
+#include <wchar.h>
 #elif defined(__APPLE__)
 #include <mach-o/dyld.h>
 #include <unistd.h>
@@ -69,6 +71,37 @@ static char* Utf8(const wchar_t* text) {
         return NULL;
     }
     return out;
+}
+
+static const char* DetectedShell() {
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return NULL;
+    DWORD process = GetCurrentProcessId();
+    const char* shell = NULL;
+    for (int depth = 0; depth < 3 && process; ++depth) {
+        PROCESSENTRY32W entry;
+        memset(&entry, 0, sizeof(entry));
+        entry.dwSize = sizeof(entry);
+        BOOL found = Process32FirstW(snapshot, &entry);
+        while (found && entry.th32ProcessID != process) found = Process32NextW(snapshot, &entry);
+        if (!found) break;
+        if (depth) {
+            if (!_wcsicmp(entry.szExeFile, L"pwsh.exe")) { shell = "pwsh"; break; }
+            if (!_wcsicmp(entry.szExeFile, L"powershell.exe")) { shell = "powershell"; break; }
+            if (!_wcsicmp(entry.szExeFile, L"bash.exe")) { shell = "bash"; break; }
+            if (!_wcsicmp(entry.szExeFile, L"zsh.exe")) { shell = "zsh"; break; }
+            if (!_wcsicmp(entry.szExeFile, L"fish.exe")) { shell = "fish"; break; }
+        }
+        process = entry.th32ParentProcessID;
+    }
+    CloseHandle(snapshot);
+    return shell;
+}
+
+static int DetectShell(lua_State* L) {
+    const char* shell = DetectedShell();
+    if (shell) lua_pushstring(L, shell); else lua_pushnil(L);
+    return 1;
 }
 #endif
 
@@ -209,7 +242,11 @@ static int Run(lua_State* L) {
     if (luaL_loadbufferx(L, (const char*)main_lua, sizeof(main_lua), "@embedded/main.lua", "t") != LUA_OK)
         return lua_error(L);
     // Pass private resources as one table to the main.lua chunk.
-    lua_createtable(L, 0, 3);
+    lua_createtable(L, 0, 4);
+#ifdef _WIN32
+    lua_pushcfunction(L, DetectShell);
+    lua_setfield(L, -2, "detect_shell");
+#endif
     lua_pushcfunction(L, NativeFunctionName);
     lua_setfield(L, -2, "native_function_name");
     lua_pushlstring(L, (const char*)licenses, sizeof(licenses));

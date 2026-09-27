@@ -149,7 +149,7 @@ Open a new shell after setup.]],
                 args = { { "shell", arity = "?", type = { "bash", "zsh", "fish", "powershell", "pwsh" },
                     description = "Shell to configure (default: SHELL)" } },
                 run = function(shell)
-                    return require("dotcmd.completion").setup(internal.completion_scripts, shell)
+                    return require("dotcmd.completion").setup(internal.completion_scripts, shell, internal.detect_shell)
                 end,
             },
         },

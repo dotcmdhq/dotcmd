@@ -122,7 +122,8 @@ local function setup_env(name)
         ZDOTDIR = false, SHELL = false }
 end
 
-test("setup uses an optional shell enum and fails when detection is unavailable", function()
+test("setup uses an optional shell enum and SHELL when detection is unavailable", function()
+    if host.os == "windows" then return end
     local home, env = setup_env("detect")
     t.failure(t.run_project(child, { env = env }, "--setup", "completions"), "cannot detect a supported shell")
     assert(not fs.stat(home .. "/config"))
@@ -173,8 +174,9 @@ test("setup follows profile symlinks", function()
 end)
 
 test("PowerShell setup queries the selected runtime and preserves the reported profile", function()
-    for _, shell in ipairs({ "powershell", "pwsh" }) do
-        local home, variables = setup_env("profile-" .. shell)
+    for index, case in ipairs({ { "powershell", "powershell" }, { "pwsh", "pwsh" }, { nil, "pwsh" } }) do
+        local requested, shell = case[1], case[2]
+        local home, variables = setup_env("profile-" .. index .. "-" .. shell)
         local profile = home .. "/redirected documents/profile.ps1"
         fs.mkdir(home .. "/redirected documents")
         t.write(profile, "# keep\r\n")
@@ -190,15 +192,21 @@ test("PowerShell setup queries the selected runtime and preserves the reported p
         end
         assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({
             completion_scripts = { powershell = "# adapter\n" },
+            detect_shell = function()
+                assert(not requested, "explicit shell should not run detection")
+                return shell
+            end,
         })
-        equal(env.main({ "--launcher", child .. "/.cmd", "--setup", "completions", shell }), 0)
+        local arguments = { "--launcher", child .. "/.cmd", "--setup", "completions" }
+        if requested then arguments[#arguments + 1] = requested end
+        equal(env.main(arguments), 0)
         equal(query[1], shell == "pwsh" and "pwsh" or "powershell.exe")
         assert(query[6]:find("$PROFILE.CurrentUserAllHosts", 1, true))
         local contents = t.read(profile)
         assert(contents:find("home '' ü", 1, true), contents)
         equal(contents:sub(1, 11), "\239\187\191# keep\r\n")
         equal(t.read(variables.XDG_CONFIG_HOME .. "/dotcmd/completions.ps1"), "# adapter\n")
-        equal(env.main({ "--launcher", child .. "/.cmd", "--setup", "completions", shell }), 0)
+        equal(env.main(arguments), 0)
         equal(t.read(profile), contents)
         local invalid = "# caf\233\r\n"
         t.write(profile, invalid)
@@ -223,6 +231,34 @@ t.write(child .. "/two files.txt", "")
 fs.mkdir(child .. "/two dirs")
 fs.mkdir(child .. "/debug")
 fs.mkdir(child .. "/build-docs")
+
+test("Windows setup detects the shell through the batch launcher", function()
+    if host.os ~= "windows" then return end
+    for _, shell in ipairs({ "pwsh", "powershell" }) do
+        local executable = shell == "powershell" and "powershell.exe" or shell
+        local home, env = setup_env("detect-" .. shell)
+        env.DOTCMD_CACHE_DIR = adapter_cache
+        local result = exec { executable, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+            "& '.\\.cmd' --setup completions", cwd = child, env = env,
+            stdout = "capture", stderr = "capture", check = false }
+        if result.code == 0 then
+            local output = t.success(result)
+            assert(output:find("Installed " .. shell .. " completions:", 1, true), output)
+            assert(fs.stat(home .. "/config/dotcmd/completions.ps1"))
+        else
+            t.failure(result, "PowerShell did not report a profile path")
+            assert(not fs.stat(home .. "/config"))
+        end
+    end
+
+    local home, env = setup_env("detect-cmd")
+    env.DOTCMD_CACHE_DIR = adapter_cache
+    local result = exec { "cmd.exe", "/d", "/c", ".cmd --setup completions", cwd = child, env = env,
+        stdout = "capture", stderr = "capture", check = false }
+    t.failure(result, "cannot detect a supported shell")
+    assert(not fs.stat(home .. "/config"))
+end)
+
 for _, shell in ipairs({ "bash", "zsh", "fish", "pwsh", "powershell" }) do
     test(shell .. " adapter with a real launcher", function()
         local powershell = shell == "pwsh" or shell == "powershell"

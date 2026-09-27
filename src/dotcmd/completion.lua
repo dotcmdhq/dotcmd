@@ -206,8 +206,9 @@ local function quote(path, shell)
     return "'" .. path:gsub("'", "'\\''") .. "'"
 end
 
-function completion.setup(scripts, shell)
-    shell = shell or ((env("SHELL") or ""):match("([^/\\]+)$") or ""):gsub("%.exe$", "")
+function completion.setup(scripts, shell, detect_shell)
+    shell = shell or (detect_shell and detect_shell())
+        or ((env("SHELL") or ""):match("([^/\\]+)$") or ""):gsub("%.exe$", "")
     assert(scripts[shell] or shell == "pwsh",
         "cannot detect a supported shell; run .cmd --setup completions bash, zsh, fish, powershell, or pwsh")
     local family = shell == "pwsh" and "powershell" or shell

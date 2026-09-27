@@ -35,7 +35,8 @@
 :; exec "$binary" --launcher "$0" "$@"
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
-for /f "tokens=2 delims==" %%V in ('findstr /b /c:":; version=" "%~f0"') do set "version=%%V"
+set /p "dotcmd_header="<"%~f0"
+set "version=%dotcmd_header:~11%"
 set "machine=%PROCESSOR_ARCHITEW6432%"
 if not defined machine set "machine=%PROCESSOR_ARCHITECTURE%"
 set "arch="

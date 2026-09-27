@@ -222,11 +222,10 @@ function extract(options, to) end
 ---@return string
 function fetch(options, sha256) end
 
----Forwards arguments after url and sha256 to the plugin chunk.
----Caches the download, reverifies and executes the source on every call in the normal global environment.
+---Executes a source SHA-256 once and caches all values returned by its chunk for this run.
+---The URL locates the source and is not part of its identity.
 ---Returns every value returned by the plugin chunk.
 ---@param url string
 ---@param sha256 string
----@param ... any
 ---@return any
-function plugin(url, sha256, ...) end
+function plugin(url, sha256) end

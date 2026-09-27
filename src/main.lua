@@ -103,12 +103,19 @@ function fetch(options, hash)
     return result_path
 end
 
-function plugin(url, hash, ...)
+local loaded_plugins = {}
+
+function plugin(url, hash)
+    local values = loaded_plugins[hash]
+    if values then return table.unpack(values, 1, values.n) end
+
     local path = fetch { url = url, sha256 = hash }
     local file <close> = assert(io.open(path, "rb"))
     local source = assert(file:read("a"))
     assert(sha256 { bytes = source } == hash, "plugin: SHA-256 mismatch for " .. url)
-    return assert(load(source, "@" .. url, "t"))(...)
+    values = table.pack(assert(load(source, "@" .. url, "t"))())
+    loaded_plugins[hash] = values
+    return table.unpack(values, 1, values.n)
 end
 
 local main_command = {

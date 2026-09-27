@@ -67,6 +67,9 @@ return "value", nil, false, dotcmd_plugin_test_calls, type(fetch) .. ":" .. host
 	mux.HandleFunc("/plugin/arguments", func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `return ...`)
 	})
+	mux.HandleFunc("/plugin/table", func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `return {}`)
+	})
 	mux.HandleFunc("/plugin/syntax", func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `return function(`)
 	})

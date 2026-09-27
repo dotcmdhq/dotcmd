@@ -8,7 +8,7 @@ local function cache_path(hash, name)
     return host.cache_dir .. "/downloads/" .. hash .. "/" .. name
 end
 
-test("plugin downloads text source and returns all of its values", function()
+test("plugin executes a source SHA-256 once and caches all of its values", function()
     dotcmd_plugin_test_calls = nil
     local hash = sha256 { bytes = values_source }
     local values = table.pack(plugin(url .. "/plugin/values", hash))
@@ -16,28 +16,16 @@ test("plugin downloads text source and returns all of its values", function()
     assert(values[1] == "value" and values[2] == nil and values[3] == false)
     assert(values[4] == 1 and values[5] == "function:" .. host.os)
 
-    -- The source download is cached, but the chunk is evaluated on every call.
     values = table.pack(plugin(url .. "/plugin/values", hash))
-    assert(values.n == 5 and values[4] == 2)
+    assert(values.n == 5 and values[4] == 1)
 end)
 
-test("plugin forwards chunk arguments, preserving nils and identity", function()
-    local hash = sha256 { bytes = "return ..." }
-    local config = { version = "27" }
-    local callback = function() return config end
-    local cases = {
-        table.pack(),
-        table.pack(nil),
-        table.pack(config),
-        table.pack(nil, config, "value", 27, false, callback, nil),
-    }
-    for _, inputs in ipairs(cases) do
-        local values = table.pack(plugin(url .. "/plugin/arguments", hash, table.unpack(inputs, 1, inputs.n)))
-        assert(values.n == inputs.n)
-        for i = 1, inputs.n do
-            assert(values[i] == inputs[i])
-        end
-    end
+test("plugin identifies cached plugins by SHA-256 rather than URL", function()
+    local source = "return {}"
+    local hash = sha256 { bytes = source }
+    local first = plugin(url .. "/plugin/table", hash)
+    local second = plugin(url .. "/another/location.lua", hash)
+    assert(first == second)
 end)
 
 test("plugin rejects source tables and missing hashes", function()
@@ -54,14 +42,15 @@ test("plugin rejects wrong hashes without executing source", function()
     assert(dotcmd_plugin_test_calls == nil)
 end)
 
-test("plugin rejects corrupted cached source", function()
+test("plugin does not reread cached source", function()
     dotcmd_plugin_test_calls = nil
-    local hash = sha256 { bytes = values_source }
-    assert(select(4, plugin(url .. "/plugin/values", hash)) == 1)
-    t.write(cache_path(hash, "values"), "return \"corrupted\"")
-    t.assert_error("SHA-256 mismatch for " .. url .. "/plugin/values", function()
-        plugin(url .. "/plugin/values", hash)
-    end)
+    local source = values_source .. "\n-- independently cached"
+    local hash = sha256 { bytes = source }
+    fs.mkdir(host.cache_dir .. "/downloads/" .. hash)
+    t.write(cache_path(hash, "500"), source)
+    assert(select(4, plugin(url .. "/status/500", hash)) == 1)
+    t.write(cache_path(hash, "500"), "return \"corrupted\"")
+    assert(select(4, plugin(url .. "/status/500", hash)) == 1)
     assert(dotcmd_plugin_test_calls == 1)
 end)
 

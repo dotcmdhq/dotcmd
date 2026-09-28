@@ -1,5 +1,5 @@
 local args = require("dotcmd.args")
-local commands = require("dotcmd.commands")
+local tasks = require("dotcmd.tasks")
 local completion = {}
 
 -- Hex fields preserve argument boundaries across shells, including cmd.exe's
@@ -71,7 +71,7 @@ local function bash_words(line, wordbreaks)
     return words, word, quote and quoted_prefix or trim, quote
 end
 
-function completion.complete(all_commands, protocol, first, ...)
+function completion.complete(all_tasks, protocol, first, ...)
     local prefix, words, trim, quote
     if protocol == "bash" then
         words, prefix, trim, quote = bash_words(unhex(first), unhex((...)))
@@ -95,9 +95,9 @@ function completion.complete(all_commands, protocol, first, ...)
             end
         end
     end
-    local function command_names(commands_by_spelling)
+    local function task_names(tasks_by_spelling)
         local names = {}
-        for name in pairs(commands_by_spelling) do names[#names + 1] = name end
+        for name in pairs(tasks_by_spelling) do names[#names + 1] = name end
         table.sort(names, function(a, b)
             local a_dash, b_dash = a:sub(1, 1) == "-", b:sub(1, 1) == "-"
             if a_dash ~= b_dash then return not a_dash end
@@ -108,28 +108,28 @@ function completion.complete(all_commands, protocol, first, ...)
             return a < b
         end)
         for _, name in ipairs(names) do
-            local spec = commands.find(commands_by_spelling, name)
+            local spec = tasks.find(tasks_by_spelling, name)
             if spec and not spec.hidden then candidates({ name }, spec.description) end
         end
     end
-    if #words == 0 then command_names(all_commands); return end
-    if commands.find(all_commands, words[1]) == commands.find(all_commands, "--help") then
-        local commands_by_spelling = all_commands
+    if #words == 0 then task_names(all_tasks); return end
+    if tasks.find(all_tasks, words[1]) == tasks.find(all_tasks, "--help") then
+        local tasks_by_spelling = all_tasks
         for i = 2, #words do
-            local command = commands.find(commands_by_spelling, words[i])
-            if not command then return end
-            commands_by_spelling = command.commands
-            if not commands_by_spelling then return end
+            local task = tasks.find(tasks_by_spelling, words[i])
+            if not task then return end
+            tasks_by_spelling = task.tasks
+            if not tasks_by_spelling then return end
         end
-        command_names(commands_by_spelling)
+        task_names(tasks_by_spelling)
         return
     end
-    local resolution = commands.resolve(all_commands, words)
+    local resolution = tasks.resolve(all_tasks, words)
     if not resolution then return end
-    local command, flat, inherited_opts = resolution.command, resolution.arguments, resolution.opts
+    local task, flat, inherited_opts = resolution.task, resolution.arguments, resolution.opts
 
     local schema = { opts = inherited_opts,
-        args = command.commands and { end_opts = true } or command.args }
+        args = task.tasks and { end_opts = true } or task.args }
     local state = args.scan(schema, flat)
     if not state then return end
     local seen, positional, options, pending, spellings =
@@ -164,9 +164,9 @@ function completion.complete(all_commands, protocol, first, ...)
         end
         if not (schema.args and schema.args.end_opts) then return end
     end
-    if command.commands then command_names(command.commands); return end
-    if command.args == nil then emit("file", "", prefix); return end
-    for i, spec in ipairs(command.args) do
+    if task.tasks then task_names(task.tasks); return end
+    if task.args == nil then emit("file", "", prefix); return end
+    for i, spec in ipairs(task.args) do
         if i == positional + 1 or (spec.arity == "*" or spec.arity == "+") and positional >= i - 1 then
             values(spec, prefix, "")
             return

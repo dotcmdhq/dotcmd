@@ -1,4 +1,4 @@
--- Discover suites and run each project's commands with the local binary.
+-- Discover suites and run each project's tasks with the local binary.
 return function(repo)
     local t = assert(loadfile(repo .. "/test/support.lua"))()
     local windows = host.os == "windows"
@@ -83,7 +83,7 @@ return function(repo)
         if fs.stat(source).type == "directory" then
             local project = work .. "/" .. name .. " project"
             copy_project(source, project)
-            -- Suites contain only test blocks; supply their shared command wrapper.
+            -- Suites contain only test blocks; supply their shared task wrapper.
             t.write(project .. "/.cmd.lua", [[return {test = function()
 local t = assert(loadfile(host.project_dir .. "/../support.lua"))()
 local test = t.test

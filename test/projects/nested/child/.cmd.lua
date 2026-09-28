@@ -4,7 +4,7 @@ return {
         description = "Configure the project",
         opts = { quiet = { flag = true, short = "q", description = "Suppress output" } },
         run = function(opts) print("setup " .. tostring(opts.quiet)) end,
-        commands = {
+        tasks = {
             completions = {
                 description = "Install completions",
                 args = { { "shell", arity = "?", type = { "bash", "fish", "zsh" } } },
@@ -15,7 +15,7 @@ return {
                 aliases = { "ed" },
                 opts = { profile = { type = { "local", "shared" }, default = "local" } },
                 run = function(opts) print("editor " .. tostring(opts.quiet) .. " " .. opts.profile) end,
-                commands = {
+                tasks = {
                     luals = {
                         description = "Configure LuaLS",
                         aliases = { "lua" },
@@ -37,7 +37,7 @@ return {
             },
             tools = {
                 description = "Project tools",
-                commands = { status = { args = {}, run = function(opts) print("status " .. tostring(opts.quiet)) end } },
+                tasks = { status = { args = {}, run = function(opts) print("status " .. tostring(opts.quiet)) end } },
             },
         },
     },

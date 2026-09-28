@@ -10,14 +10,14 @@ end
 
 -- Read token structure without conversion, defaults, or required-value checks.
 -- pending is the key of an option awaiting a value; opts and positionals are raw.
-function args.scan(command, argv, initial_options)
+function args.scan(schema, argv, initial_options)
     local spellings = {}
-    for key, spec in pairs(command.opts or {}) do
+    for key, spec in pairs(schema.opts or {}) do
         spellings["--" .. key:gsub("_", "-")] = key
         for short in (spec.short or ""):gmatch(".") do spellings["-" .. short] = key end
     end
     local opts, positionals = {}, {}
-    local options = command.opts ~= nil and initial_options ~= false
+    local options = schema.opts ~= nil and initial_options ~= false
     ---@type string?
     local pending
     local first_positional, separator
@@ -29,8 +29,8 @@ function args.scan(command, argv, initial_options)
         if options and text == "--" then
             options = false
             separator = true
-        elseif options and option_like(text) and (key or not (command.args and command.args.end_opts)) then
-            local spec = key and command.opts[key]
+        elseif options and option_like(text) and (key or not (schema.args and schema.args.end_opts)) then
+            local spec = key and schema.opts[key]
             if not spec then return nil, "unknown option: " .. text end
             local label = "--" .. key:gsub("_", "-")
             if opts[key] ~= nil and not many(spec) then return nil, "option " .. label .. " may only appear once" end
@@ -56,7 +56,7 @@ function args.scan(command, argv, initial_options)
         else
             first_positional = first_positional or i
             positionals[#positionals + 1] = text
-            if command.args and command.args.end_opts then options = false end
+            if schema.args and schema.args.end_opts then options = false end
         end
         i = i + 1
     end
@@ -92,8 +92,8 @@ local function convert(spec, text)
 end
 
 -- Return packed run parameters or nil and a CLI error. Schemas are trusted.
-function args.parse(command, argv)
-    local state, message = args.scan(command, argv)
+function args.parse(schema, argv)
+    local state, message = args.scan(schema, argv)
     if not state then return nil, message end
     if state.pending then
         return nil, "option --" .. state.pending:gsub("_", "-") .. " requires a value"
@@ -101,7 +101,7 @@ function args.parse(command, argv)
     local opts, positionals = state.opts, state.positionals
 
     for key, raw in pairs(opts) do
-        local spec = command.opts[key]
+        local spec = schema.opts[key]
         if not spec.flag then
             if many(spec) then
                 for i, text in ipairs(raw) do
@@ -117,7 +117,7 @@ function args.parse(command, argv)
         end
     end
 
-    for key, spec in pairs(command.opts or {}) do
+    for key, spec in pairs(schema.opts or {}) do
         if opts[key] == nil then
             if spec.arity == "1" or spec.arity == "+" then
                 return nil, "missing required option: --" .. key:gsub("_", "-")
@@ -137,10 +137,10 @@ function args.parse(command, argv)
         result.n = result.n + 1
         result[result.n] = value
     end
-    if command.opts ~= nil then append(opts) end
-    if command.args ~= nil then
+    if schema.opts ~= nil then append(opts) end
+    if schema.args ~= nil then
         local index = 1
-        for _, spec in ipairs(command.args) do
+        for _, spec in ipairs(schema.args) do
             local count = many(spec) and (#positionals - index + 1) or (positionals[index] ~= nil and 1 or 0)
             if count == 0 then
                 local arity = spec.arity or "1"

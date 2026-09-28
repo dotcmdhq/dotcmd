@@ -1,11 +1,11 @@
 local internal = ...
 local args = require("dotcmd.args")
-local commands = require("dotcmd.commands")
+local tasks = require("dotcmd.tasks")
 local format = require("dotcmd.format")
 local pretty = require("dotcmd.pretty")
 local output = format.writer(io.stdout)
 
--- Projects return {name = function(...) ... end} or
+-- Project tasks are {name = function(...) ... end} or
 -- {name = {description = "...", run = function(...) ... end}} from .cmd.lua.
 -- host is global; optional opts/args schemas prepare the arguments to run.
 local function cache_dir()
@@ -117,30 +117,30 @@ function plugin(url, hash)
     return table.unpack(values, 1, values.n)
 end
 
-local main_command = {
+local main_task = {
     args = { end_opts = true, { "args", arity = "*", default = { "--help" } } },
     opts = {
         launcher = { hidden = true },
     },
 }
 
-local all_commands, launcher, project_path, project_missing
+local all_tasks, launcher, project_path, project_missing
 
-local builtin_commands = {
+local builtin_tasks = {
     __complete = {
         hidden = true,
         args = { { "protocol" }, { "prefix" }, { "words", arity = "*" } },
         run = function(protocol, prefix, ...)
-            return require("dotcmd.completion").complete(all_commands, protocol, prefix, ...)
+            return require("dotcmd.completion").complete(all_tasks, protocol, prefix, ...)
         end,
     },
     __setup = {
         description = "Set up dotcmd integrations",
-        commands = {
+        tasks = {
             completions = {
                 description = [[Install shell completions for the current user
 
-Supports command names, options, enum and boolean values, and paths from command schemas.
+Supports task names, options, enum and boolean values, and paths from task schemas.
 The shell defaults to SHELL; specify it when using a different shell or when SHELL is unset.
 Use pwsh for PowerShell 7, or powershell for Windows PowerShell.
 Updates the adapter and its shell startup entry when run again.
@@ -156,11 +156,11 @@ Open a new shell after setup.]],
     __init = {
         description = [[Create the project's .cmd.lua file
 
-Writes a minimal file that returns an empty command table.
+Writes a minimal file that returns an empty task table.
 Does not overwrite an existing .cmd.lua.]],
         args = {},
         run = function()
-            fs.write(project_path, [[---@type dotcmd.Commands
+            fs.write(project_path, [[---@type dotcmd.Tasks
 return {}
 ]], { if_exists = "error" })
             output:write({ "Created ", project_path, "\nOptional: run ",
@@ -202,16 +202,16 @@ The next invocation downloads the selected binary if it is not already cached.]]
     },
     __help = {
         aliases = { "-h", "-?" },
-        description = "Show help for a command, or list commands",
-        args = { { "command", arity = "*", description = "Command path to describe" } },
+        description = "Show help for a task, or list tasks",
+        args = { { "task", arity = "*", description = "Task path to describe" } },
         run = function(...)
-            return require("dotcmd.help")(all_commands, main_command, project_missing, ...)
+            return require("dotcmd.help")(all_tasks, main_task, project_missing, ...)
         end,
     },
 }
 
 function main(argv)
-    local parsed, message = args.parse(main_command, argv)
+    local parsed, message = args.parse(main_task, argv)
     if not parsed then
         io.stderr:write("dotcmd: " .. message .. "\n")
         return 2
@@ -236,33 +236,33 @@ function main(argv)
         return assert(loadfile(project_path, "t"))(), false
     end)
     project_missing = missing or false
-    local command_definitions = ok and project or {}
-    for key, command in pairs(builtin_commands) do command_definitions[key] = command end
+    local task_definitions = ok and project or {}
+    for key, task in pairs(builtin_tasks) do task_definitions[key] = task end
 
-    all_commands = commands.normalize(command_definitions)
+    all_tasks = tasks.normalize(task_definitions)
 
     local words = { name }
     for _, word in ipairs(parsed) do words[#words + 1] = word end
-    local resolution, resolve_error, error_code = commands.resolve(all_commands, words)
+    local resolution, resolve_error, error_code = tasks.resolve(all_tasks, words)
     if not resolution then
         if not ok then
             if type(project) == "table" then error(project) end
             io.stderr:write("dotcmd: " .. tostring(project) .. "\n")
         else
-            io.stderr:write("dotcmd: " .. tostring(resolve_error) .. "\nRun .cmd --help to list available commands.\n")
+            io.stderr:write("dotcmd: " .. tostring(resolve_error) .. "\nRun .cmd --help to list available tasks.\n")
         end
         return error_code or 1
     end
-    local command, arguments, path, inherited_opts =
-        resolution.command, resolution.arguments, resolution.path, resolution.opts
-    local schema = { opts = inherited_opts, args = command.commands and {} or command.args }
-    if command.commands and not command.run then
+    local task, arguments, path, inherited_opts =
+        resolution.task, resolution.arguments, resolution.path, resolution.opts
+    local schema = { opts = inherited_opts, args = task.tasks and {} or task.args }
+    if task.tasks and not task.run then
         local _, message = args.parse(schema, arguments)
         if message then
             io.stderr:write("dotcmd " .. table.concat(path, " ") .. ": " .. message .. "\n")
             return 2
         end
-        return require("dotcmd.help")(all_commands, main_command, project_missing, table.unpack(path)) or 0
+        return require("dotcmd.help")(all_tasks, main_task, project_missing, table.unpack(path)) or 0
     end
     local results
     if schema.opts ~= nil or schema.args ~= nil then
@@ -271,9 +271,9 @@ function main(argv)
             io.stderr:write("dotcmd " .. table.concat(path, " ") .. ": " .. message .. "\n")
             return 2
         end
-        results = table.pack(command.run(table.unpack(parameters, 1, parameters.n)))
+        results = table.pack(task.run(table.unpack(parameters, 1, parameters.n)))
     else
-        results = table.pack(command.run(table.unpack(arguments)))
+        results = table.pack(task.run(table.unpack(arguments)))
     end
     for i = 1, results.n do output:write({ pretty(results[i]), "\n" }) end
     output:flush()

@@ -1,4 +1,4 @@
-assert(type(host) == "table") -- Available while loading the project, not just in commands.
+assert(type(host) == "table") -- Available while loading the project, not just in tasks.
 assert(select("#", ...) == 0)
 local function hex(value)
     return (value:gsub(".", function(c) return ("%02x"):format(c:byte()) end))

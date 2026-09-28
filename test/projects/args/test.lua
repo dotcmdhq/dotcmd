@@ -15,7 +15,7 @@ end
 
 test("scan preserves raw values and option boundaries without resolving the schema", function()
     local function unexpected() error("scan called a converter") end
-    local command = {
+    local schema = {
         opts = {
             mode = { short = "m", parse = unexpected },
             enabled = { type = "boolean" },
@@ -25,19 +25,19 @@ test("scan preserves raw values and option boundaries without resolving the sche
         },
         args = { { "values", arity = "+", parse = unexpected } },
     }
-    local state = assert(args.scan(command, { "-m", "raw", "--enabled=false", "--tag=one", "--tag=two", "--", "tail", "--literal" }))
+    local state = assert(args.scan(schema, { "-m", "raw", "--enabled=false", "--tag=one", "--tag=two", "--", "tail", "--literal" }))
     assert(state.opts.mode == "raw" and state.opts.enabled == "false")
     assert(table.concat(state.opts.tag, "|") == "one|two")
     assert(state.opts.jobs == nil and state.opts.required == nil)
     assert(table.concat(state.positionals, "|") == "tail|--literal" and not state.options)
     assert(state.spellings["-m"] == "mode" and state.spellings["--mode"] == "mode")
-    state = assert(args.scan(command, {}))
+    state = assert(args.scan(schema, {}))
     assert(state.options and #state.positionals == 0 and next(state.opts) == nil)
-    state = assert(args.scan(command, { "--jobs" }))
+    state = assert(args.scan(schema, { "--jobs" }))
     assert(state.pending == "jobs")
-    local parsed, message = args.parse(command, { "--jobs" })
+    local parsed, message = args.parse(schema, { "--jobs" })
     assert(parsed == nil and message == "option --jobs requires a value")
-    local invalid, message = args.scan(command, { "--unknown" })
+    local invalid, message = args.scan(schema, { "--unknown" })
     assert(invalid == nil and message == "unknown option: --unknown")
 end)
 
@@ -168,11 +168,11 @@ test("malformed CLI input fails before run", function()
     succeeds("cli_errors", "--name", "-", "-")
 end)
 
-test("parsed commands preserve exit status", function()
+test("parsed tasks preserve exit status", function()
     assert(t.run_project(child, "status").code == 42)
 end)
 
-test("parsed commands print returned values independently of exit status", function()
+test("parsed tasks print returned values independently of exit status", function()
     assert(t.success(t.run_project(child, "results")) == "42\nnil\nfalse\n")
 end)
 

@@ -67,7 +67,7 @@ local function run(options, ...)
     return result
 end
 
-test("update module loads only when the command runs", function()
+test("update module loads only when the task runs", function()
     local project = t.project("lazy", [[
 for i, searcher in ipairs(package.searchers) do
     package.searchers[i] = function(name)

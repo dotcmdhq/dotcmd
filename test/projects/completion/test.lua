@@ -24,7 +24,7 @@ local function values(prefix, ...)
 end
 local function equal(actual, expected) assert(actual == expected, ("expected %q, got %q"):format(expected, actual)) end
 
-test("command names, aliases, hidden commands and help", function()
+test("task names, aliases, hidden tasks and help", function()
     local order = {}
     for index, record in ipairs(request("words", "")) do order[record[2]] = index end
     assert(order["build-docs"] < order.custom and order.custom < order.docs)

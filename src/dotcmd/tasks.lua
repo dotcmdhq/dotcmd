@@ -1,5 +1,5 @@
 local args = require("dotcmd.args")
-local commands = {}
+local tasks = {}
 
 local function spellings(opts)
     local result = {}
@@ -31,46 +31,46 @@ local function normalize(definitions, parent_opts, parent_path)
     local result = {}
     for key, definition in pairs(definitions) do
         local source = type(definition) == "function" and { run = definition } or definition
-        local command = {}
-        for field, value in pairs(source) do command[field] = value end
+        local task = {}
+        for field, value in pairs(source) do task[field] = value end
         local spelling = key:gsub("_", "-")
         local path = parent_path == "" and spelling or parent_path .. " " .. spelling
-        assert(not (command.commands ~= nil and command.args ~= nil),
-            "command " .. path .. " cannot define both args and commands")
-        local merged = merge_opts(parent_opts, command.opts, path)
-        if command.commands ~= nil then
-            assert(type(command.commands) == "table", "commands must be a table in " .. path)
-            command.commands = normalize(command.commands, merged, path)
+        assert(not (task.tasks ~= nil and task.args ~= nil),
+            "task " .. path .. " cannot define both args and tasks")
+        local merged = merge_opts(parent_opts, task.opts, path)
+        if task.tasks ~= nil then
+            assert(type(task.tasks) == "table", "tasks must be a table in " .. path)
+            task.tasks = normalize(task.tasks, merged, path)
         else
-            assert(type(command.run) == "function", "command " .. path .. " must define run")
+            assert(type(task.run) == "function", "task " .. path .. " must define run")
         end
-        assert(result[spelling] == nil, "duplicate command " .. path)
-        result[spelling] = command
+        assert(result[spelling] == nil, "duplicate task " .. path)
+        result[spelling] = task
     end
     for key, definition in pairs(definitions) do
         local spelling = key:gsub("_", "-")
-        local command = result[spelling]
-        for _, alias in ipairs(command.aliases or {}) do
+        local task = result[spelling]
+        for _, alias in ipairs(task.aliases or {}) do
             assert(result[alias] == nil,
-                "duplicate command " .. (parent_path == "" and alias or parent_path .. " " .. alias))
+                "duplicate task " .. (parent_path == "" and alias or parent_path .. " " .. alias))
             result[alias] = spelling
         end
     end
     return result
 end
 
-function commands.normalize(definitions)
+function tasks.normalize(definitions)
     return normalize(definitions, nil, "")
 end
 
-local function lookup(commands_by_spelling, name)
-    local command = commands_by_spelling[name]
-    if type(command) == "string" then command = commands_by_spelling[command] end
-    return command
+local function lookup(tasks_by_spelling, name)
+    local task = tasks_by_spelling[name]
+    if type(task) == "string" then task = tasks_by_spelling[task] end
+    return task
 end
 
 ---@class dotcmd.Resolution
----@field command dotcmd.Command
+---@field task dotcmd.Task
 ---@field arguments string[]
 ---@field path string[]
 ---@field opts? table<string, dotcmd.Option>
@@ -80,12 +80,12 @@ end
 ---@return dotcmd.Resolution? resolution
 ---@return string? message
 ---@return integer? error_code
-function commands.resolve(commands_by_spelling, words)
-    local command = lookup(commands_by_spelling, words[1])
-    if not command then return nil, "unknown command: " .. tostring(words[1]) end
+function tasks.resolve(tasks_by_spelling, words)
+    local task = lookup(tasks_by_spelling, words[1])
+    if not task then return nil, "unknown task: " .. tostring(words[1]) end
     local path, argv, index, ended = { words[1] }, {}, 2, false
-    local opts = merge_opts(nil, command.opts, words[1])
-    while command.commands do
+    local opts = merge_opts(nil, task.opts, words[1])
+    while task.tasks do
         local tail = {}
         for i = index, #words do tail[#tail + 1] = words[i] end
         local state, message = args.scan({ opts = opts or {}, args = { end_opts = true } }, tail, not ended)
@@ -96,19 +96,19 @@ function commands.resolve(commands_by_spelling, words)
             break
         end
         local name = tail[position]
-        local child = lookup(command.commands, name)
+        local child = lookup(task.tasks, name)
         if not child then
             if not ended and not state.separator and name:sub(1, 1) == "-"
                 and #name > 1 and tonumber(name) == nil then
                 return nil, "unknown option: " .. name, 2
             end
-            return nil, "unknown subcommand: " .. name
+            return nil, "unknown subtask: " .. name
         end
         for i = 1, position - 1 do argv[#argv + 1] = tail[i] end
         ended = ended or state.separator
-        command = child
+        task = child
         path[#path + 1] = name
-        opts = merge_opts(opts, command.opts, table.concat(path, " "))
+        opts = merge_opts(opts, task.opts, table.concat(path, " "))
         index = index + position
     end
     for i = index, #words do argv[#argv + 1] = words[i] end
@@ -117,23 +117,23 @@ function commands.resolve(commands_by_spelling, words)
             if word == "--" then table.remove(argv, i); break end
         end
     end
-    return { command = command, arguments = argv, path = path, opts = opts }
+    return { task = task, arguments = argv, path = path, opts = opts }
 end
 
-function commands.find(commands_by_spelling, path)
+function tasks.find(tasks_by_spelling, path)
     if type(path) == "string" then
-        local command = lookup(commands_by_spelling, path)
-        return command, command and merge_opts(nil, command.opts, path)
+        local task = lookup(tasks_by_spelling, path)
+        return task, task and merge_opts(nil, task.opts, path)
     end
-    local command, opts
+    local task, opts
     for index, name in ipairs(path) do
-        command = lookup(commands_by_spelling, name)
-        if not command then return nil end
-        opts = merge_opts(opts, command.opts, table.concat(path, " ", 1, index))
-        commands_by_spelling = command.commands
-        if not commands_by_spelling and index < #path then return nil end
+        task = lookup(tasks_by_spelling, name)
+        if not task then return nil end
+        opts = merge_opts(opts, task.opts, table.concat(path, " ", 1, index))
+        tasks_by_spelling = task.tasks
+        if not tasks_by_spelling and index < #path then return nil end
     end
-    return command, opts
+    return task, opts
 end
 
-return commands
+return tasks

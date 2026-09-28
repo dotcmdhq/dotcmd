@@ -1,4 +1,4 @@
-local commands = require("dotcmd.commands")
+local tasks = require("dotcmd.tasks")
 local format = require("dotcmd.format")
 local output = format.writer(io.stdout)
 
@@ -81,9 +81,9 @@ local function print_options(opts)
     print_section("Options", rows)
 end
 
-local function usage(name, command, opts)
+local function usage(name, task, opts)
     local result = { keyword(name) }
-    for _, spec in pairs(opts or command.opts or {}) do
+    for _, spec in pairs(opts or task.opts or {}) do
         if not spec.hidden then
             result[#result + 1] = " ["
             result[#result + 1] = keyword("options")
@@ -91,19 +91,19 @@ local function usage(name, command, opts)
             break
         end
     end
-    if command.commands then
-        result[#result + 1] = command.run and " [" or " <"
-        result[#result + 1] = keyword("command")
-        result[#result + 1] = command.run and "]" or ">"
+    if task.tasks then
+        result[#result + 1] = task.run and " [" or " <"
+        result[#result + 1] = keyword("task")
+        result[#result + 1] = task.run and "]" or ">"
         return result
     end
-    if command.args == nil then
+    if task.args == nil then
         result[#result + 1] = " ["
         result[#result + 1] = keyword("args")
         result[#result + 1] = "...]"
         return result
     end
-    for _, spec in ipairs(command.args) do
+    for _, spec in ipairs(task.args) do
         local arity = spec.arity or "1"
         result[#result + 1] = (arity == "?" or arity == "*") and " [" or " <"
         result[#result + 1] = keyword(spec[1])
@@ -113,17 +113,17 @@ local function usage(name, command, opts)
     return result
 end
 
-return function(all_commands, main_command, project_missing, ...)
+return function(all_tasks, main_task, project_missing, ...)
     local path = { ... }
     if #path == 0 then
-        output:write({ keyword("Usage:"), " .cmd <command> [args...]\n" })
+        output:write({ keyword("Usage:"), " .cmd <task> [args...]\n" })
         local names, rows, builtin_rows = {}, {}, {}
-        for key, command in pairs(all_commands) do
-            if type(command) ~= "string" and not command.hidden then names[#names + 1] = key end
+        for key, task in pairs(all_tasks) do
+            if type(task) ~= "string" and not task.hidden then names[#names + 1] = key end
         end
         table.sort(names)
         for _, key in ipairs(names) do
-            local entry = all_commands[key]
+            local entry = all_tasks[key]
             local description = entry.description
             local label = usage(key, entry)
             local builtin = key:sub(1, 2) == "--"
@@ -134,36 +134,36 @@ return function(all_commands, main_command, project_missing, ...)
             local section = builtin and builtin_rows or rows
             section[#section + 1] = { label, description and description:match("^[^\r\n]*") }
         end
-        print_section("Project commands", rows)
-        print_section("Built-in commands", builtin_rows)
-        print_options(main_command.opts)
+        print_section("Project tasks", rows)
+        print_section("Built-in tasks", builtin_rows)
+        print_options(main_task.opts)
         if project_missing then
             output:write({ "\nNo .cmd.lua found. Run ", keyword(".cmd --init"), " to create one.\n" })
         end
         output:flush()
         return
     end
-    local command, inherited_opts = commands.find(all_commands, path)
-    if command == nil then
-        error("unknown command: " .. table.concat(path, " ")
-            .. "\nRun .cmd --help to list available commands.")
+    local task, inherited_opts = tasks.find(all_tasks, path)
+    if task == nil then
+        error("unknown task: " .. table.concat(path, " ")
+            .. "\nRun .cmd --help to list available tasks.")
     end
-    output:write({ keyword("Usage:"), " .cmd ", format.plain(usage(table.concat(path, " "), command, inherited_opts)), "\n" })
+    output:write({ keyword("Usage:"), " .cmd ", format.plain(usage(table.concat(path, " "), task, inherited_opts)), "\n" })
     local rows = {}
-    for _, spec in ipairs(command.args or {}) do
+    for _, spec in ipairs(task.args or {}) do
         local text, metadata = description(spec, true)
         rows[#rows + 1] = { keyword(spec[1]), text, metadata }
     end
-    if command.description then output:write({ "\n", command.description:gsub("%s+$", ""), "\n" }) end
+    if task.description then output:write({ "\n", task.description:gsub("%s+$", ""), "\n" }) end
     print_section("Arguments", rows)
-    if command.commands then
+    if task.tasks then
         local children, child_rows = {}, {}
-        for name, child in pairs(command.commands) do
+        for name, child in pairs(task.tasks) do
             if type(child) ~= "string" and not child.hidden then children[#children + 1] = name end
         end
         table.sort(children)
         for _, name in ipairs(children) do
-            local child = command.commands[name]
+            local child = task.tasks[name]
             local label = usage(name, child)
             for _, alias in ipairs(child.aliases or {}) do
                 label[#label + 1] = ", "
@@ -171,7 +171,7 @@ return function(all_commands, main_command, project_missing, ...)
             end
             child_rows[#child_rows + 1] = { label, child.description and child.description:match("^[^\r\n]*") }
         end
-        print_section("Commands", child_rows)
+        print_section("Tasks", child_rows)
     end
     print_options(inherited_opts)
     output:flush()

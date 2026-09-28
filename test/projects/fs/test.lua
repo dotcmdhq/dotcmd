@@ -1,3 +1,114 @@
+test("fs read and write binary files and create parents by default", function()
+    local path = "write ü/nested/file"
+    local bytes = ("a\0\255\r\n"):rep(20000)
+    assert(fs.read(path) == nil)
+    assert(fs.write(path, bytes) == true)
+    assert(fs.read(path) == bytes)
+    assert(fs.write(path, bytes) == true) -- replace never compares old contents
+    assert(fs.write(path, "") == true)
+    assert(fs.read(path) == "")
+    t.assert_error("fs.write:", function() fs.write("no-parents/file", "x", { parents = false }) end)
+    assert(not fs.stat("no-parents"))
+    fs.mkdir("no-parents")
+    assert(fs.write("no-parents/file", "x", { parents = false }))
+    t.assert_error("fs.read:", function() fs.read("write ü") end)
+    t.assert_error("fs.write:", function() fs.write("write ü", "x") end)
+    t.assert_error("fs.write:", function() fs.write("trailing/", "x") end)
+    assert(not fs.stat("trailing"))
+end)
+
+test("fs write existence policies and invalid arguments", function()
+    for _, policy in ipairs({ "error", "skip", "replace" }) do
+        local path = "policy-" .. policy
+        assert(fs.write(path, "first", { if_exists = policy }))
+        if policy == "error" then
+            t.assert_error("already exists", function() fs.write(path, "second", { if_exists = policy }) end)
+        else
+            assert(fs.write(path, "second", { if_exists = policy }) == (policy == "replace"))
+        end
+        assert(fs.read(path) == (policy == "replace" and "second" or "first"))
+    end
+    fs.mkdir("skip-directory")
+    assert(fs.write("skip-directory", "x", { if_exists = "skip" }) == false)
+    t.assert_error("already exists", function() fs.write("skip-directory", "x", { if_exists = "error" }) end)
+    for _, path in ipairs({ "", "bad\0path" }) do
+        t.assert_error("fs:", function() fs.read(path) end)
+        t.assert_error("fs:", function() fs.write(path, "x") end)
+    end
+    t.assert_error("bad argument #2", function() fs.write("invalid-write", 123) end)
+    t.assert_error("invalid option", function() fs.write("invalid-write", "x", { if_exists = "append" }) end)
+    t.assert_error("boolean expected", function() fs.write("invalid-write", "x", { parents = "yes" }) end)
+    assert(not fs.stat("invalid-write"))
+end)
+
+test("fs write follows symlinks and preserves Unix permissions", function()
+    fs.write("write-links/target", "before")
+    fs.chmod("write-links/target", 0x1e8) -- 0750
+    local mode = fs.stat("write-links/target").mode
+    if not t.symlink("target", "write-links/link") then return end
+    assert(t.symlink("link", "write-links/chain"))
+    assert(fs.write("write-links/chain", "after"))
+    assert(fs.read("write-links/target") == "after")
+    assert(fs.stat("write-links/target").mode == mode)
+    for _, path in ipairs({ "write-links/link", "write-links/chain" }) do
+        assert(fs.stat(path, { follow = false }).type == "symlink")
+        assert(fs.write(path, "skipped", { if_exists = "skip" }) == false)
+        t.assert_error("already exists", function() fs.write(path, "error", { if_exists = "error" }) end)
+    end
+    assert(t.symlink("missing", "write-links/broken"))
+    assert(fs.read("write-links/broken") == nil)
+    assert(fs.write("write-links/broken", "x", { if_exists = "skip" }) == false)
+    t.assert_error("already exists", function() fs.write("write-links/broken", "x", { if_exists = "error" }) end)
+    t.assert_error("fs.realpath:", function() fs.write("write-links/broken", "x") end)
+    assert(fs.stat("write-links/broken", { follow = false }).type == "symlink")
+    assert(not fs.stat("write-links/missing"))
+end)
+
+test("fs write create-only publication has one winner across processes", function()
+    local project = t.project("write-race", [[return {write = function(id)
+    return fs.write(host.project_dir .. "/winner", id:rep(65536), { if_exists = "skip" })
+end}]])
+    local processes, wins = {}, 0
+    for i = 1, 8 do
+        local command = t.command(project, "write", tostring(i))
+        command.stdout, command.stderr = "capture", "capture"
+        processes[i] = spawn(command)
+    end
+    for i, process in ipairs(processes) do
+        local output = t.success(process:wait())
+        if output == "true\n" then
+            wins = wins + 1
+            assert(fs.read(project .. "/winner") == tostring(i):rep(65536))
+        else assert(output == "false\n", output) end
+    end
+    assert(wins == 1)
+    for name in fs.list(project) do assert(not name:find(".tmp-", 1, true), name) end
+end)
+
+if host.os ~= "windows" then
+    test("fs write does not need read access to the existing contents", function()
+        fs.write("unreadable-old", "old")
+        fs.chmod("unreadable-old", 0)
+        assert(fs.write("unreadable-old", "new"))
+        assert(fs.stat("unreadable-old").mode == 0)
+        fs.chmod("unreadable-old", 0x180)
+        assert(fs.read("unreadable-old") == "new")
+    end)
+
+    test("fs write detects buffered output failure and leaves the old file intact", function()
+        local project = t.project("write-failure", [[return {check = function()
+    local path = host.project_dir .. "/target"
+    local ok, message = pcall(fs.write, path, "replacement")
+    assert(not ok and message:find("fs.write:", 1, true), tostring(message))
+    assert(fs.read(path) == "before")
+    for name in fs.list(host.project_dir) do assert(not name:find(".tmp-", 1, true), name) end
+end}]])
+        fs.write(project .. "/target", "before")
+        t.success(exec { "/bin/sh", "-c", 'trap "" XFSZ; ulimit -f 0; exec "$@"', "write-test",
+            host.executable, "--launcher", project .. "/.cmd", "check", stdout = "capture", stderr = "capture" })
+    end)
+end
+
 test("fs metadata and missing paths", function()
     t.write("data-ü", "abc")
     local info = fs.stat("data-ü")
@@ -117,13 +228,13 @@ end)
 if host.os ~= "windows" then
     test("fs chmod +x respects and preserves umask and existing permissions", function()
         local project = t.project("chmod", [[return {check = function(mode, expected, mask)
-    local file = assert(io.open(host.project_dir .. "/file", "wb")); assert(file:close())
+    fs.write(host.project_dir .. "/file", "")
     fs.chmod(host.project_dir .. "/file", tonumber(mode, 8))
     fs.chmod(host.project_dir .. "/file", "+x")
     assert(fs.stat(host.project_dir .. "/file").mode == tonumber(expected, 8))
     local after = host.project_dir .. "/after"
     fs.remove(after)
-    file = assert(io.open(after, "wb")); assert(file:close())
+    fs.write(after, "")
     assert(fs.stat(after).mode == (0x1b6 & ~tonumber(mask, 8))) -- 0666 minus umask
 end}]])
         for _, case in ipairs({

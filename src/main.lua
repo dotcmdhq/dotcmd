@@ -110,8 +110,7 @@ function plugin(url, hash)
     if values then return table.unpack(values, 1, values.n) end
 
     local path = fetch { url = url, sha256 = hash }
-    local file <close> = assert(io.open(path, "rb"))
-    local source = assert(file:read("a"))
+    local source = assert(fs.read(path), "plugin: missing source: " .. path)
     assert(sha256 { bytes = source } == hash, "plugin: SHA-256 mismatch for " .. url)
     values = table.pack(assert(load(source, "@" .. url, "t"))())
     loaded_plugins[hash] = values
@@ -161,17 +160,9 @@ Writes a minimal file that returns an empty command table.
 Does not overwrite an existing .cmd.lua.]],
         args = {},
         run = function()
-            assert(not fs.stat(project_path, { follow = false }), project_path .. " already exists")
-            local temp = project_path .. ".tmp-" .. ("%016x%016x"):format(math.random(0), math.random(0))
-            local cleanup <close> = setmetatable({}, { __close = function() fs.remove(temp) end })
-            do
-                local file <close> = assert(io.open(temp, "wb"))
-                assert(file:write([[---@type dotcmd.Commands
+            fs.write(project_path, [[---@type dotcmd.Commands
 return {}
-]]))
-                assert(file:flush())
-            end
-            fs.rename(temp, project_path)
+]], { if_exists = "error" })
             output:write({ "Created ", project_path, "\nOptional: run ",
                 { bold = true, ".cmd --setup completions" }, " to enable shell completions.\n" }):flush()
         end,

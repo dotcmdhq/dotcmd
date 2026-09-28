@@ -8,6 +8,9 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <wchar.h>
+#include <bcrypt.h>
+#include <fcntl.h>
+#include <io.h>
 typedef wchar_t PathChar;
 typedef DWORD FsError;
 #else
@@ -27,7 +30,9 @@ extern "C" {
 }
 
 struct State {
-    PathChar* paths[2];
+    PathChar* paths[3];
+    FILE* file;
+    bool temporary;
 #ifdef _WIN32
     HANDLE directory;
     WIN32_FIND_DATAW entry;
@@ -50,7 +55,16 @@ static void CloseDirectory(State* state) {
 static int Cleanup(lua_State* L) {
     State* state = (State*)lua_touserdata(L, 1);
     CloseDirectory(state);
-    for (int i = 0; i < 2; ++i) { free(state->paths[i]); state->paths[i] = NULL; }
+    if (state->file) { fclose(state->file); state->file = NULL; }
+    if (state->temporary) {
+#ifdef _WIN32
+        DeleteFileW(state->paths[2]);
+#else
+        unlink(state->paths[2]);
+#endif
+        state->temporary = false;
+    }
+    for (int i = 0; i < 3; ++i) { free(state->paths[i]); state->paths[i] = NULL; }
     return 0;
 }
 
@@ -331,9 +345,7 @@ static size_t RootLength(const wchar_t* path) {
 }
 #endif
 
-static int Mkdir(lua_State* L) {
-    State* state = NewState(L);
-    PathChar* path = Path(L, state, 0, 1);
+static FsError CreateParents(PathChar* path) {
 #ifdef _WIN32
     size_t start = RootLength(path);
 #else
@@ -349,9 +361,17 @@ static int Mkdir(lua_State* L) {
         PathChar saved = path[i]; path[i] = 0;
         FsError error = MakeDirectory(path);
         path[i] = saved;
-        if (error) return Fail(L, "mkdir", lua_tostring(L, 1), error);
+        if (error) return error;
     }
-    FsError error = MakeDirectory(path);
+    return 0;
+}
+
+static int Mkdir(lua_State* L) {
+    State* state = NewState(L);
+    PathChar* path = Path(L, state, 0, 1);
+    FsError error = CreateParents(path);
+    if (error) return Fail(L, "mkdir", lua_tostring(L, 1), error);
+    error = MakeDirectory(path);
     if (error) return Fail(L, "mkdir", lua_tostring(L, 1), error);
     return 0;
 }
@@ -444,23 +464,9 @@ static int Remove(lua_State* L) {
     return 0;
 }
 
-static int Rename(lua_State* L) {
-    static const char* const policies[] = {"error", "skip", "replace", NULL};
-    if (lua_isnoneornil(L, 3)) lua_pushnil(L); else lua_getfield(L, 3, "if_exists");
-    int policy = luaL_checkoption(L, -1, "error", policies); lua_pop(L, 1);
-    bool replace = policy == 2;
-    State* state = NewState(L);
-    PathChar* from = Path(L, state, 0, 1);
-    PathChar* to = Path(L, state, 1, 2);
+static FsError MovePath(const PathChar* from, const PathChar* to, bool replace) {
 #ifdef _WIN32
-    if (!MoveFileExW(from, to, replace ? MOVEFILE_REPLACE_EXISTING : 0)) {
-        DWORD error = GetLastError();
-        if (policy == 1 && (error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS)) {
-            lua_pushboolean(L, false);
-            return 1;
-        }
-        return Fail(L, "rename", lua_tostring(L, 1), error);
-    }
+    return MoveFileExW(from, to, replace ? MOVEFILE_REPLACE_EXISTING : 0) ? 0 : GetLastError();
 #else
 #ifdef __linux__
     int result = replace ? rename(from, to)
@@ -468,14 +474,194 @@ static int Rename(lua_State* L) {
 #else
     int result = replace ? rename(from, to) : renamex_np(from, to, RENAME_EXCL);
 #endif
-    if (result < 0) {
-        if (policy == 1 && (errno == EEXIST || errno == ENOTEMPTY)) {
+    return result == 0 ? 0 : errno;
+#endif
+}
+
+static bool Exists(FsError error) {
+#ifdef _WIN32
+    return error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS;
+#else
+    return error == EEXIST || error == ENOTEMPTY;
+#endif
+}
+
+static int Rename(lua_State* L) {
+    static const char* const policies[] = {"error", "skip", "replace", NULL};
+    if (lua_isnoneornil(L, 3)) lua_pushnil(L); else lua_getfield(L, 3, "if_exists");
+    int policy = luaL_checkoption(L, -1, "error", policies); lua_pop(L, 1);
+    State* state = NewState(L);
+    PathChar* from = Path(L, state, 0, 1);
+    PathChar* to = Path(L, state, 1, 2);
+    FsError error = MovePath(from, to, policy == 2);
+    if (error) {
+        if (policy == 1 && Exists(error)) {
             lua_pushboolean(L, false);
             return 1;
         }
-        return Fail(L, "rename", lua_tostring(L, 1), errno);
+        return Fail(L, "rename", lua_tostring(L, 1), error);
+    }
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+// stdio reports errno on every platform, unlike the native path operations.
+static int FileError(lua_State* L, const char* operation, int error) {
+    return luaL_error(L, "fs.%s: %s: %s", operation, lua_tostring(L, 1), strerror(error));
+}
+
+static int CloseFile(State* state) {
+    FILE* file = state->file;
+    state->file = NULL;
+    return fclose(file) == 0 ? 0 : errno;
+}
+
+static int Read(lua_State* L) {
+    State* state = NewState(L);
+    PathChar* path = Path(L, state, 0, 1);
+#ifdef _WIN32
+    state->file = _wfopen(path, L"rb");
+#else
+    state->file = fopen(path, "rb");
+#endif
+    if (!state->file) {
+        int error = errno;
+        if (error == ENOENT) { lua_pushnil(L); return 1; }
+        return FileError(L, "read", error);
+    }
+    luaL_Buffer buffer;
+    luaL_buffinit(L, &buffer);
+    for (;;) {
+        char* block = luaL_prepbuffsize(&buffer, 65536);
+        size_t size = fread(block, 1, 65536, state->file);
+        if (ferror(state->file)) return FileError(L, "read", errno);
+        luaL_addsize(&buffer, size);
+        if (feof(state->file)) break;
+    }
+    int error = CloseFile(state);
+    if (error) return FileError(L, "read", error);
+    luaL_pushresult(&buffer);
+    return 1;
+}
+
+static void OpenTemporary(lua_State* L, State* state) {
+#ifdef _WIN32
+    size_t length = wcslen(state->paths[0]);
+    state->paths[2] = (wchar_t*)malloc((length + 38) * sizeof(wchar_t));
+    if (!state->paths[2]) luaL_error(L, "fs.write: out of memory");
+    memcpy(state->paths[2], state->paths[0], length * sizeof(wchar_t));
+    memcpy(state->paths[2] + length, L".tmp-", 5 * sizeof(wchar_t));
+    HANDLE handle;
+    do {
+        unsigned char random[16];
+        if (BCryptGenRandom(NULL, random, sizeof(random), BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0)
+            luaL_error(L, "fs.write: cannot generate temporary filename");
+        for (size_t i = 0; i < sizeof(random); ++i) {
+            state->paths[2][length + 5 + i * 2] = L"0123456789abcdef"[random[i] >> 4];
+            state->paths[2][length + 6 + i * 2] = L"0123456789abcdef"[random[i] & 15];
+        }
+        state->paths[2][length + 37] = 0;
+        handle = CreateFileW(state->paths[2], GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+    } while (handle == INVALID_HANDLE_VALUE && Exists(GetLastError()));
+    if (handle == INVALID_HANDLE_VALUE) Fail(L, "write", lua_tostring(L, 1), GetLastError());
+    state->temporary = true;
+    int descriptor = _open_osfhandle((intptr_t)handle, _O_WRONLY | _O_BINARY | _O_NOINHERIT);
+    if (descriptor == -1) {
+        int error = errno; CloseHandle(handle); FileError(L, "write", error);
+    }
+    state->file = _fdopen(descriptor, "wb");
+    if (!state->file) { int error = errno; _close(descriptor); FileError(L, "write", error); }
+#else
+    size_t length = strlen(state->paths[0]);
+    state->paths[2] = (char*)malloc(length + sizeof(".tmp-XXXXXX"));
+    if (!state->paths[2]) luaL_error(L, "fs.write: out of memory");
+    memcpy(state->paths[2], state->paths[0], length);
+    strcpy(state->paths[2] + length, ".tmp-XXXXXX");
+    int descriptor = mkstemp(state->paths[2]);
+    if (descriptor == -1) FileError(L, "write", errno);
+    state->temporary = true;
+    if (fcntl(descriptor, F_SETFD, FD_CLOEXEC) < 0) {
+        int error = errno; close(descriptor); FileError(L, "write", error);
+    }
+    state->file = fdopen(descriptor, "wb");
+    if (!state->file) { int error = errno; close(descriptor); FileError(L, "write", error); }
+#endif
+}
+
+static int Inspect(lua_State* L, int path, bool follow) {
+    lua_pushcfunction(L, Stat);
+    lua_pushvalue(L, path);
+    lua_createtable(L, 0, 1);
+    lua_pushboolean(L, follow); lua_setfield(L, -2, "follow");
+    lua_call(L, 2, 1);
+    return lua_gettop(L);
+}
+
+static int Write(lua_State* L) {
+    luaL_checktype(L, 2, LUA_TSTRING);
+    size_t size;
+    const char* bytes = lua_tolstring(L, 2, &size);
+    bool parents = Option(L, 3, "parents", true);
+    static const char* const policies[] = {"error", "skip", "replace", NULL};
+    if (lua_isnoneornil(L, 3)) lua_pushnil(L); else lua_getfield(L, 3, "if_exists");
+    int policy = luaL_checkoption(L, -1, "replace", policies); lua_pop(L, 1);
+    State* state = NewState(L);
+    PathChar* path = Path(L, state, 0, 1);
+#ifdef _WIN32
+    size_t length = wcslen(path);
+    bool trailing_separator = path[length - 1] == '/' || path[length - 1] == '\\';
+#else
+    size_t length = strlen(path);
+    bool trailing_separator = path[length - 1] == '/';
+#endif
+    if (trailing_separator) return luaL_error(L, "fs.write: %s: expected a file path", lua_tostring(L, 1));
+    int info = Inspect(L, 1, false);
+    if (!lua_isnil(L, info)) {
+        if (policy == 1) { lua_pushboolean(L, false); return 1; }
+        if (policy == 0) return luaL_error(L, "fs.write: %s already exists", lua_tostring(L, 1));
+        lua_getfield(L, info, "type");
+        bool link = strcmp(lua_tostring(L, -1), "symlink") == 0;
+        lua_pop(L, 1);
+        if (link) {
+            lua_pushcfunction(L, Realpath); lua_pushvalue(L, 1); lua_call(L, 1, 1);
+            int resolved = lua_gettop(L);
+            free(state->paths[0]); state->paths[0] = NULL;
+            path = Path(L, state, 0, resolved);
+            info = Inspect(L, resolved, true);
+        }
+        lua_getfield(L, info, "type");
+        bool regular = strcmp(lua_tostring(L, -1), "file") == 0;
+        lua_pop(L, 1);
+        if (!regular) return luaL_error(L, "fs.write: %s: expected a regular file", lua_tostring(L, 1));
+    }
+#ifndef _WIN32
+    mode_t mode;
+    if (lua_isnil(L, info)) {
+        mode_t mask = umask(0); umask(mask);
+        mode = 0666 & ~mask;
+    } else {
+        lua_getfield(L, info, "mode"); mode = (mode_t)lua_tointeger(L, -1); lua_pop(L, 1);
     }
 #endif
+    if (parents) {
+        FsError error = CreateParents(path);
+        if (error) return Fail(L, "write", lua_tostring(L, 1), error);
+    }
+    OpenTemporary(L, state);
+    if (fwrite(bytes, 1, size, state->file) != size) return FileError(L, "write", errno);
+    // Publish only after both buffered output and closing have succeeded.
+    if (fflush(state->file) != 0) return FileError(L, "write", errno);
+#ifndef _WIN32
+    if (fchmod(fileno(state->file), mode) < 0) return FileError(L, "write", errno);
+#endif
+    int close_error = CloseFile(state);
+    if (close_error) return FileError(L, "write", close_error);
+    FsError error = MovePath(state->paths[2], path, policy == 2);
+    if (error) {
+        if (policy == 1 && Exists(error)) { lua_pushboolean(L, false); return 1; }
+        return Fail(L, "write", lua_tostring(L, 1), error);
+    }
+    state->temporary = false;
     lua_pushboolean(L, true);
     return 1;
 }
@@ -532,7 +718,7 @@ void RegisterFs(lua_State* L) {
     lua_pop(L, 1);
     const luaL_Reg functions[] = {
         {"stat", Stat}, {"realpath", Realpath}, {"list", List}, {"mkdir", Mkdir}, {"remove", Remove},
-        {"rename", Rename}, {"chmod", Chmod}, {NULL, NULL},
+        {"rename", Rename}, {"chmod", Chmod}, {"read", Read}, {"write", Write}, {NULL, NULL},
     };
     luaL_newlib(L, functions);
     lua_setglobal(L, "fs");

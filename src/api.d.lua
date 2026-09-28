@@ -75,6 +75,8 @@
 ---@field mode integer Unix permission bits (0777 mask); 0 on Windows, where chmod is a no-op.
 
 ---@class dotcmd.Fs
+---@field read fun(path: string): string? Reads the whole file as binary bytes; nil when missing, other failures raise.
+---@field write fun(path: string, bytes: string, options?: dotcmd.WriteOptions): boolean Atomic whole-file write; true on success, false only when skipped. Checks writing and closing; does not sync to durable storage.
 ---@field stat fun(path: string, options?: {follow?: boolean}): dotcmd.Stat? Missing paths return nil; follow defaults to true.
 ---@field realpath fun(path: string): string Absolute path with symlinks resolved; the path must exist. Raises on failure. Windows returns an extended-length path.
 ---@field list fun(path: string): fun(): string? Unsorted entry names for a generic for loop.
@@ -84,6 +86,11 @@
 ---@field chmod fun(path: string, mode: integer|"+x") Sets Unix permission bits (0 through 0777), or adds execute bits allowed by umask with "+x"; no-op on Windows.
 
 ---@alias dotcmd.IfExists "error"|"skip"|"replace"
+
+---@class dotcmd.WriteOptions
+---Replacement changes file identity: other hardlinks retain the previous file.
+---@field parents? boolean Create parent directories; defaults to true.
+---@field if_exists? dotcmd.IfExists Defaults to replace, without reading or comparing existing contents. Replacement follows existing symlinks (dangling links raise) and preserves Unix permissions. Error and skip apply to any existing entry, including a symlink.
 
 ---@class dotcmd.ExtractOptions
 ---@field if_exists? dotcmd.IfExists Defaults to error. Replacement swaps trees on Unix; Windows moves the old tree aside before publication.

@@ -117,8 +117,7 @@ return {
     unwind = function(path)
         local value = { exit_code = 19, message = "before cleanup" }
         local cleanup <close> = setmetatable({}, { __close = function()
-            local file <close> = assert(io.open(path, "w"))
-            file:write("closed")
+            fs.write(path, "closed")
             value.exit_code, value.message = 99, "after cleanup"
         end })
         error(value)

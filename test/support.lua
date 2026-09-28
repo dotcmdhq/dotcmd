@@ -1,14 +1,12 @@
 local t = {}
 
 function t.read(path)
-    local file <close> = assert(io.open(path, "rb"))
-    return assert(file:read("a"))
+    local bytes = fs.read(path)
+    assert(bytes, "missing file: " .. path)
+    return bytes
 end
 
-function t.write(path, bytes)
-    local file <close> = assert(io.open(path, "wb"))
-    assert(file:write(bytes))
-end
+t.write = fs.write
 
 function t.normalized(path)
     return (path:gsub("\\", "/"):gsub("/%./", "/"):gsub("/+$", ""))

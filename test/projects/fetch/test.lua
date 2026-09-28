@@ -189,9 +189,7 @@ end)
 test("fetch prepared results are shared across processes with identical stripped bytecode", function()
     local input, hash = seed("shared preparation", "shared-prep.txt")
     local source = [[return function(input, output)
-    local from <close> = assert(io.open(input, "rb"))
-    local to <close> = assert(io.open(output, "wb"))
-    assert(to:write(from:read("a"):upper()))
+    fs.write(output, assert(fs.read(input)):upper())
 end]]
     local output = fetch { url = "https://127.0.0.1/shared-prep.txt", sha256 = hash,
         prepare = assert(load(source, "@first-project.lua"))() }

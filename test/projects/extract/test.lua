@@ -104,7 +104,11 @@ end)
 test("extract preserves forward hardlinks and rejects missing targets", function()
     extract { path = fixture("hard", { { name = "sdk/alias", type = "1", link = "sdk/file" }, { name = "sdk/file", data = "contents" } }), strip_components = 1 }
     assert(t.read("hard/alias") == "contents" and t.read("hard/file") == "contents")
-    t.write("hard/file", "changed"); assert(t.read("hard/alias") == "changed")
+    -- Modify the shared inode; atomic replacement would detach this hardlink.
+    local file <close> = assert(io.open("hard/file", "wb"))
+    assert(file:write("changed"))
+    assert(file:close())
+    assert(t.read("hard/alias") == "changed")
     fails("hard.tar", { strip_components = 1, include = { "sdk/alias" } })
     fails(fixture("hard-cycle", { { name = "a", type = "1", link = "b" }, { name = "b", type = "1", link = "a" } }))
 end)

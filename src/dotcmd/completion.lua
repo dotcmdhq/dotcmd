@@ -179,28 +179,6 @@ local function env(name)
     return value ~= "" and value or nil
 end
 
-local function read(path)
-    if not fs.stat(path) then return "" end
-    local file <close> = assert(io.open(path, "rb"))
-    return assert(file:read("a"))
-end
-
-local function write(path, contents)
-    if read(path) == contents then return end
-    local info = fs.stat(path, { follow = false })
-    if info and info.type == "symlink" then path = fs.realpath(path) end
-    info = fs.stat(path)
-    fs.mkdir(assert(path:match("^(.*)[/\\]")))
-    local temp = path .. ".tmp-" .. ("%016x"):format(math.random(0))
-    local cleanup <close> = setmetatable({}, { __close = function() fs.remove(temp) end })
-    do
-        local file <close> = assert(io.open(temp, "wb"))
-        assert(file:write(contents))
-    end
-    if info then fs.chmod(temp, info.mode) end
-    fs.rename(temp, path, { if_exists = "replace" })
-end
-
 local function quote(path, shell)
     if shell == "powershell" then return "'" .. path:gsub("'", "''") .. "'" end
     return "'" .. path:gsub("'", "'\\''") .. "'"
@@ -242,7 +220,7 @@ function completion.setup(scripts, shell, detect_shell)
     -- Validate every profile before changing any file.
     local updates = {}
     for _, path in ipairs(profiles) do
-        local text = read(path)
+        local text = fs.read(path) or ""
         assert(not text:find("\0", 1, true) and (family ~= "powershell" or utf8.len(text)),
             "profile must use UTF-8: " .. path)
         -- Windows PowerShell 5.1 otherwise reads UTF-8 paths using the ANSI code page.
@@ -261,8 +239,8 @@ function completion.setup(scripts, shell, detect_shell)
         end
         updates[#updates + 1] = { path, text }
     end
-    write(target, scripts[family])
-    for _, update in ipairs(updates) do write(update[1], update[2]) end
+    fs.write(target, scripts[family])
+    for _, update in ipairs(updates) do fs.write(update[1], update[2]) end
     print("Installed " .. shell .. " completions: " .. target)
     for _, path in ipairs(profiles) do print("Configured: " .. path) end
     print("Open a new " .. shell .. " shell, or enable completions now by running:")

@@ -62,8 +62,13 @@ local function build(mode)
         },
     }
 
-    local args = {
+    local cmake_command = {
         cmake,
+        cwd = root,
+        env = env,
+    }
+    local configure = {
+        cmake_command,
         "-S",
         windows and root:gsub("\\", "/") or root,
         "-B",
@@ -73,8 +78,6 @@ local function build(mode)
         "-DCMAKE_MAKE_PROGRAM=" .. (windows and ninja:gsub("\\", "/") or ninja),
         "-DCMAKE_BUILD_TYPE=" .. (mode == "debug" and "Debug" or "MinSizeRel"),
         "-DDOTCMD_VERSION=" .. (os.getenv("DOTCMD_VERSION") or "dev"),
-        cwd = root,
-        env = env,
     }
 
     -- Supply the compiler. CMake uses Apple's installed toolchain on macOS.
@@ -98,9 +101,9 @@ local function build(mode)
         }
         env.ZIG_GLOBAL_CACHE_DIR = host.cache_dir .. "/zig"
         env.ZIG_LOCAL_CACHE_DIR = output .. "/zig"
-        args[#args + 1] = "-DCMAKE_TOOLCHAIN_FILE=" .. root .. "/cmake/zig.cmake"
-        args[#args + 1] = "-DDOTCMD_ZIG=" .. toolchain .. "/zig"
-        args[#args + 1] = "-DDOTCMD_ZIG_TARGET=" .. arch .. "-linux-musl"
+        configure[#configure + 1] = "-DCMAKE_TOOLCHAIN_FILE=" .. root .. "/cmake/zig.cmake"
+        configure[#configure + 1] = "-DDOTCMD_ZIG=" .. toolchain .. "/zig"
+        configure[#configure + 1] = "-DDOTCMD_ZIG_TARGET=" .. arch .. "-linux-musl"
     elseif windows then
         local mingw_config = {
             version = "20251216",
@@ -118,19 +121,19 @@ local function build(mode)
                 extract { path = input, to = output, strip_components = 1 }
             end,
         }
-        args[#args + 1] = "-DCMAKE_C_COMPILER=" ..
+        configure[#configure + 1] = "-DCMAKE_C_COMPILER=" ..
             toolchain:gsub("\\", "/") .. "/bin/" .. arch .. "-w64-mingw32-clang.exe"
-        args[#args + 1] = "-DCMAKE_CXX_COMPILER=" ..
+        configure[#configure + 1] = "-DCMAKE_CXX_COMPILER=" ..
             toolchain:gsub("\\", "/") .. "/bin/" .. arch .. "-w64-mingw32-clang++.exe"
-        args[#args + 1] = "-DCMAKE_RC_COMPILER=" ..
+        configure[#configure + 1] = "-DCMAKE_RC_COMPILER=" ..
             toolchain:gsub("\\", "/") .. "/bin/" .. arch .. "-w64-mingw32-windres.exe"
     end
 
     -- Configure and build locally; CMake owns dependencies and incremental builds.
 
-    exec(args)
-    exec { cmake, "--build", output, "--parallel", "4", cwd = root, env = env }
-    return cmake
+    exec(configure)
+    exec { cmake_command, "--build", output, "--parallel", "4" }
+    return cmake_command
 end
 
 ---@type dotcmd.Tasks
@@ -163,9 +166,9 @@ Downloads the required build tools and builds into target/<mode>.
         description = "Build and test .cmd in fixture projects",
         args = {},
         run = function()
-            local cmake = build()
-            exec { cmake, "--build", root .. "/target/release", "--target", "test",
-                cwd = root, env = { CTEST_OUTPUT_ON_FAILURE = "1" } }
+            local cmake_command = build()
+            exec { cmake_command, "--build", root .. "/target/release", "--target", "test",
+                env = { CTEST_OUTPUT_ON_FAILURE = "1" } }
         end,
     },
 }

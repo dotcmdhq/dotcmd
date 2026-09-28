@@ -22,9 +22,12 @@ function t.symlink(target, path, directory)
     else
         command = { "ln", "-s", target, path }
     end
-    command.stdout, command.stderr = "capture", "capture"
-    command.check = false
-    local result = exec(command)
+    local result = exec {
+        command,
+        stdout = "capture",
+        stderr = "capture",
+        check = false,
+    }
     if host.os == "windows" and result.code ~= 0
         and (result.stdout .. result.stderr):lower():find("privilege", 1, true) then
         print("SKIP symlink creation requires Windows Developer Mode or privileges")
@@ -39,18 +42,21 @@ function t.command(project, ...)
 end
 
 function t.run_project(project, config, ...)
-    local options
+    local command
     if type(config) == "table" then
-        options = t.command(project, ...)
+        command = t.command(project, ...)
     else
-        options = t.command(project, config, ...)
+        command = t.command(project, config, ...)
         config = {}
     end
-    options.cwd = config.cwd or project
-    options.env = config.env
-    options.stdout = "capture"; options.stderr = "capture"
-    options.check = false
-    return exec(options)
+    return exec {
+        command,
+        cwd = config.cwd or project,
+        env = config.env,
+        stdout = "capture",
+        stderr = "capture",
+        check = false,
+    }
 end
 
 function t.project(name, source)

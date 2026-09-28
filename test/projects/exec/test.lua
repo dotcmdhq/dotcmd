@@ -48,6 +48,43 @@ test("exec environment overlays and removal", function()
         ("unexpected environment: %q"):format(result.stdout))
 end)
 
+test("exec composes arguments and environment from inner to outer", function()
+    local inner = t.command(child, "env", "DOTCMD_COMPOSE_A", "DOTCMD_COMPOSE_B", "DOTCMD_COMPOSE_C")
+    inner.env = { DOTCMD_COMPOSE_A = "inner", DOTCMD_COMPOSE_B = "inner", DOTCMD_COMPOSE_C = "inner",
+        DOTCMD_COMPOSE_D = "inner" }
+    inner.stdin, inner.stdout, inner.stderr, inner.check = "invalid", "invalid", "invalid", "invalid"
+    local middle = { inner, "DOTCMD_COMPOSE_D", "DOTCMD_COMPOSE_E" }
+    middle.env = { DOTCMD_COMPOSE_B = "middle", DOTCMD_COMPOSE_C = false, DOTCMD_COMPOSE_E = "middle" }
+    middle.stdin, middle.stdout, middle.stderr, middle.check = "invalid", "invalid", "invalid", "invalid"
+    local outer = { middle, "DOTCMD_COMPOSE_F" }
+    outer.env = { DOTCMD_COMPOSE_C = "outer", DOTCMD_COMPOSE_D = false, DOTCMD_COMPOSE_F = "outer" }
+    outer.stdout = "capture"
+    local result = exec(outer)
+    assert(result.stdout:gsub("\r\n", "\n") == "inner\nmiddle\nouter\n<missing>\nmiddle\nouter\n", result.stdout)
+end)
+
+test("exec uses the outermost specified cwd across command layers", function()
+    local inner_cwd = host.project_dir .. "/compose inner"; fs.mkdir(inner_cwd)
+    local outer_cwd = host.project_dir .. "/compose outer"; fs.mkdir(outer_cwd)
+    local inner = t.command(child, "cwd"); inner.cwd = inner_cwd
+    local inherited = { inner, stdout = "capture" }
+    local result = exec(inherited)
+    assert(t.normalized(result.stdout:gsub("[\r\n]+$", "")) == t.normalized(inner_cwd))
+    local overridden = { inherited, cwd = outer_cwd, stdout = "capture" }
+    result = exec(overridden)
+    assert(t.normalized(result.stdout:gsub("[\r\n]+$", "")) == t.normalized(outer_cwd))
+end)
+
+test("exec reads check only from the outermost command", function()
+    local inner = t.command(child, "status", "17")
+    inner.check = false; inner.stderr = "capture"
+    local checked = { inner, stderr = "capture" }
+    t.assert_error("child failure", function() exec(checked) end)
+    local unchecked = { checked, stderr = "capture", check = false }
+    local result = exec(unchecked)
+    assert(result.code == 17 and result.stderr == "child failure")
+end)
+
 test("exec cwd and output file redirection", function()
     local cwd = host.project_dir .. "/output"; fs.mkdir(cwd)
     local options = t.command(child, "cwd"); options.cwd = cwd; options.stdout = "capture"

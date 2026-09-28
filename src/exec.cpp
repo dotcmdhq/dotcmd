@@ -247,49 +247,29 @@ static const NativeChar* Environment(Process* p, const NativeChar* name) {
     return NULL;
 }
 
-static void ReadEnvironment(lua_State* L, Process* p, int options) {
-    // Reserve room for all inherited entries and all Lua overrides.
+static size_t CountEnvironmentOverrides(lua_State* L, int inner) {
     size_t extra = 0;
-    if (options) {
-        lua_getfield(L, options, "env");
+    for (int layer = 1; layer <= inner; ++layer) {
+        lua_getfield(L, layer, "env");
         if (!lua_isnil(L, -1)) {
             luaL_checktype(L, -1, LUA_TTABLE);
             lua_pushnil(L);
-            while (lua_next(L, -2)) { ++extra; lua_pop(L, 1); }
+            while (lua_next(L, -2)) {
+                if (extra == SIZE_MAX) luaL_error(L, "exec: out of memory");
+                ++extra;
+                lua_pop(L, 1);
+            }
         }
-    } else lua_pushnil(L);
-    int overrides = lua_gettop(L);
-    size_t count = 0;
-#ifdef _WIN32
-    wchar_t* inherited = GetEnvironmentStringsW();
-    if (!inherited) luaL_error(L, "exec: cannot read environment");
-    for (const wchar_t* e = inherited; *e; e += wcslen(e) + 1) ++count;
-#else
-    char** inherited = environ;
-    while (inherited[count]) ++count;
-#endif
-    p->env = (NativeChar**)calloc(count + extra + 1, sizeof(NativeChar*));
-    bool copied = p->env != NULL;
-#ifdef _WIN32
-    const wchar_t* e = inherited;
-#endif
-    for (size_t i = 0; copied && i < count; ++i) {
-#ifndef _WIN32
-        const char* e = inherited[i];
-#endif
-        size_t bytes = (Length(e) + 1) * sizeof(NativeChar);
-        p->env[i] = (NativeChar*)malloc(bytes);
-        if (!p->env[i]) copied = false;
-        else memcpy(p->env[i], e, bytes);
-#ifdef _WIN32
-        e += wcslen(e) + 1;
-#endif
+        lua_pop(L, 1);
     }
-#ifdef _WIN32
-    FreeEnvironmentStringsW(inherited);
-#endif
-    if (!copied) luaL_error(L, "exec: out of memory");
-    if (lua_isnil(L, overrides)) { lua_pop(L, 1); return; }
+    return extra;
+}
+
+static void ApplyEnvironment(lua_State* L, Process* p, int layer, size_t* count_pointer) {
+    lua_getfield(L, layer, "env");
+    if (lua_isnil(L, -1)) { lua_pop(L, 1); return; }
+    int overrides = lua_gettop(L);
+    size_t count = *count_pointer;
     lua_pushnil(L);
     while (lua_next(L, overrides)) {
         const char* name = String(L, -2);
@@ -315,6 +295,49 @@ static void ReadEnvironment(lua_State* L, Process* p, int options) {
         lua_pop(L, 2);
     }
     lua_pop(L, 1);
+    *count_pointer = count;
+}
+
+static void ReadEnvironment(lua_State* L, Process* p, int inner) {
+    // Reserve room for all inherited entries and every command-layer override.
+    size_t extra = CountEnvironmentOverrides(L, inner);
+    size_t count = 0;
+#ifdef _WIN32
+    wchar_t* inherited = GetEnvironmentStringsW();
+    if (!inherited) luaL_error(L, "exec: cannot read environment");
+    for (const wchar_t* e = inherited; *e; e += wcslen(e) + 1) ++count;
+#else
+    char** inherited = environ;
+    while (inherited[count]) ++count;
+#endif
+    if (extra >= SIZE_MAX - count || count + extra + 1 > SIZE_MAX / sizeof(NativeChar*)) {
+#ifdef _WIN32
+        FreeEnvironmentStringsW(inherited);
+#endif
+        luaL_error(L, "exec: out of memory");
+    }
+    p->env = (NativeChar**)calloc(count + extra + 1, sizeof(NativeChar*));
+    bool copied = p->env != NULL;
+#ifdef _WIN32
+    const wchar_t* e = inherited;
+#endif
+    for (size_t i = 0; copied && i < count; ++i) {
+#ifndef _WIN32
+        const char* e = inherited[i];
+#endif
+        size_t bytes = (Length(e) + 1) * sizeof(NativeChar);
+        p->env[i] = (NativeChar*)malloc(bytes);
+        if (!p->env[i]) copied = false;
+        else memcpy(p->env[i], e, bytes);
+#ifdef _WIN32
+        e += wcslen(e) + 1;
+#endif
+    }
+#ifdef _WIN32
+    FreeEnvironmentStringsW(inherited);
+#endif
+    if (!copied) luaL_error(L, "exec: out of memory");
+    for (int layer = inner; layer >= 1; --layer) ApplyEnvironment(L, p, layer, &count);
 }
 
 static void ReadStream(lua_State* L, int options, const char* name, Stream* stream, bool input, bool spawn) {
@@ -740,11 +763,41 @@ static int CloseGuard(lua_State* L) {
     return 0;
 }
 
+// Table commands form a chain through index 1. Nested tables remain on the Lua
+// stack at consecutive indices so construction needs no separately owned list.
+static int ReadCommandLayers(lua_State* L, int supplied, size_t* count_pointer) {
+    if (!lua_istable(L, 1)) {
+        if (!supplied) luaL_error(L, "exec: executable is required");
+        *count_pointer = (size_t)supplied;
+        return 0;
+    }
+    if (supplied != 1) luaL_error(L, "exec: table form accepts one argument");
+    size_t count = 0;
+    int layer = 1;
+    for (;;) {
+        size_t length = lua_rawlen(L, layer);
+        if (!length) luaL_error(L, "exec: executable is required");
+        luaL_checkstack(L, 1, "too many nested commands");
+        lua_rawgeti(L, layer, 1);
+        bool nested = lua_istable(L, -1);
+        size_t added = nested ? length - 1 : length;
+        if (added > SIZE_MAX - count) luaL_error(L, "exec: out of memory");
+        count += added;
+        if (nested) {
+            layer = lua_gettop(L);
+        } else {
+            String(L, -1);
+            lua_pop(L, 1);
+            *count_pointer = count;
+            return layer;
+        }
+    }
+}
+
 static Process* NewProcess(lua_State* L, bool spawn) {
     int supplied = lua_gettop(L);
-    bool options = lua_istable(L, 1);
-    size_t count = options ? lua_rawlen(L, 1) : (size_t)supplied;
-    if (!count) luaL_error(L, "exec: executable is required");
+    size_t count = 0;
+    int inner = ReadCommandLayers(L, supplied, &count);
     Process* p = (Process*)lua_newuserdatauv(L, sizeof(Process), 1);
     memset(p, 0, sizeof(*p));
     p->check = !spawn;
@@ -763,22 +816,44 @@ static Process* NewProcess(lua_State* L, bool spawn) {
     lua_toclose(L, -1);
     int guard_index = lua_gettop(L);
     p->count = count;
+    if (count == SIZE_MAX || count + 1 > SIZE_MAX / sizeof(char*)) luaL_error(L, "exec: out of memory");
     p->args = (char**)calloc(count + 1, sizeof(char*));
     if (!p->args) luaL_error(L, "exec: out of memory");
-    for (size_t i = 0; i < count; ++i) {
-        if (options) lua_rawgeti(L, 1, (lua_Integer)i + 1);
-        const char* value = String(L, options ? -1 : (int)i + 1);
-        size_t size = strlen(value) + 1;
-        p->args[i] = (char*)Allocate(L, size);
-        memcpy(p->args[i], value, size);
-        if (options) lua_pop(L, 1);
+    size_t argument = 0;
+    if (inner) {
+        for (int layer = inner; layer >= 1; --layer) {
+            size_t length = lua_rawlen(L, layer);
+            size_t first = layer == inner ? 1 : 2;
+            for (size_t i = first; i <= length; ++i) {
+                lua_rawgeti(L, layer, (lua_Integer)i);
+                const char* value = String(L, -1);
+                size_t size = strlen(value) + 1;
+                p->args[argument] = (char*)Allocate(L, size);
+                memcpy(p->args[argument++], value, size);
+                lua_pop(L, 1);
+            }
+        }
+    } else {
+        for (int i = 1; i <= supplied; ++i) {
+            const char* value = String(L, i);
+            size_t size = strlen(value) + 1;
+            p->args[argument] = (char*)Allocate(L, size);
+            memcpy(p->args[argument++], value, size);
+        }
     }
     if (!p->args[0][0]) luaL_error(L, "exec: executable must not be empty");
-    if (options) {
-        if (supplied != 1) luaL_error(L, "exec: table form accepts one argument");
-        lua_getfield(L, 1, "cwd");
-        if (!lua_isnil(L, -1)) p->cwd = Native(L, String(L, -1));
-        lua_pop(L, 1);
+    if (inner) {
+        // cwd composes; the outermost command layer that specifies it wins.
+        for (int layer = 1; layer <= inner; ++layer) {
+            lua_getfield(L, layer, "cwd");
+            if (!lua_isnil(L, -1)) {
+                p->cwd = Native(L, String(L, -1));
+                lua_pop(L, 1);
+                break;
+            }
+            lua_pop(L, 1);
+        }
+        // Execution behavior belongs only to the directly executed outer table.
         if (!spawn) {
             lua_getfield(L, 1, "check");
             if (!lua_isnil(L, -1)) { luaL_checktype(L, -1, LUA_TBOOLEAN); p->check = lua_toboolean(L, -1); }
@@ -788,7 +863,7 @@ static Process* NewProcess(lua_State* L, bool spawn) {
         ReadStream(L, 1, "stderr", &p->streams[1], false, spawn);
         ReadStream(L, 1, "stdin", &p->streams[2], true, spawn);
     }
-    ReadEnvironment(L, p, options ? 1 : 0);
+    ReadEnvironment(L, p, inner);
     // Preserve output order without flushing unrelated files or process pipes.
     fflush(stdout);
     fflush(stderr);

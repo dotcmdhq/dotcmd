@@ -38,10 +38,13 @@
 ---@alias dotcmd.Output "inherit"|"capture"|"discard"|dotcmd.File
 ---@alias dotcmd.Input "inherit"|"discard"|dotcmd.File
 
----@class dotcmd.ExecOptions
----@field [integer] string Program at index 1, followed by arguments.
----@field cwd? string Child working directory; defaults to the caller's cwd.
----@field env? table<string, string|false> Overlay inherited variables; false removes one.
+---@class dotcmd.Command
+---@field [integer] string|dotcmd.Command Index 1 is a program string or inner command; remaining indexed values are string arguments.
+---@field cwd? string Child working directory; the outermost specified value wins and otherwise defaults to the caller's cwd.
+---@field env? table<string, string|false> Overlay inherited and inner command variables; outer values win and false removes one.
+
+---Execution settings are read only from the command table passed directly to exec, never from inner commands.
+---@class dotcmd.ExecCommand: dotcmd.Command
 ---@field stdin? dotcmd.Input Defaults to inherit. File paths are relative to the child's cwd.
 ---@field stdout? dotcmd.Output Defaults to inherit. File paths are relative to the child's cwd.
 ---@field stderr? dotcmd.Output|"stdout" Defaults to inherit; stdout merges into standard output.
@@ -52,10 +55,8 @@
 ---@field stdout string Present only when captured; annotated as a string to avoid nil checks at capture sites.
 ---@field stderr string Present only when captured; annotated as a string to avoid nil checks at capture sites.
 
----@class dotcmd.SpawnOptions
----@field [integer] string Program at index 1, followed by arguments.
----@field cwd? string Child working directory; defaults to the caller's cwd.
----@field env? table<string, string|false> Overlay inherited variables; false removes one.
+---Execution settings are read only from the command table passed directly to spawn, never from inner commands.
+---@class dotcmd.SpawnCommand: dotcmd.Command
 ---@field stdin? dotcmd.Input|"pipe" Defaults to inherit. File paths are relative to the child's cwd.
 ---@field stdout? dotcmd.Output|"pipe" Defaults to inherit. Output files are truncated.
 ---@field stderr? dotcmd.Output|"pipe"|"stdout" Defaults to inherit; stdout merges into standard output.
@@ -207,16 +208,16 @@ function http(options) end
 
 ---Executes without a shell; returns the exit code and captured output.
 ---Checked nonzero exits raise a table with the child's exit_code and a message.
----@param program string|dotcmd.ExecOptions
+---@param command string|dotcmd.Command|dotcmd.ExecCommand
 ---@param ... string
 ---@return dotcmd.ExecResult
-function exec(program, ...) end
+function exec(command, ...) end
 
 ---Starts without a shell and returns immediately. Startup failures raise; captured output is drained automatically.
----@param program string|dotcmd.SpawnOptions
+---@param command string|dotcmd.Command|dotcmd.SpawnCommand
 ---@param ... string
 ---@return dotcmd.Process
-function spawn(program, ...) end
+function spawn(command, ...) end
 
 ---Hash bytes or a file; returns lowercase hexadecimal.
 ---@param options dotcmd.Sha256Options

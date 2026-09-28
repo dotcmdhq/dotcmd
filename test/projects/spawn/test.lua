@@ -14,6 +14,14 @@ test("spawn accepts both argument forms and inherits streams", function()
     assert(first.stdin == nil and first.stdout == nil and first.stderr == nil)
 end)
 
+test("spawn ignores stream settings on inner commands", function()
+    local inner = t.command(child, "noop")
+    inner.stdin, inner.stdout, inner.stderr = "pipe", "pipe", "pipe"
+    local process <close> = spawn { inner }
+    assert(process.stdin == nil and process.stdout == nil and process.stderr == nil)
+    assert(process:wait().code == 0)
+end)
+
 test("spawn returns before exit and exposes blocking Lua pipe handles", function()
     local options = t.command(child, "hold"); options.stdin = "pipe"; options.stdout = "pipe"
     local process <close> = spawn(options)

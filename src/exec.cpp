@@ -880,14 +880,16 @@ static void CheckResult(lua_State* L, Process* p, bool check) {
         lua_createtable(L, 0, 2);
         lua_pushinteger(L, p->code);
         lua_setfield(L, -2, "exit_code");
-        lua_pushfstring(L, "exec: %s exited with code %I", p->args[0], p->code);
         Stream* error = &p->streams[p->streams[1].mode == Merge ? 0 : 1];
-        if (error->mode == Capture && error->buffer.size) {
-            lua_pushliteral(L, "\n");
-            lua_pushlstring(L, error->buffer.data, error->buffer.size);
-            lua_concat(L, 3);
+        if (error->mode != Inherit) {
+            lua_pushfstring(L, "exec: %s exited with code %I", p->args[0], p->code);
+            if (error->mode == Capture && error->buffer.size) {
+                lua_pushliteral(L, "\n");
+                lua_pushlstring(L, error->buffer.data, error->buffer.size);
+                lua_concat(L, 3);
+            }
+            lua_setfield(L, -2, "message");
         }
-        lua_setfield(L, -2, "message");
         lua_error(L);
     }
 }

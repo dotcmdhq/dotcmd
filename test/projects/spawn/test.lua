@@ -132,6 +132,15 @@ test("spawn wait checks exit status by default and can disable checking", functi
     assert(process:wait { check = false } == result)
 end)
 
+test("spawn wait omits its error message when stderr is inherited", function()
+    local project = t.project("spawn inherited check", ([[return {test = function()
+        local process <close> = spawn(host.executable, "--launcher", %q, "status", "17")
+        process:wait()
+    end}]]):format(child .. "/.cmd"))
+    local result = t.run_project(project, "test")
+    assert(result.code == 17 and result.stdout == "" and result.stderr == "child failure", result.stderr)
+end)
+
 test("spawn kill stops the direct child and can be repeated", function()
     local options = t.command(child, "hold"); options.stdin = "pipe"; options.stdout = "pipe"
     local process <close> = spawn(options)

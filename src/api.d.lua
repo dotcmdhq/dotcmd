@@ -65,7 +65,7 @@
 ---@field stdin file* Present when stdin is piped. Writes block; close it to send EOF.
 ---@field stdout file* Present when stdout is piped. Reads block; callers must drain piped output.
 ---@field stderr file* Present when stderr is piped. Reads block; callers must drain piped output.
----@field wait fun(self: dotcmd.Process, options?: {check?: false}): dotcmd.ExecResult Wait for exit and captured output. check defaults to true; nonzero exits raise a table with message and exit_code. false returns nonzero exits without raising.
+---@field wait fun(self: dotcmd.Process, options?: {check?: false}): dotcmd.ExecResult Wait for exit and captured output. check defaults to true; nonzero exits raise a table with exit_code and, unless effective stderr is inherited, a message. false returns nonzero exits without raising.
 ---@field poll fun(self: dotcmd.Process): dotcmd.ExecResult? Return the completed result, or nil while running or collecting output.
 ---@field kill fun(self: dotcmd.Process) Force-stop the direct child if running, without waiting.
 ---@field close fun(self: dotcmd.Process) Stop the direct child, wait, and close pipes. Also called by <close>; safe to repeat.
@@ -207,7 +207,7 @@ json = nil
 function http(options) end
 
 ---Executes without a shell; returns the exit code and captured output.
----Checked nonzero exits raise a table with the child's exit_code and a message.
+---Checked nonzero exits raise a table with the child's exit_code and, unless effective stderr is inherited, a message.
 ---@param command string|dotcmd.Command|dotcmd.ExecCommand
 ---@param ... string
 ---@return dotcmd.ExecResult

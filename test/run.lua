@@ -45,16 +45,19 @@ return function(repo)
     }
     local certificate = work .. "/test CA ü.pem"
     local server <close> = spawn { server_binary, certificate, repo .. "/test/projects/fetch/sdk.zip", repo .. "/.cmd",
+        host.executable,
         stdin = "pipe", stdout = "pipe", stderr = "capture",
     }
     local server_url = server.stdout:read("l")
-    if not server_url then error(server:wait().stderr) end
+    local server_http_url = server.stdout:read("l")
+    if not server_url or not server_http_url then error(server:wait().stderr) end
 
     local home, cache, appdata = work .. "/home", work .. "/cache", work .. "/appdata"
     fs.mkdir(home)
     local launcher = t.read(repo .. "/.cmd"):gsub("^:; version=[^\n]+", ":; version=test")
     local env = { HOME = home, USERPROFILE = home, XDG_CACHE_HOME = cache, LOCALAPPDATA = appdata,
-        DOTCMD_CACHE_DIR = false, DOTCMD_TEST_URL = server_url, SSL_CERT_FILE = certificate,
+        DOTCMD_CACHE_DIR = false, DOTCMD_TEST_URL = server_url, DOTCMD_TEST_HTTP_URL = server_http_url,
+        SSL_CERT_FILE = certificate,
         SSL_CERT_DIR = false, NO_PROXY = "*", no_proxy = "*",
     }
     t.write(work .. "/support.lua", t.read(repo .. "/test/support.lua"))

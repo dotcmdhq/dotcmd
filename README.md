@@ -1,7 +1,6 @@
 # TODO
 
 - Test symlink metadata, dangling links, and recursive removal around links/cycles. Needs symlink creation in the native filesystem API, including Windows directory links/junctions.
-- Test fresh bootstrap downloads, SHA-256 rejection, and cache reuse. Needs a controlled download source for the launcher.
 - Explore callable plugin factories with a `.task` bootstrap interface so `--plugin <url> [version]` can hash and load a plugin, resolve `latest` by default, and emit a complete pinned constructor declaration.
 - Generate LuaLS definitions from installed plugins for the global `plugin(url, sha256)` function. Collect overloads with literal URLs and source SHA-256s in one definition file, using each plugin chunk's return type, so callers need no type annotation. Keep `@return any` before the overloads and leave the generic parameters unannotated: broad `@param url string`/`@param sha256 string` annotations suppress literal argument suggestions. This shape supports URL and SHA-256 completion and plugin-specific return-type narrowing. Example (replace hash placeholders with the installed plugins' actual hashes):
 

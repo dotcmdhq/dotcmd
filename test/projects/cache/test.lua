@@ -17,6 +17,34 @@ local function run(env)
     options.check = false
     return exec(options)
 end
+local function invoke(project, env)
+    local options = windows
+        and { "cmd.exe", "/d", "/c", "call", project .. "/.cmd", "--cache-dir" }
+        or { "/bin/sh", "-c", "\"$@\"", "dotcmd-test", project .. "/.cmd", "--cache-dir" }
+    options.cwd = project; options.env = env
+    options.stdout = "capture"; options.stderr = "capture"
+    options.check = false
+    return exec(options)
+end
+local function bootstrap_project(name, hash, url)
+    local project = t.project(name)
+    local launcher = t.read(project .. "/.cmd")
+    local key = "sha_" .. host.os .. "_" .. host.arch
+    local count
+    launcher, count = launcher:gsub("(:; " .. key .. "=)[^\r\n]+", "%1" .. hash)
+    assert(count == 1)
+    launcher, count = launcher:gsub('(:; url=")[^"]+(")', "%1" .. url .. "%2")
+    assert(count == 1)
+    launcher, count = launcher:gsub('(set "dotcmd_url=)[^"]+(")', "%1" .. url .. "%2")
+    assert(count == 1)
+    t.write(project .. "/.cmd", launcher)
+    fs.chmod(project .. "/.cmd", "+x")
+    return project
+end
+local function cached_binary(cache)
+    return cache .. "/" .. version .. "/" .. host.os .. "-" .. host.arch
+        .. "/dotcmd" .. (windows and ".exe" or "")
+end
 local function check(root, env)
     -- Seed the launcher cache so it uses the updated binary without a download.
     local directory = root .. "/" .. version .. "/" .. host.os .. "-" .. host.arch
@@ -31,6 +59,34 @@ test("cache uses the OS default in launcher and host", function()
     local root = windows and appdata .. "/dotcmd/Cache"
         or host.os == "macos" and home .. "/Library/Caches/dotcmd" or xdg .. "/dotcmd"
     check(root, environment())
+end)
+
+test("launcher downloads and reuses a verified binary", function()
+    local url = assert(os.getenv("DOTCMD_TEST_HTTP_URL"))
+    local hash = sha256 { path = host.executable }
+    local cache = host.project_dir .. "/bootstrap cache ü"
+    local env = environment(); env.DOTCMD_CACHE_DIR = cache
+    local fresh = bootstrap_project("bootstrap fresh", hash, url .. "/binary")
+    local output = t.success(invoke(fresh, env))
+    assert(t.normalized(output:gsub("\n$", "")) == t.normalized(cache), output)
+    assert(sha256 { path = cached_binary(cache) } == hash)
+
+    local cached = bootstrap_project("bootstrap cached", hash, url .. "/status/500")
+    output = t.success(invoke(cached, env))
+    assert(t.normalized(output:gsub("\n$", "")) == t.normalized(cache), output)
+end)
+
+test("launcher rejects a downloaded binary with the wrong SHA-256", function()
+    local url = assert(os.getenv("DOTCMD_TEST_HTTP_URL"))
+    local cache = host.project_dir .. "/bootstrap mismatch"
+    local env = environment(); env.DOTCMD_CACHE_DIR = cache
+    local project = bootstrap_project("bootstrap wrong hash", string.rep("0", 64), url .. "/binary")
+    t.failure(invoke(project, env), "SHA-256")
+    assert(not fs.stat(cached_binary(cache)))
+    local directory = cache .. "/" .. version .. "/" .. host.os .. "-" .. host.arch
+    if fs.stat(directory) then
+        for name in fs.list(directory) do error("leftover bootstrap file: " .. name) end
+    end
 end)
 
 test("cache falls back when OS environment variables are missing or empty", function()

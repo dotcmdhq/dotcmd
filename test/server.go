@@ -60,6 +60,9 @@ func main() {
 	mux.HandleFunc("/archive", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, os.Args[2])
 	})
+	mux.HandleFunc("/binary", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, os.Args[4])
+	})
 	mux.HandleFunc("/plugin/values", func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `dotcmd_plugin_test_calls = (dotcmd_plugin_test_calls or 0) + 1
 return "value", nil, false, dotcmd_plugin_test_calls, type(fetch) .. ":" .. host.os`)
@@ -98,11 +101,14 @@ return "value", nil, false, dotcmd_plugin_test_calls, type(fetch) .. ":" .. host
 
 	server := httptest.NewTLSServer(mux)
 	defer server.Close()
+	plainServer := httptest.NewServer(mux)
+	defer plainServer.Close()
 	certificate := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
 	if err := os.WriteFile(os.Args[1], certificate, 0644); err != nil {
 		panic(err)
 	}
 	// The listener is already bound to an OS-assigned port before publishing it.
 	fmt.Println(server.URL)
+	fmt.Println(plainServer.URL)
 	io.Copy(io.Discard, os.Stdin)
 }

@@ -543,19 +543,45 @@ static wchar_t* FullPath(lua_State* L, const wchar_t* path) {
     return result;
 }
 
-static wchar_t* ChildPath(lua_State* L, Process* p, const wchar_t* path) {
-    if (path[0] == '/' || path[0] == '\\' || (path[0] && path[1] == ':')) {
-        size_t bytes = (wcslen(path) + 1) * sizeof(wchar_t);
-        wchar_t* result = (wchar_t*)Allocate(L, bytes);
-        memcpy(result, path, bytes);
-        return result;
+static bool Separator(wchar_t character) {
+    return character == '/' || character == '\\';
+}
+
+static size_t RootLength(const wchar_t* path, size_t size) {
+    if (size >= 2 && path[1] == ':') return 2;
+    size_t component = size >= 8 && (path[2] == '?' || path[2] == '.') && Separator(path[3]) &&
+        _wcsnicmp(path + 4, L"UNC", 3) == 0 && Separator(path[7]) ? 8 : 2;
+    for (int i = 0; i < 2; ++i) {
+        while (component < size && Separator(path[component])) ++component;
+        while (component < size && !Separator(path[component])) ++component;
     }
-    size_t a = wcslen(p->cwd), b = wcslen(path);
-    wchar_t* result = (wchar_t*)Allocate(L, (a + b + 2) * sizeof(wchar_t));
-    memcpy(result, p->cwd, a * sizeof(wchar_t));
-    result[a] = '/';
-    memcpy(result + a + 1, path, (b + 1) * sizeof(wchar_t));
-    return result;
+    return component;
+}
+
+static wchar_t* ChildPath(lua_State* L, Process* p, const wchar_t* path, size_t size) {
+    size_t cwd_size = wcslen(p->cwd);
+    bool qualified = size >= 2 && Separator(path[0]) && Separator(path[1]);
+    qualified = qualified || (size >= 3 && path[1] == ':' && Separator(path[2]));
+    size_t prefix = 0;
+    bool separator = false;
+    if (!qualified && size && Separator(path[0])) {
+        prefix = RootLength(p->cwd, cwd_size);
+    } else if (!qualified && !(size >= 2 && path[1] == ':')) {
+        prefix = cwd_size;
+        separator = true;
+    }
+    Buffer result = {};
+    if ((prefix && !Append(&result, p->cwd, prefix * sizeof(wchar_t))) ||
+        (separator && !Append(&result, L"/", sizeof(wchar_t))) ||
+        !Append(&result, path, size * sizeof(wchar_t)) || !Append(&result, L"", sizeof(wchar_t))) {
+        free(result.data);
+        luaL_error(L, "exec: out of memory");
+    }
+    return (wchar_t*)result.data;
+}
+
+static wchar_t* ChildPath(lua_State* L, Process* p, const wchar_t* path) {
+    return ChildPath(L, p, path, wcslen(path));
 }
 
 static int CompareEnvironment(const void* a, const void* b) {
@@ -632,10 +658,10 @@ static void StartProcess(lua_State* L, Process* p) {
             const wchar_t* end = wcschr(path, ';');
             size_t size = end ? (size_t)(end - path) : wcslen(path);
             if (size >= 2 && path[0] == '"' && path[size - 1] == '"') { ++path; size -= 2; }
-            bool absolute_path = size && (path[0] == '/' || path[0] == '\\' || (size > 1 && path[1] == ':'));
-            if (!absolute_path && (!Append(&p->command, p->cwd, wcslen(p->cwd) * sizeof(wchar_t)) ||
-                !Append(&p->command, L"/", sizeof(wchar_t)))) luaL_error(L, "exec: out of memory");
-            if (!Append(&p->command, path, size * sizeof(wchar_t)) || !Append(&p->command, L";", sizeof(wchar_t)))
+            wchar_t* entry = ChildPath(L, p, path, size);
+            bool appended = Append(&p->command, entry, wcslen(entry) * sizeof(wchar_t));
+            free(entry);
+            if (!appended || !Append(&p->command, L";", sizeof(wchar_t)))
                 luaL_error(L, "exec: out of memory");
             path = end ? end + 1 : NULL;
         }

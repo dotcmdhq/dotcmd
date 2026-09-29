@@ -1,5 +1,30 @@
 local child = host.project_dir .. "/child"
 
+local function windows_drive_test(name, fn)
+    if host.os ~= "windows" then return end
+    test(name, function()
+        local target = host.project_dir .. "/" .. name:gsub("[^%w]+", "-")
+        fs.mkdir(target)
+        local parent_drive = host.cwd:match("^([A-Za-z]):")
+        local drive
+        for letter = string.byte("Z"), string.byte("D"), -1 do
+            local candidate = string.char(letter) .. ":"
+            if string.char(letter) ~= parent_drive and not fs.stat(candidate .. "/") then
+                local result = exec { "subst.exe", candidate, target,
+                    stdout = "capture", stderr = "capture", check = false }
+                if result.code == 0 then drive = candidate; break end
+            end
+        end
+        assert(drive, "no drive letter available for Windows path test")
+        local cleanup <close> = setmetatable({}, { __close = function()
+            exec { "subst.exe", drive, "/d", stdout = "discard", stderr = "discard", check = false }
+        end })
+        fs.mkdir(target .. "/cwd")
+        fs.mkdir(target .. "/rooted")
+        fn(drive .. "/cwd", target .. "/rooted")
+    end)
+end
+
 test("exec flushes parent output before inherited child output", function()
     local result = t.run_project(child, "ordered")
     assert(result.code == 0)
@@ -154,6 +179,29 @@ test("exec cwd and output file redirection", function()
     options.stdout = { path = "out.bin" }; options.stderr = { path = "err.bin" }
     assert(exec(options).code == 0)
     assert(t.read("output/out.bin") == "OUT\0\255" and t.read("output/err.bin") == "ERR\0\254")
+end)
+
+windows_drive_test("exec resolves root-relative output on the child drive", function(cwd, rooted)
+    local options = t.command(child, "emit"); options.cwd = cwd
+    options.stdout = { path = "\\rooted\\out.bin" }; options.stderr = "discard"
+    assert(exec(options).code == 0)
+    assert(t.read(rooted .. "/out.bin") == "OUT\0\255")
+end)
+
+windows_drive_test("exec resolves a root-relative executable on the child drive", function(cwd, rooted)
+    t.write(rooted .. "/dotcmd.exe", t.read(host.executable))
+    local options = { "\\rooted\\dotcmd.exe", "--launcher", child .. "/.cmd", "emit", cwd = cwd,
+        stdout = "capture", stderr = "capture" }
+    local result = exec(options)
+    assert(result.stdout == "OUT\0\255" and result.stderr == "ERR\0\254")
+end)
+
+windows_drive_test("exec resolves a root-relative PATH entry on the child drive", function(cwd, rooted)
+    t.write(rooted .. "/dotcmd.exe", t.read(host.executable))
+    local options = { "dotcmd", "--launcher", child .. "/.cmd", "emit", cwd = cwd,
+        env = { PATH = "\\rooted" }, stdout = "capture", stderr = "capture" }
+    local result = exec(options)
+    assert(result.stdout == "OUT\0\255" and result.stderr == "ERR\0\254")
 end)
 
 test("exec exit codes, check, and start failures", function()

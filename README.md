@@ -1,6 +1,5 @@
 # TODO
 
-- Fix Windows `exec` path resolution to use the child's `cwd`: with a parent on `C:` and child on `D:`, redirected `\out.txt` must resolve to `D:\out.txt`. Check executable paths and `PATH` entries too, and add Windows regression tests.
 - Test symlink metadata, dangling links, and recursive removal around links/cycles. Needs symlink creation in the native filesystem API, including Windows directory links/junctions.
 - Test fresh bootstrap downloads, SHA-256 rejection, and cache reuse. Needs a controlled download source for the launcher.
 - Explore callable plugin factories with a `.task` bootstrap interface so `--plugin <url> [version]` can hash and load a plugin, resolve `latest` by default, and emit a complete pinned constructor declaration.

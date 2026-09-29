@@ -4,7 +4,9 @@ struct lua_State;
 // exec(program, ...) or exec{command, ..., cwd, env, stdin, stdout, stderr, check=true}.
 // A table command may contain another command at index 1. Arguments append,
 // environments merge with outer values winning, and the outermost specified cwd wins.
-// false removes an environment variable. Only the outer table supplies streams and check.
+// Environment functions update the effective inner value and receive nil when absent;
+// nil or false results remove a variable. Direct false values remove one too. Only the
+// outer table supplies streams and check.
 // Output streams accept "inherit", "capture", "discard", or {path="file"}; stderr
 // also accepts "stdout". Input accepts "inherit", "discard", or {path="file"}.
 // File paths are relative to the child's cwd; output files are truncated.

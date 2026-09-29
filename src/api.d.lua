@@ -37,11 +37,13 @@
 
 ---@alias dotcmd.Output "inherit"|"capture"|"discard"|dotcmd.File
 ---@alias dotcmd.Input "inherit"|"discard"|dotcmd.File
+---@alias dotcmd.EnvUpdate fun(old: string?): string|false|nil
+---@alias dotcmd.EnvValue string|false|dotcmd.EnvUpdate
 
 ---@class dotcmd.Command
 ---@field [integer] string|dotcmd.Command Index 1 is a program string or inner command; remaining indexed values are string arguments.
 ---@field cwd? string Child working directory; the outermost specified value wins and otherwise defaults to the caller's cwd.
----@field env? table<string, string|false> Overlay inherited and inner command variables; outer values win and false removes one.
+---@field env? table<string, dotcmd.EnvValue> Overlay inherited and inner command variables; outer values win. An update function receives the effective old value, or nil when absent; nil or false removes the variable.
 
 ---Execution settings are read only from the command table passed directly to exec, never from inner commands.
 ---@class dotcmd.ExecCommand: dotcmd.Command

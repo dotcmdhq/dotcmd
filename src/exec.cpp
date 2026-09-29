@@ -223,6 +223,20 @@ static NativeChar* Native(lua_State* L, const char* text) {
 #endif
 }
 
+static void PushNative(lua_State* L, const NativeChar* text) {
+#ifdef _WIN32
+    int size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text, -1, NULL, 0, NULL, NULL);
+    if (!size) luaL_error(L, "exec: invalid Unicode environment value");
+    luaL_Buffer buffer;
+    char* value = luaL_buffinitsize(L, &buffer, (size_t)size);
+    if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text, -1, value, size, NULL, NULL))
+        luaL_error(L, "exec: cannot convert environment value to UTF-8");
+    luaL_pushresultsize(&buffer, (size_t)size - 1);
+#else
+    lua_pushstring(L, text);
+#endif
+}
+
 static size_t Length(const NativeChar* text) {
 #ifdef _WIN32
     return wcslen(text);
@@ -274,16 +288,29 @@ static void ApplyEnvironment(lua_State* L, Process* p, int layer, size_t* count_
     while (lua_next(L, overrides)) {
         const char* name = String(L, -2);
         if (!*name || strchr(name, '=')) luaL_error(L, "exec: invalid environment variable name");
-        bool remove = lua_isboolean(L, -1) && !lua_toboolean(L, -1);
+        NativeChar* native_name = Native(L, name);
+        size_t name_size = Length(native_name);
+        size_t match = 0;
+        while (match < count && !NameMatches(p->env[match], native_name, name_size)) ++match;
+        free(native_name);
+        bool update = lua_isfunction(L, -1);
+        if (update) {
+            lua_pushvalue(L, -1);
+            if (match < count) PushNative(L, p->env[match] + name_size + 1);
+            else lua_pushnil(L);
+            lua_call(L, 1, 1);
+            lua_replace(L, -2);
+        }
+        bool remove = lua_isnil(L, -1) || (lua_isboolean(L, -1) && !lua_toboolean(L, -1));
+        if (!remove && lua_type(L, -1) != LUA_TSTRING) {
+            if (update) luaL_error(L, "exec: environment update for %s must return a string, false, or nil", name);
+            luaL_error(L, "exec: environment variable %s must be a string, false, or an update function", name);
+        }
         if (remove) lua_pushfstring(L, "%s=", name);
         else lua_pushfstring(L, "%s=%s", name, String(L, -1));
         // Own the new entry before doing anything else that can raise.
         p->env[count] = Native(L, lua_tostring(L, -1));
         NativeChar* entry = p->env[count];
-        size_t name_size = 0;
-        while (entry[name_size] != '=') ++name_size;
-        size_t match = 0;
-        while (match < count && !NameMatches(p->env[match], entry, name_size)) ++match;
         if (match < count) {
             free(p->env[match]);
             p->env[match] = p->env[--count];

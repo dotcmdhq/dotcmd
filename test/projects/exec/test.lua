@@ -63,6 +63,65 @@ test("exec composes arguments and environment from inner to outer", function()
     assert(result.stdout:gsub("\r\n", "\n") == "inner\nmiddle\nouter\n<missing>\nmiddle\nouter\n", result.stdout)
 end)
 
+test("exec composes environment update functions from inner to outer", function()
+    local separator = host.os == "windows" and ";" or ":"
+    local executable_dir, executable = host.executable:match("^(.*)[/\\]([^/\\]+)$")
+    assert(executable_dir and executable)
+    local inner = { executable, "--launcher", child .. "/.cmd", "env", "PATH",
+        "DOTCMD_UPDATE_CHAIN", "DOTCMD_UPDATE_REMOVED", "DOTCMD_UPDATE_EMPTY", "DOTCMD_UPDATE_ABSENT" }
+    inner.env = {
+        DOTCMD_UPDATE_CHAIN = function(old)
+            assert(old == nil)
+            return "inner"
+        end,
+        DOTCMD_UPDATE_REMOVED = "inner",
+        DOTCMD_UPDATE_EMPTY = "",
+    }
+    local middle = { inner }
+    middle.env = {
+        DOTCMD_UPDATE_CHAIN = function(old)
+            assert(old == "inner")
+            return old .. "+middle"
+        end,
+        DOTCMD_UPDATE_REMOVED = false,
+        DOTCMD_UPDATE_EMPTY = function(old)
+            assert(old == "")
+        end,
+    }
+    local outer = { middle, stdout = "capture" }
+    local path
+    outer.env = {
+        PATH = function(old)
+            assert(type(old) == "string")
+            path = executable_dir .. separator .. old
+            return path
+        end,
+        DOTCMD_UPDATE_CHAIN = function(old)
+            assert(old == "inner+middle")
+            return old .. "+outer"
+        end,
+        DOTCMD_UPDATE_REMOVED = function(old)
+            assert(old == nil)
+            return "restored"
+        end,
+        DOTCMD_UPDATE_ABSENT = function(old)
+            assert(old == nil)
+            return false
+        end,
+    }
+    local result = exec(outer)
+    assert(result.stdout:gsub("\r\n", "\n") == path .. "\ninner+middle+outer\nrestored\n<missing>\n<missing>\n",
+        result.stdout)
+end)
+
+test("exec rejects invalid environment update results", function()
+    for _, update in ipairs({ function() return true end, function() return 17 end, function() return {} end }) do
+        t.assert_error("must return a string, false, or nil", function()
+            exec { child, env = { DOTCMD_UPDATE_INVALID = update } }
+        end)
+    end
+end)
+
 test("exec uses the outermost specified cwd across command layers", function()
     local inner_cwd = host.project_dir .. "/compose inner"; fs.mkdir(inner_cwd)
     local outer_cwd = host.project_dir .. "/compose outer"; fs.mkdir(outer_cwd)

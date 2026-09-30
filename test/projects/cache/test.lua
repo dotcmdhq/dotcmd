@@ -43,13 +43,13 @@ local function bootstrap_project(name, hash, url)
 end
 local function cached_binary(cache)
     return cache .. "/" .. version .. "/" .. host.os .. "-" .. host.arch
-        .. "/dotcmd" .. (windows and ".exe" or "")
+        .. "/dotcmd" .. host.exe_suffix
 end
 local function check(root, env)
     -- Seed the launcher cache so it uses the updated binary without a download.
     local directory = root .. "/" .. version .. "/" .. host.os .. "-" .. host.arch
     fs.mkdir(directory)
-    local binary = directory .. "/dotcmd" .. (windows and ".exe" or "")
+    local binary = directory .. "/dotcmd" .. host.exe_suffix
     t.write(binary, t.read(host.executable)); fs.chmod(binary, "+x")
     local result = t.success(run(env))
     assert(t.normalized(result:gsub("\n$", "")) == t.normalized(root), result)

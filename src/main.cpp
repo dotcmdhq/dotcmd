@@ -223,13 +223,18 @@ static int Run(lua_State* L) {
     lua_pushcfunction(L, SearchBuiltin);
     lua_rawseti(L, -2, 2); // Replace the Lua filesystem searcher.
     lua_pop(L, 2);
-    lua_createtable(L, 0, 8);
-    SetString(L, "version", DOTCMD_VERSION);
+    lua_createtable(L, 0, 7);
     SetString(L, "os", DOTCMD_OS);
     SetString(L, "arch", DOTCMD_ARCH);
-    SetString(L, "build", DOTCMD_BUILD);
-    SetString(L, "lua_version", LUA_RELEASE);
-    SetString(L, "compiler", DOTCMD_COMPILER);
+#ifdef _WIN32
+    SetString(L, "exe_suffix", ".exe");
+    SetString(L, "path_sep", ";");
+    SetString(L, "dir_sep", "\\");
+#else
+    SetString(L, "exe_suffix", "");
+    SetString(L, "path_sep", ":");
+    SetString(L, "dir_sep", "/");
+#endif
     char* path = ExecutablePath();
     if (!path) return luaL_error(L, "cannot determine executable path");
     SetString(L, "executable", path);
@@ -242,7 +247,8 @@ static int Run(lua_State* L) {
     if (luaL_loadbufferx(L, (const char*)main_lua, sizeof(main_lua), "@embedded/main.lua", "t") != LUA_OK)
         return lua_error(L);
     // Pass private resources as one table to the main.lua chunk.
-    lua_createtable(L, 0, 4);
+    lua_createtable(L, 0, 5);
+    SetString(L, "version", DOTCMD_VERSION);
 #ifdef _WIN32
     lua_pushcfunction(L, DetectShell);
     lua_setfield(L, -2, "detect_shell");

@@ -216,7 +216,7 @@ foreach(shell bash zsh fish powershell)
 endforeach()
 embed("${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY.txt" licenses)
 file(GENERATE OUTPUT "${generated}/$<CONFIG>/build_config.h" CONTENT
-    "#define DOTCMD_VERSION \"${DOTCMD_VERSION}\"\n#define DOTCMD_BUILD \"$<IF:$<CONFIG:Debug>,debug,release>\"\n#define DOTCMD_COMPILER \"${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}\"\n")
+    "#define DOTCMD_VERSION \"${DOTCMD_VERSION}\"\n")
 
 # Compile the host and link static dependencies.
 # The host uses C++ syntax but no C++ standard library or runtime.

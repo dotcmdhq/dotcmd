@@ -225,7 +225,7 @@ local adapter_cache = host.project_dir .. "/adapter-cache"
 local version = t.read(child .. "/.cmd"):match("^:; version=([^\r\n]+)")
 local bin_dir = adapter_cache .. "/" .. version .. "/" .. host.os .. "-" .. host.arch
 fs.mkdir(bin_dir)
-local binary = bin_dir .. "/dotcmd" .. (host.os == "windows" and ".exe" or "")
+local binary = bin_dir .. "/dotcmd" .. host.exe_suffix
 t.write(binary, t.read(host.executable)); fs.chmod(binary, "+x")
 t.write(child .. "/two files.txt", "")
 fs.mkdir(child .. "/two dirs")

@@ -1,4 +1,4 @@
-return function(launcher, version)
+return function(launcher, version, current_version)
     local target = fs.realpath(launcher)
     local info = assert(fs.stat(target))
     local base = "https://github.com/dotcmdhq/dotcmd/releases/"
@@ -8,7 +8,7 @@ return function(launcher, version)
             "could not resolve latest release tag")
         version = tag:gsub("%%(%x%x)", function(hex) return string.char(tonumber(hex, 16)) end)
     end
-    if version == host.version then
+    if version == current_version then
         print(launcher .. " is already up to date (" .. version .. ")")
         return
     end

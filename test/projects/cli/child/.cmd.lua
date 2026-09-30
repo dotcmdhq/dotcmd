@@ -1,4 +1,10 @@
 assert(type(host) == "table") -- Available while loading the project, not just in tasks.
+assert(host.version == nil and host.build == nil and host.compiler == nil and host.lua_version == nil)
+if host.os == "windows" then
+    assert(host.exe_suffix == ".exe" and host.path_sep == ";" and host.dir_sep == "\\")
+else
+    assert(host.exe_suffix == "" and host.path_sep == ":" and host.dir_sep == "/")
+end
 assert(select("#", ...) == 0)
 local function hex(value)
     return (value:gsub(".", function(c) return ("%02x"):format(c:byte()) end))

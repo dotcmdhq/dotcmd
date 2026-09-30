@@ -24,7 +24,7 @@ test("http preserves repeated request and response headers", function()
     local cookies = response.headers["set-cookie"]
     assert(#cookies == 2 and cookies[1] == "first=1" and cookies[2] == "second=2")
     assert(http { url = url .. "/echo", headers = { ["X-Test"] = "single" } }.headers["x-seen"][1] == "single")
-    assert(response.headers["x-user-agent"][1] == "dotcmd/" .. host.version)
+    assert(response.headers["x-user-agent"][1] == "dotcmd/" .. t.version())
     response = http { url = url .. "/echo", headers = { ["User-Agent"] = "custom/1.0" } }
     assert(response.headers["x-user-agent"][1] == "custom/1.0")
 end)

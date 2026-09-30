@@ -26,7 +26,6 @@ local function run(options, ...)
     for k, v in pairs(fs) do env.fs[k] = v end
     for k, v in pairs(options.fs or {}) do env.fs[k] = v end
     env.host.cwd = project
-    env.host.version = options.version or "1.0.0"
     local result = { stdout = "", stderr = "", path = path, requests = {} }
     local stdout <close> = assert(io.tmpfile())
     env.io.stdout = stdout
@@ -52,7 +51,7 @@ local function run(options, ...)
         t.write(request.to, options.replacement or replacement)
         return {}
     end
-    assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({})
+    assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({ version = options.version or "1.0.0" })
     local args = { ... }
     table.insert(args, 1, path)
     table.insert(args, 1, "--launcher")
@@ -81,7 +80,7 @@ return {}
     for _, args in ipairs({ { "--version" }, { "--help" }, { "--help", "--update" } }) do
         assert(not t.success(t.run_project(project, table.unpack(args))):find("loading updater", 1, true))
     end
-    local output = t.success(t.run_project(project, "--update", host.version))
+    local output = t.success(t.run_project(project, "--update", t.version()))
     assert(output:sub(1, 16) == "loading updater\n")
     assert(output:find("is already up to date", 1, true))
 end)
@@ -258,7 +257,7 @@ return {}
     for _, version in ipairs({ "1.0.0", "2.0.0", "0.1.36" }) do
         local directory = cache .. "/" .. version .. "/" .. host.os .. "-" .. host.arch
         fs.mkdir(directory)
-        local binary = directory .. "/dotcmd" .. (windows and ".exe" or "")
+        local binary = directory .. "/dotcmd" .. host.exe_suffix
         t.write(binary, t.read(host.executable)); fs.chmod(binary, "+x")
     end
     -- Different byte offsets and line endings expose Windows batch resumption bugs.

@@ -37,8 +37,8 @@ return function(repo)
             extract { path = input, to = output, strip_components = 1 }
         end,
     }
-    local server_binary = work .. "/http-server" .. (windows and ".exe" or "")
-    exec { go .. "/bin/go" .. (windows and ".exe" or ""), "build", "-trimpath", "-o", server_binary,
+    local server_binary = work .. "/http-server" .. host.exe_suffix
+    exec { go .. "/bin/go" .. host.exe_suffix, "build", "-trimpath", "-o", server_binary,
         repo .. "/test/server.go",
         env = { GOROOT = go, GOTOOLCHAIN = "local", GOENV = "off", CGO_ENABLED = "0",
             GOCACHE = host.cache_dir .. "/go-build", GOOS = go_os, GOARCH = go_arch },

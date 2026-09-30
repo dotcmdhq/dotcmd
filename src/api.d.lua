@@ -3,10 +3,9 @@
 ---@class dotcmd.Host
 ---@field os "linux"|"macos"|"windows"
 ---@field arch "x64"|"arm64"
----@field version string
----@field build "debug"|"release"
----@field lua_version string
----@field compiler string
+---@field exe_suffix ""|".exe" Executable filename suffix.
+---@field path_sep ":"|";" Separator between PATH entries.
+---@field dir_sep "/"|"\\" Directory separator.
 ---@field executable string Absolute executable path.
 ---@field cwd string Initial working directory.
 ---@field project_dir string Directory containing the launcher.

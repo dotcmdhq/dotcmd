@@ -80,6 +80,10 @@ function t.failure(result, expected)
     return result.stderr
 end
 
+function t.version()
+    return assert(t.success(t.run_project(host.project_dir, "--version")):match("^dotcmd (.-)\n$"))
+end
+
 local passed, failed = 0, 0
 function t.assert_error(expected, fn)
     local ok, message = pcall(fn)

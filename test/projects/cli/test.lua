@@ -1,5 +1,6 @@
 local success, failure = t.success, t.failure
 local child = host.project_dir .. "/child"
+local version = t.version()
 local normalized = t.normalized
 local empty = t.project("empty")
 local broken = t.project("broken", "this is not valid Lua!")
@@ -48,7 +49,7 @@ test("CLI launcher accepts separate and attached values before tasks", function(
         command.stdout, command.stderr = "capture", "capture"
         local output = success(exec(command))
         if args[#args] == "--version" then
-            assert(output == "dotcmd " .. host.version .. "\n")
+            assert(output == "dotcmd " .. version .. "\n")
         elseif args[#args] ~= "nothing" then
             assert(output:match("args %[args%.%.%.%]%s+Print arguments as hex"), output)
         end
@@ -82,7 +83,7 @@ test("CLI option errors use the shared parser", function()
 end)
 test("CLI built-ins work when project loading fails", function()
     for _, project in ipairs({ empty, broken, load_error }) do
-        assert(success(t.run_project(project, "--version")) == "dotcmd " .. host.version .. "\n")
+        assert(success(t.run_project(project, "--version")) == "dotcmd " .. version .. "\n")
         assert(normalized(success(t.run_project(project, "--cache-dir")):gsub("\n$", ""))
             == normalized(host.cache_dir))
         assert(success(t.run_project(project, "--licenses")):find("Lua", 1, true))
@@ -106,7 +107,7 @@ test("CLI built-ins work when checking the project file fails", function()
         if path == project_path then error("stat failure") end
         return fs.stat(path, options)
     end }, { __index = fs })
-    assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({})
+    assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({ version = version })
     assert(env.main({ "--launcher", child .. "/.cmd", "--version" }) == 0)
 end)
 test("CLI clean errors for missing project and unknown task", function()
@@ -298,7 +299,7 @@ test("CLI preserves structured project loading errors while keeping built-ins av
     local project = t.project("structured load error", "error { exit_code = 31, message = \"load failed\" }")
     local result = t.run_project(project, "build")
     assert(result.code == 31 and result.stderr:gsub("\r\n", "\n") == "dotcmd: load failed\n")
-    assert(success(t.run_project(project, "--version")) == "dotcmd " .. host.version .. "\n")
+    assert(success(t.run_project(project, "--version")) == "dotcmd " .. version .. "\n")
 end)
 test("CLI general help shows sorted tasks with first-line summaries", function()
     local output = success(t.run_project(child, "--help"))

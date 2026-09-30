@@ -182,13 +182,13 @@ The next invocation downloads the selected binary if it is not already cached.]]
             end,
         } },
         run = function(version)
-            return require("dotcmd.update")(launcher, version)
+            return require("dotcmd.update")(launcher, version, internal.version)
         end,
     },
     __version = {
         description = "Show dotcmd version",
         args = {},
-        run = function() print("dotcmd " .. host.version) end,
+        run = function() print("dotcmd " .. internal.version) end,
     },
     __cache_dir = {
         description = "Show shared cache directory",

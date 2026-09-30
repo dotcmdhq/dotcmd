@@ -89,7 +89,7 @@ test("exec composes arguments and environment from inner to outer", function()
 end)
 
 test("exec composes environment update functions from inner to outer", function()
-    local separator = host.os == "windows" and ";" or ":"
+    local separator = host.path_sep
     local executable_dir, executable = host.executable:match("^(.*)[/\\]([^/\\]+)$")
     assert(executable_dir and executable)
     local inner = { executable, "--launcher", child .. "/.cmd", "env", "PATH",

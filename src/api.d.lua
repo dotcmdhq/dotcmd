@@ -7,8 +7,8 @@
 ---@field path_sep ":"|";" Separator between PATH entries.
 ---@field dir_sep "/"|"\\" Directory separator.
 ---@field executable string Absolute executable path.
----@field project_dir string Directory containing the launcher; relative paths resolve here.
----@field invocation_dir string Initial working directory before entering the project.
+---@field project_dir string Directory containing the launcher; relative paths resolve here. Uses native separators.
+---@field invocation_dir string Initial working directory before entering the project. Uses native separators.
 ---@field cache_dir string Shared cache root; honors DOTCMD_CACHE_DIR.
 
 ---Called with binary string chunks; chunk boundaries are arbitrary and empty strings are valid.

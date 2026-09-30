@@ -1,9 +1,8 @@
-local root = host.project_dir
 local windows = host.os == "windows"
 
 local function build(mode)
     mode = mode or "release"
-    local output = root .. "/target/" .. mode
+    local output = "target/" .. mode
     local env = {}
 
     -- Supply the build tools.
@@ -63,15 +62,14 @@ local function build(mode)
 
     local cmake_command = {
         cmake,
-        cwd = root,
         env = env,
     }
     local configure = {
         cmake_command,
         "-S",
-        root:gsub(host.dir_sep, "/"),
+        ".",
         "-B",
-        output:gsub(host.dir_sep, "/"),
+        output,
         "-G",
         "Ninja",
         "-DCMAKE_MAKE_PROGRAM=" .. ninja:gsub(host.dir_sep, "/"),
@@ -99,8 +97,8 @@ local function build(mode)
             end,
         }
         env.ZIG_GLOBAL_CACHE_DIR = host.cache_dir .. "/zig"
-        env.ZIG_LOCAL_CACHE_DIR = output .. "/zig"
-        configure[#configure + 1] = "-DCMAKE_TOOLCHAIN_FILE=" .. root .. "/cmake/zig.cmake"
+        env.ZIG_LOCAL_CACHE_DIR = host.project_dir .. "/" .. output .. "/zig"
+        configure[#configure + 1] = "-DCMAKE_TOOLCHAIN_FILE=" .. host.project_dir .. "/cmake/zig.cmake"
         configure[#configure + 1] = "-DDOTCMD_ZIG=" .. toolchain .. "/zig"
         configure[#configure + 1] = "-DDOTCMD_ZIG_TARGET=" .. arch .. "-linux-musl"
     elseif windows then
@@ -157,8 +155,8 @@ Downloads the required build tools and builds into target/<mode>.
         description = "Build and run the local dotcmd executable",
         run = function(...)
             build()
-            exec { root .. "/target/release/dotcmd" .. host.exe_suffix,
-                "--launcher", root .. "/.cmd", ... }
+            exec { "target/release/dotcmd" .. host.exe_suffix,
+                "--launcher", ".cmd", ... }
         end,
     },
     test = {
@@ -166,7 +164,7 @@ Downloads the required build tools and builds into target/<mode>.
         args = {},
         run = function()
             local cmake_command = build()
-            exec { cmake_command, "--build", root .. "/target/release", "--target", "test",
+            exec { cmake_command, "--build", "target/release", "--target", "test",
                 env = { CTEST_OUTPUT_ON_FAILURE = "1" } }
         end,
     },

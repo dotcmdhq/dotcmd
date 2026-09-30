@@ -1,10 +1,10 @@
-:; version=0.1.87
-:; sha_linux_x64=9eb166a2bd56d99e5a211d8b8dba4d8d7cc5f13670a64944e0f6e4af76e841bd
-:; sha_linux_arm64=2eb69daf2b97ff23cded7908ba8a0e13c64a6f0a3ccd16d798f93a1a36e5e3db
-:; sha_macos_x64=214945f36930fb00340b6593db99abafa748348996a038e6312bf3748e60d721
-:; sha_macos_arm64=89b70e299a3612edb3abbbe9f50487c7e560931552a493e81432d5b774dfb824
-:; sha_windows_x64=a5e22060ee1ab292ac746fa7e1f42dee17530d922fbbb8e3667e15754b3d3289
-:; sha_windows_arm64=66d0e7a14209e582504cfcece5149b5c5269edf597cec87961128863bdb79af3
+:; version=0.1.89
+:; sha_linux_x64=3759474392fd652d0a05c442852ffd803f61929218ecc00bd893f61ec2648b4a
+:; sha_linux_arm64=8c8f1c67aa10c143d7f82ccb99b1e729aa3bb9866af4da36193a9714dd9b8af5
+:; sha_macos_x64=5e54d891eb63b3c9bbd06657f62341a295866cb6109049a188906c00829c20f5
+:; sha_macos_arm64=7c8af2aadcee1fc6d18f66bcd7407e587cd8464d7fa51000654b1298e8c5cd9e
+:; sha_windows_x64=03cbe0e7b1f219f77f187fd93acbdbd575440e7213e2fe5801f09a68be32610b
+:; sha_windows_arm64=1203ea726f32e4677127ad3a8a114a480454e02981655bb9d7a315a49be3e43f
 :; set -eu
 :; platform=$(uname -sm)
 :; case "$platform" in Linux\ *) os=linux;; Darwin\ *) os=macos;; *) echo 'dotcmd: unsupported OS' >&2; exit 1;; esac

@@ -122,6 +122,25 @@ test("fs metadata and missing paths", function()
     assert(fs.stat(".", { follow = false }).type == "directory")
 end)
 
+test("fs stat distinguishes followed, unfollowed, and dangling symlinks", function()
+    fs.mkdir("stat-links/directory")
+    t.write("stat-links/file", "contents")
+    if not t.symlink("file", "stat-links/file-link") then return end
+    assert(t.symlink("directory", "stat-links/directory-link", true))
+
+    local file = fs.stat("stat-links/file-link")
+    assert(file.type == "file" and file.size == 8)
+    local file_link = fs.stat("stat-links/file-link", { follow = false })
+    assert(file_link.type == "symlink" and math.type(file_link.size) == "integer"
+        and math.type(file_link.mode) == "integer")
+    assert(fs.stat("stat-links/directory-link").type == "directory")
+    assert(fs.stat("stat-links/directory-link/", { follow = false }).type == "symlink")
+
+    assert(t.symlink("missing", "stat-links/dangling"))
+    assert(fs.stat("stat-links/dangling") == nil)
+    assert(fs.stat("stat-links/dangling", { follow = false }).type == "symlink")
+end)
+
 test("fs realpath returns usable absolute paths for files and directories", function()
     fs.mkdir("realpath ü/child")
     t.write("realpath ü/file", "contents")
@@ -158,8 +177,7 @@ if host.os == "windows" then
     test("fs realpath resolves Windows directory junctions", function()
         fs.mkdir("junction-target")
         t.write("junction-target/file", "contents")
-        exec { "cmd.exe", "/d", "/c", "mklink", "/J", "junction", host.project_dir .. "/junction-target",
-            stdout = "discard" }
+        t.junction(host.project_dir .. "/junction-target", "junction")
         assert(fs.realpath("junction") == fs.realpath("junction-target"))
         assert(fs.realpath("junction/file") == fs.realpath("junction-target/file"))
     end)
@@ -204,6 +222,42 @@ test("fs file, empty-directory, and recursive removal", function()
     t.write("remove-file", "data"); fs.remove("remove-file")
     assert(fs.stat("remove-file") == nil)
 end)
+
+test("fs removal never traverses symlinks or link cycles", function()
+    fs.mkdir("remove-links/target/nested")
+    t.write("remove-links/target/nested/keep", "contents")
+    fs.mkdir("remove-links/tree/ordinary")
+    t.write("remove-links/tree/ordinary/file", "contents")
+    if not t.symlink("../target", "remove-links/tree/external", true) then return end
+
+    fs.remove("remove-links/tree/external/", { recursive = true })
+    assert(fs.stat("remove-links/tree/external", { follow = false }) == nil)
+    assert(t.read("remove-links/target/nested/keep") == "contents")
+
+    assert(t.symlink("../target", "remove-links/tree/external", true))
+    assert(t.symlink(".", "remove-links/tree/cycle", true))
+    assert(t.symlink("missing", "remove-links/tree/dangling"))
+    fs.remove("remove-links/tree", { recursive = true })
+    assert(fs.stat("remove-links/tree", { follow = false }) == nil)
+    assert(t.read("remove-links/target/nested/keep") == "contents")
+end)
+
+if host.os == "windows" then
+    test("fs recursive removal never traverses Windows junctions", function()
+        fs.mkdir("remove-junctions/target/nested")
+        t.write("remove-junctions/target/nested/keep", "contents")
+        fs.mkdir("remove-junctions/tree/ordinary")
+        t.write("remove-junctions/tree/ordinary/file", "contents")
+        t.junction(host.project_dir .. "/remove-junctions/target", "remove-junctions/tree/external")
+        t.junction(host.project_dir .. "/remove-junctions/tree", "remove-junctions/tree/cycle")
+        assert(fs.stat("remove-junctions/tree/external", { follow = false }).type == "symlink")
+        assert(fs.stat("remove-junctions/tree/cycle", { follow = false }).type == "symlink")
+
+        fs.remove("remove-junctions/tree", { recursive = true })
+        assert(fs.stat("remove-junctions/tree", { follow = false }) == nil)
+        assert(t.read("remove-junctions/target/nested/keep") == "contents")
+    end)
+end
 
 test("fs rename replacement and marking a file executable", function()
     t.write("from", "new"); t.write("to", "old")

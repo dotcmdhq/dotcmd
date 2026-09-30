@@ -37,6 +37,17 @@ function t.symlink(target, path, directory)
     return true
 end
 
+function t.junction(target, path)
+    assert(host.os == "windows")
+    local result = exec {
+        { "cmd.exe", "/d", "/c", "mklink", "/J", path:gsub("/", "\\"), (target:gsub("/", "\\")) },
+        stdout = "capture",
+        stderr = "capture",
+        check = false,
+    }
+    assert(result.code == 0, result.stderr .. result.stdout)
+end
+
 function t.command(project, ...)
     return { host.executable, project .. "/.cmd", ... }
 end

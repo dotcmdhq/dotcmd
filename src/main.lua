@@ -49,7 +49,7 @@ function fetch(options, hash)
                 fs.remove(temp)
             end,
         })
-        http { url = options.url, to = temp }
+        http { url = options.url, to = temp, progress = true }
         assert(sha256 { path = temp } == hash, "fetch: SHA-256 mismatch for " .. options.url)
         fs.rename(temp, download_path, { if_exists = "skip" })
     end

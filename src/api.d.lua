@@ -29,6 +29,7 @@
 ---@field connect_timeout? integer Seconds; defaults to 30.
 ---@field timeout? integer Seconds; defaults to 0 (unlimited).
 ---@field check? false Disable checking the final HTTP status; non-2xx responses raise by default.
+---@field progress? true Show download progress on terminal stderr after a short delay.
 
 ---@class dotcmd.HttpResponse
 ---@field url string Final URL after redirects.

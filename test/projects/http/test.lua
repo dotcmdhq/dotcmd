@@ -84,6 +84,12 @@ test("http saves downloads relative to cwd and replaces existing files", functio
     assert(response.headers["x-redirect-only"] == nil)
 end)
 
+test("http accepts terminal progress for file downloads", function()
+    local path = "progress.bin"
+    local response = http { url = url .. "/body", to = path, progress = true }
+    assert(response.status == 200 and t.read(path) == bytes)
+end)
+
 test("http failed statuses preserve files and remove temporary downloads", function()
     fs.mkdir("status")
     t.write("status/existing", "keep me")
@@ -143,6 +149,12 @@ end)
 
 test("http rejects a negative timeout", function()
     t.assert_error("http:", function() http { url = "https://127.0.0.1/", timeout = -1 } end)
+end)
+
+test("http requires boolean progress", function()
+    t.assert_error("boolean expected", function()
+        http { url = url .. "/body", progress = "yes" }
+    end)
 end)
 
 test("http rejects a URL containing NUL", function()

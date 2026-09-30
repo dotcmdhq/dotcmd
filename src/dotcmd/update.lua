@@ -15,7 +15,7 @@ return function(launcher, version, current_version)
     local tag = version:gsub("[^%w._~-]", function(byte) return ("%%%02X"):format(byte:byte()) end)
     local temp = target .. ".tmp-" .. ("%016x%016x"):format(math.random(0), math.random(0))
     local cleanup <close> = setmetatable({}, { __close = function() fs.remove(temp) end })
-    http { url = base .. "download/" .. tag .. "/dotcmd.cmd", to = temp }
+    http { url = base .. "download/" .. tag .. "/dotcmd.cmd", to = temp, progress = true }
     fs.chmod(temp, info.mode)
     fs.rename(temp, target, { if_exists = "replace" })
     print("Updated " .. launcher .. " to " .. version)

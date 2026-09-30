@@ -13,28 +13,31 @@ extern "C" {
 #include "lauxlib.h"
 }
 
-static int IsTerminal(lua_State* L) {
-    luaL_Stream* stream = (luaL_Stream*)luaL_checkudata(L, 1, LUA_FILEHANDLE);
-    luaL_argcheck(L, stream->f != NULL, 1, "closed file");
+bool IsTerminal(FILE* file) {
 #ifdef _WIN32
-    int descriptor = _fileno(stream->f);
+    int descriptor = _fileno(file);
     intptr_t native = descriptor < 0 ? -1 : _get_osfhandle(descriptor);
     HANDLE handle = native == -1 ? INVALID_HANDLE_VALUE : (HANDLE)native;
     DWORD mode;
     if (handle == INVALID_HANDLE_VALUE || !GetConsoleMode(handle, &mode)
         || !SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)) {
-        lua_pushboolean(L, 0);
-    } else {
-        lua_pushboolean(L, 1);
+        return false;
     }
+    return true;
 #else
-    lua_pushboolean(L, isatty(fileno(stream->f)));
+    return isatty(fileno(file));
 #endif
+}
+
+static int LuaIsTerminal(lua_State* L) {
+    luaL_Stream* stream = (luaL_Stream*)luaL_checkudata(L, 1, LUA_FILEHANDLE);
+    luaL_argcheck(L, stream->f != NULL, 1, "closed file");
+    lua_pushboolean(L, IsTerminal(stream->f));
     return 1;
 }
 
 static int OpenTerminal(lua_State* L) {
-    lua_pushcfunction(L, IsTerminal);
+    lua_pushcfunction(L, LuaIsTerminal);
     return 1;
 }
 

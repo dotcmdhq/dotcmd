@@ -75,20 +75,23 @@ end
 ---@field path string[]
 ---@field opts? table<string, dotcmd.Option>
 
--- Remove only dispatch names. Keep all options and separators in their original
--- order so the leaf parser applies defaults, repetition, and end_opts once.
+-- Start at the implicit project group and remove only dispatch names. Keep all
+-- options and separators in their original order so the leaf parser applies
+-- defaults, repetition, and end_opts once.
 ---@return dotcmd.Resolution? resolution
 ---@return string? message
 ---@return integer? error_code
 function tasks.resolve(tasks_by_spelling, words)
-    local task = lookup(tasks_by_spelling, words[1])
-    if not task then return nil, "unknown task: " .. tostring(words[1]) end
-    local path, argv, index, ended = { words[1] }, {}, 2, false
-    local opts = merge_opts(nil, task.opts, words[1])
+    local root = { tasks = tasks_by_spelling }
+    local task = root
+    local path, argv, index, ended = {}, {}, 1, false
+    local opts
     while task.tasks do
         local tail = {}
         for i = index, #words do tail[#tail + 1] = words[i] end
-        local state, message = args.scan({ opts = opts or {}, args = { end_opts = true } }, tail, not ended)
+        -- Root children include dash-prefixed built-ins; options begin below it.
+        local scan_opts = task == root and nil or opts or {}
+        local state, message = args.scan({ opts = scan_opts, args = { end_opts = true } }, tail, not ended)
         if not state then return nil, message, 2 end
         local position = state.first_positional
         if not position or state.pending then
@@ -98,6 +101,7 @@ function tasks.resolve(tasks_by_spelling, words)
         local name = tail[position]
         local child = lookup(task.tasks, name)
         if not child then
+            if task == root then return nil, "unknown task: " .. name end
             if not ended and not state.separator and name:sub(1, 1) == "-"
                 and #name > 1 and tonumber(name) == nil then
                 return nil, "unknown option: " .. name, 2

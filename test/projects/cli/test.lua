@@ -7,7 +7,11 @@ local broken = t.project("broken", "this is not valid Lua!")
 local load_error = host.project_dir .. "/load-error"
 
 test("CLI help without a project", function()
-    for _, args in ipairs({ {}, { "-h" }, { "-?" }, { "--help" } }) do
+    local bare = t.run_project(empty)
+    assert(bare.code == 2 and bare.stderr == "", bare.stderr)
+    local explicit = success(t.run_project(empty, "--help"))
+    assert((bare.stdout:gsub("\r\n", "\n")) == explicit, bare.stdout)
+    for _, args in ipairs({ { "-h" }, { "-?" }, { "--help" } }) do
         local output = success(t.run_project(empty, table.unpack(args)))
         assert(output:find("--version", 1, true))
         assert(output:find("--cache-dir", 1, true))
@@ -350,7 +354,9 @@ test("CLI task help handles raw functions, empty schemas, and unknown tasks", fu
     assert(not failure(t.run_project(child, "--help", "unknown"), "unknown task"):find("stack traceback", 1, true))
 end)
 test("CLI built-in help accepts a task path", function()
-    assert(success(t.run_project(child)) == success(t.run_project(child, "--help")))
+    local bare = t.run_project(child)
+    assert(bare.code == 2 and bare.stderr == "", bare.stderr)
+    assert((bare.stdout:gsub("\r\n", "\n")) == success(t.run_project(child, "--help")))
     local output = success(t.run_project(child, "--help", "--help"))
     assert(output:find("Usage: .cmd --help [task...]\n", 1, true), output)
     assert(output:find("Task path to describe", 1, true), output)

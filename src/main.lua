@@ -186,7 +186,6 @@ return function(argv)
 
     all_tasks = tasks.normalize(task_definitions)
 
-    if #argv == 0 then argv = { "--help" } end
     local resolution, resolve_error, error_code = tasks.resolve(all_tasks, argv)
     if not resolution then
         if not ok then
@@ -203,10 +202,12 @@ return function(argv)
     if task.tasks and not task.run then
         local _, message = args.parse(schema, arguments)
         if message then
-            io.stderr:write("dotcmd " .. table.concat(path, " ") .. ": " .. message .. "\n")
-            return 2
+            local command = #path == 0 and "dotcmd" or "dotcmd " .. table.concat(path, " ")
+            io.stderr:write(command .. ": " .. message .. "\n")
+        else
+            require("dotcmd.help")(all_tasks, project_missing, table.unpack(path))
         end
-        return require("dotcmd.help")(all_tasks, project_missing, table.unpack(path)) or 0
+        return 2
     end
     local results
     if schema.opts ~= nil or schema.args ~= nil then

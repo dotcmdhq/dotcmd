@@ -44,7 +44,7 @@ return function(repo)
             GOCACHE = host.cache_dir .. "/go-build", GOOS = go_os, GOARCH = go_arch },
     }
     local certificate = work .. "/test CA ü.pem"
-    local server <close> = spawn { server_binary, certificate, repo .. "/test/projects/fetch/sdk.zip", repo .. "/src/launcher.cmd",
+    local server <close> = spawn { server_binary, certificate, repo .. "/test/projects/fetch/sdk.zip", repo .. "/.cmd",
         host.executable,
         stdin = "pipe", stdout = "pipe", stderr = "capture",
     }
@@ -54,7 +54,7 @@ return function(repo)
 
     local home, cache, appdata = work .. "/home", work .. "/cache", work .. "/appdata"
     fs.mkdir(home)
-    local launcher = t.read(repo .. "/src/launcher.cmd"):gsub("^:; version=[^\n]+", ":; version=test")
+    local launcher = t.read(repo .. "/.cmd"):gsub("^:; version=[^\n]+", ":; version=test")
     local env = { HOME = home, USERPROFILE = home, XDG_CACHE_HOME = cache, LOCALAPPDATA = appdata,
         DOTCMD_CACHE_DIR = false, DOTCMD_TEST_URL = server_url, DOTCMD_TEST_HTTP_URL = server_http_url,
         SSL_CERT_FILE = certificate,

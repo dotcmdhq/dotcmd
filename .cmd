@@ -1,10 +1,10 @@
-:; version=0.1.89
-:; sha_linux_x64=3759474392fd652d0a05c442852ffd803f61929218ecc00bd893f61ec2648b4a
-:; sha_linux_arm64=8c8f1c67aa10c143d7f82ccb99b1e729aa3bb9866af4da36193a9714dd9b8af5
-:; sha_macos_x64=5e54d891eb63b3c9bbd06657f62341a295866cb6109049a188906c00829c20f5
-:; sha_macos_arm64=7c8af2aadcee1fc6d18f66bcd7407e587cd8464d7fa51000654b1298e8c5cd9e
-:; sha_windows_x64=03cbe0e7b1f219f77f187fd93acbdbd575440e7213e2fe5801f09a68be32610b
-:; sha_windows_arm64=1203ea726f32e4677127ad3a8a114a480454e02981655bb9d7a315a49be3e43f
+:; version=0.1.92
+:; sha_linux_x64=1d723a5b82fcfd119aebae7154a0d125515bde991c8c3ae8e7de51d9ccf78032
+:; sha_linux_arm64=364328076b2f6e4e744bf61c7fdb50b163e77f9c09c3908bf1b80bbb69060624
+:; sha_macos_x64=c6981579b7536841e94946771f5c42b31f9f0babe4c10b87e84622c341ea7820
+:; sha_macos_arm64=8ef8f7f78ec3c451c045fe6c047c9eb80d8592077ac740e509e2eff821eda11f
+:; sha_windows_x64=98ef6daa8985ac8627241b254ad6247bb268e6765d50586b107fd91b543563a7
+:; sha_windows_arm64=f0999b18865a74865dc39b598f2dffd069b0c4fa88418c138eb045a487a41e80
 :; set -eu
 :; platform=$(uname -sm)
 :; case "$platform" in Linux\ *) os=linux;; Darwin\ *) os=macos;; *) echo 'dotcmd: unsupported OS' >&2; exit 1;; esac
@@ -13,7 +13,7 @@
 :; case "$cache" in /*) ;; '') case "$os" in linux) case "${XDG_CACHE_HOME:-}" in /*) cache="$XDG_CACHE_HOME/dotcmd";; *) cache="${HOME:?dotcmd: HOME is not set}/.cache/dotcmd";; esac;; macos) cache="${HOME:?dotcmd: HOME is not set}/Library/Caches/dotcmd";; esac;; *) echo 'dotcmd: DOTCMD_CACHE_DIR must be an absolute path' >&2; exit 1;; esac
 :; cache="$cache/$version/$os-$arch"
 :; binary="$cache/dotcmd"
-:; if [ -x "$binary" ]; then exec "$binary" --launcher "$0" "$@"; fi
+:; if [ -x "$binary" ]; then exec "$binary" "$0" "$@"; fi
 :; case "$os-$arch" in linux-x64) expected=$sha_linux_x64;; linux-arm64) expected=$sha_linux_arm64;; macos-x64) expected=$sha_macos_x64;; macos-arm64) expected=$sha_macos_arm64;; esac
 :; case "$os" in linux) sha_tool=sha256sum;; macos) sha_tool=shasum;; esac
 :; sha_path=$(command -v "$sha_tool" || true)
@@ -32,7 +32,7 @@
 :; chmod +x "$tmp"
 :; mv -f "$tmp" "$binary"
 :; trap - EXIT INT TERM
-:; exec "$binary" --launcher "$0" "$@"
+:; exec "$binary" "$0" "$@"
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
 set /p "dotcmd_header="<"%~f0"
@@ -73,7 +73,7 @@ set "PSModulePath="
 if errorlevel 1 exit /b 1
 endlocal
 :run
-"%binary%" --launcher "%~f0" %* & call exit /b %%errorlevel%%
+"%binary%" "%~f0" %* & call exit /b %%errorlevel%%
 :unsupported
 echo dotcmd: unsupported CPU architecture >&2
 exit /b 1

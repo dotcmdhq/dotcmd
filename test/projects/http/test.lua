@@ -148,3 +148,118 @@ end)
 test("http rejects a URL containing NUL", function()
     t.assert_error("http:", function() http { url = "https://127.0.0.1/\0suffix" } end)
 end)
+
+test("http streams final response bodies into SHA-256", function()
+    for _, path in ipairs { "/body", "/redirect/302?to=/body", "/redirect/307?to=/redirect/302?to=/body" } do
+        local response = http { url = url .. path, to = sha256 }
+        assert(response.status == 200 and response.url == url .. "/body")
+        assert(response.body == sha256 { bytes = bytes })
+        assert(response.headers["x-redirect-only"] == nil)
+    end
+    for _, options in ipairs {
+        { url = url .. "/body", method = "HEAD", to = sha256 },
+        { url = url .. "/status/204", to = sha256 },
+    } do
+        local response = http(options)
+        assert(response.body == sha256 { bytes = "" })
+    end
+end)
+
+test("http composes consumers over a large chunked response", function()
+    local initialized, completed, calls = 0, 0, 0
+    local function counted_hash()
+        initialized = initialized + 1
+        local consume, count = sha256(), 0
+        return function(...)
+            if select("#", ...) == 0 then
+                completed = completed + 1
+                return { bytes = count, digest = consume() }
+            end
+            assert(select("#", ...) == 1)
+            local chunk = ...
+            assert(type(chunk) == "string")
+            calls = calls + 1
+            count = count + #chunk
+            consume(chunk)
+            return "ignored"
+        end
+    end
+    local response = http { url = url .. "/chunks", to = counted_hash }
+    assert(initialized == 1 and completed == 1 and calls > 1)
+    assert(response.body.bytes == 1024 * 1024)
+    assert(response.body.digest == sha256 { bytes = string.rep("a\0\255b", 262144) })
+end)
+
+test("http consumer failures abort transfers and preserve error objects", function()
+    local failure = { message = "byte limit exceeded" }
+    local completed, received = false, 0
+    local ok, err = pcall(http, {
+        url = url .. "/slow", timeout = 5,
+        to = function()
+            return function(chunk)
+                if chunk == nil then completed = true; return end
+                received = received + #chunk
+                assert(received <= 0, failure)
+            end
+        end,
+    })
+    assert(not ok and err == failure and received > 0 and not completed)
+    assert(http { url = url .. "/body", to = sha256 }.body == sha256 { bytes = bytes })
+end)
+
+test("http skips consumer completion after transport or checked status failures", function()
+    for _, path in ipairs { "/truncated", "/slow", "/status/404", "/loop" } do
+        local completed, initialized = false, 0
+        t.assert_error("http:", function()
+            http { url = url .. path, timeout = 1,
+                to = function()
+                    initialized = initialized + 1
+                    return function(chunk)
+                        if chunk == nil then completed = true end
+                    end
+                end,
+            }
+        end)
+        assert(initialized == 1 and not completed)
+    end
+    local response = http { url = url .. "/status/404", check = false, to = sha256 }
+    assert(response.status == 404)
+    assert(response.body == sha256 { bytes = "status body" })
+end)
+
+test("http propagates factory and completion errors and requires a consumer function", function()
+    local failure = {}
+    local ok, err = pcall(http, { url = url .. "/body", to = function() error(failure) end })
+    assert(not ok and err == failure)
+    ok, err = pcall(http, { url = url .. "/body", to = function()
+        return function(chunk)
+            if chunk == nil then error(failure) end
+        end
+    end })
+    assert(not ok and err == failure)
+    t.assert_error("function expected", function()
+        http { url = url .. "/body", to = function() return 123 end }
+    end)
+end)
+
+test("http consumers preserve false and nil results and support nested requests", function()
+    for _, expected in ipairs { false, "value" } do
+        local response = http { url = url .. "/body", to = function()
+            return function(chunk)
+                if chunk == nil then return expected, "ignored" end
+            end
+        end }
+        assert(response.body == expected)
+    end
+    local nested = false
+    local response = http { url = url .. "/body", to = function()
+        return function(chunk)
+            if chunk ~= nil then
+                assert(http { url = url .. "/body", to = sha256 }.body == sha256 { bytes = bytes })
+                nested = true
+                collectgarbage("collect")
+            end
+        end
+    end }
+    assert(nested and response.body == nil)
+end)

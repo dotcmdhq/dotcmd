@@ -12,12 +12,21 @@
 ---@field project_dir string Directory containing the launcher.
 ---@field cache_dir string Shared cache root; honors DOTCMD_CACHE_DIR.
 
+---Called with binary string chunks; chunk boundaries are arbitrary and empty strings are valid.
+---Called with no arguments once after success to complete; its first return value becomes the result.
+---Chunk-call return values are ignored. Errors abort the producer; failures skip completion.
+---Consumers own their state and must arrange cleanup independently of successful completion.
+---@alias dotcmd.ChunkConsumer fun(chunk?: string): any
+
+---Called without arguments once per operation to create a fresh consumer.
+---@alias dotcmd.ConsumerFactory fun(): dotcmd.ChunkConsumer
+
 ---@class dotcmd.HttpOptions
 ---@field url string HTTPS URL.
 ---@field method? string Defaults to GET.
 ---@field headers? table<string, string|string[]> Arrays send repeated headers. User-Agent defaults to dotcmd/<version>.
 ---@field body? string Binary-safe request body.
----@field to? string Output file, relative to cwd. Only a successful 2xx response replaces it.
+---@field to? string|dotcmd.ConsumerFactory Output file or consumer factory. File paths are relative to cwd; only a successful 2xx response replaces a file. Consumers receive the final response body; completion runs only after transport and enabled status checks succeed. With check=false, error response bodies are consumed and completed too.
 ---@field connect_timeout? integer Seconds; defaults to 30.
 ---@field timeout? integer Seconds; defaults to 0 (unlimited).
 ---@field check? false Disable checking the final HTTP status; non-2xx responses raise by default.
@@ -26,7 +35,7 @@
 ---@field url string Final URL after redirects.
 ---@field status integer
 ---@field headers table<string, string[]> Lowercase names; values always arrays.
----@field body string Binary-safe response body; absent when using to. Annotated as a string to avoid nil checks for in-memory responses.
+---@field body string|any Binary-safe response string by default, or the consumer completion value when to is a factory. Absent when to is a file path. Streaming does not retain the response bytes.
 
 ---@class dotcmd.Sha256Options
 ---@field bytes? string Binary-safe contents; mutually exclusive with path. Exactly one is required.
@@ -222,6 +231,10 @@ function exec(command, ...) end
 function spawn(command, ...) end
 
 ---Hash bytes or a file; returns lowercase hexadecimal.
+---With no arguments, returns a chunk consumer: call with one string to update or no arguments to finish.
+---Completion releases native resources and returns the digest; further calls raise.
+---Abandoned consumers release their native state when garbage-collected.
+---@overload fun(): dotcmd.ChunkConsumer
 ---@param options dotcmd.Sha256Options
 ---@return string
 function sha256(options) end

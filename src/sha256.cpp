@@ -19,6 +19,7 @@ extern "C" {
 
 struct Hash {
     FILE* file;
+    bool finished;
 #ifdef _WIN32
     BCRYPT_ALG_HANDLE algorithm;
     BCRYPT_HASH_HANDLE hash;
@@ -28,14 +29,18 @@ struct Hash {
 #endif
 };
 
-static int Cleanup(lua_State* L) {
-    Hash* hash = (Hash*)lua_touserdata(L, 1);
+static void Release(Hash* hash) {
     if (hash->file) { fclose(hash->file); hash->file = NULL; }
 #ifdef _WIN32
     if (hash->hash) { BCryptDestroyHash(hash->hash); hash->hash = NULL; }
     if (hash->algorithm) { BCryptCloseAlgorithmProvider(hash->algorithm, 0); hash->algorithm = NULL; }
     free(hash->path); hash->path = NULL;
 #endif
+    hash->finished = true;
+}
+
+static int Cleanup(lua_State* L) {
+    Release((Hash*)lua_touserdata(L, 1));
     return 0;
 }
 
@@ -59,8 +64,60 @@ static void Update(lua_State* L, Hash* hash, const char* data, size_t size) {
 #endif
 }
 
+static Hash* NewHash(lua_State* L) {
+    Hash* hash = (Hash*)lua_newuserdatauv(L, sizeof(Hash), 0);
+    memset(hash, 0, sizeof(*hash));
+    luaL_setmetatable(L, "dotcmd.sha256");
+    return hash;
+}
+
+static void Initialize(lua_State* L, Hash* hash) {
+#ifdef _WIN32
+    Check(L, BCryptOpenAlgorithmProvider(&hash->algorithm, BCRYPT_SHA256_ALGORITHM, NULL, 0), "BCryptOpenAlgorithmProvider");
+    Check(L, BCryptCreateHash(hash->algorithm, &hash->hash, NULL, 0, NULL, 0, 0), "BCryptCreateHash");
+#else
+    if (!SHA256_Init(&hash->context)) luaL_error(L, "sha256: initialization failed");
+#endif
+}
+
+static int Finish(lua_State* L, Hash* hash) {
+    unsigned char digest[32];
+#ifdef _WIN32
+    Check(L, BCryptFinishHash(hash->hash, digest, sizeof(digest), 0), "BCryptFinishHash");
+#else
+    if (!SHA256_Final(digest, &hash->context)) return luaL_error(L, "sha256: finalization failed");
+#endif
+    Release(hash);
+    const char* digits = "0123456789abcdef";
+    char hex[64];
+    for (size_t i = 0; i < sizeof(digest); ++i) {
+        hex[i * 2] = digits[digest[i] >> 4];
+        hex[i * 2 + 1] = digits[digest[i] & 15];
+    }
+    lua_pushlstring(L, hex, sizeof(hex));
+    return 1;
+}
+
+static int Consume(lua_State* L) {
+    Hash* hash = (Hash*)lua_touserdata(L, lua_upvalueindex(1));
+    if (hash->finished) return luaL_error(L, "sha256: consumer is already complete");
+    if (lua_gettop(L) == 0) return Finish(L, hash);
+    if (lua_gettop(L) != 1) return luaL_error(L, "sha256: consumer expects one chunk or no arguments");
+    luaL_checktype(L, 1, LUA_TSTRING);
+    size_t size;
+    const char* bytes = lua_tolstring(L, 1, &size);
+    Update(L, hash, bytes, size);
+    return 0;
+}
+
 static int Sha256(lua_State* L) {
-    if (lua_gettop(L) != 1) return luaL_error(L, "sha256 expects {bytes=...} or {path=...}");
+    if (lua_gettop(L) == 0) {
+        Hash* hash = NewHash(L);
+        Initialize(L, hash);
+        lua_pushcclosure(L, Consume, 1);
+        return 1;
+    }
+    if (lua_gettop(L) != 1) return luaL_error(L, "sha256 expects no arguments, {bytes=...} or {path=...}");
     luaL_checktype(L, 1, LUA_TTABLE);
     lua_getfield(L, 1, "bytes");
     lua_getfield(L, 1, "path");
@@ -73,16 +130,9 @@ static int Sha256(lua_State* L) {
     const char* value = lua_tolstring(L, input, &size);
     if (from_file && memchr(value, 0, size)) return luaL_error(L, "sha256: path must not contain NUL bytes");
 
-    Hash* hash = (Hash*)lua_newuserdatauv(L, sizeof(Hash), 0);
-    memset(hash, 0, sizeof(*hash));
-    luaL_setmetatable(L, "dotcmd.sha256");
+    Hash* hash = NewHash(L);
     lua_toclose(L, -1);
-#ifdef _WIN32
-    Check(L, BCryptOpenAlgorithmProvider(&hash->algorithm, BCRYPT_SHA256_ALGORITHM, NULL, 0), "BCryptOpenAlgorithmProvider");
-    Check(L, BCryptCreateHash(hash->algorithm, &hash->hash, NULL, 0, NULL, 0, 0), "BCryptCreateHash");
-#else
-    if (!SHA256_Init(&hash->context)) return luaL_error(L, "sha256: initialization failed");
-#endif
+    Initialize(L, hash);
 
     if (from_file) {
 #ifdef _WIN32
@@ -112,20 +162,7 @@ static int Sha256(lua_State* L) {
         Update(L, hash, value, size);
     }
 
-    unsigned char digest[32];
-#ifdef _WIN32
-    Check(L, BCryptFinishHash(hash->hash, digest, sizeof(digest), 0), "BCryptFinishHash");
-#else
-    if (!SHA256_Final(digest, &hash->context)) return luaL_error(L, "sha256: finalization failed");
-#endif
-    const char* digits = "0123456789abcdef";
-    char hex[64];
-    for (size_t i = 0; i < sizeof(digest); ++i) {
-        hex[i * 2] = digits[digest[i] >> 4];
-        hex[i * 2 + 1] = digits[digest[i] & 15];
-    }
-    lua_pushlstring(L, hex, sizeof(hex));
-    return 1;
+    return Finish(L, hash);
 }
 
 void RegisterSha256(lua_State* L) {

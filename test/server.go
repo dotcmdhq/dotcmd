@@ -27,6 +27,15 @@ func main() {
 		w.Header().Add("Set-Cookie", "second=2")
 		io.Copy(w, r.Body)
 	})
+	mux.HandleFunc("/chunks", func(w http.ResponseWriter, r *http.Request) {
+		chunk := strings.Repeat("a\x00\xffb", 1024)
+		for i := 0; i < 256; i++ {
+			if _, err := io.WriteString(w, chunk); err != nil {
+				return
+			}
+			w.(http.Flusher).Flush()
+		}
+	})
 	mux.HandleFunc("/status/{code}", func(w http.ResponseWriter, r *http.Request) {
 		code, _ := strconv.Atoi(r.PathValue("code"))
 		w.WriteHeader(code)

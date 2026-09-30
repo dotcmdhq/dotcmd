@@ -34,6 +34,11 @@ struct Request {
     Buffer body;
     Buffer response_headers;
     FILE* file;
+    lua_State* lua;
+    int callback_index;
+    const char* chunk;
+    size_t chunk_size;
+    bool consumer_failed;
 #ifdef _WIN32
     wchar_t* temporary;
     wchar_t* destination;
@@ -46,8 +51,7 @@ struct Request {
 
 static bool curl_initialized = false;
 
-// No Lua calls inside libcurl callbacks: a Lua allocation error must not jump
-// past libcurl's cleanup. The request owns every native allocation instead.
+// Native buffers remain request-owned, including on allocation failure.
 static bool Append(Buffer* buffer, const char* data, size_t size) {
     if (size > SIZE_MAX - buffer->size) return false;
     size_t needed = buffer->size + size;
@@ -63,9 +67,31 @@ static bool Append(Buffer* buffer, const char* data, size_t size) {
     return true;
 }
 
+static int ConsumeChunk(lua_State* L) {
+    Request* request = (Request*)lua_touserdata(L, lua_upvalueindex(2));
+    lua_pushvalue(L, lua_upvalueindex(1));
+    // String allocation and the consumer call both run inside lua_pcall.
+    lua_pushlstring(L, request->chunk, request->chunk_size);
+    lua_call(L, 1, 0);
+    return 0;
+}
+
 static size_t WriteBody(char* data, size_t size, size_t count, void* context) {
     Request* request = (Request*)context;
     size_t bytes = size * count;
+    if (request->callback_index) {
+        if (request->consumer_failed) return CURL_WRITEFUNC_ERROR;
+        request->chunk = data;
+        request->chunk_size = bytes;
+        // Stack space was reserved before entering libcurl. Nothing that can
+        // raise a Lua error runs outside this protected call.
+        lua_pushvalue(request->lua, request->callback_index);
+        if (lua_pcall(request->lua, 0, 0, 0) != LUA_OK) {
+            request->consumer_failed = true;
+            return CURL_WRITEFUNC_ERROR;
+        }
+        return bytes;
+    }
     if (request->file) return fwrite(data, 1, bytes, request->file);
     return Append(&request->body, data, bytes) ? bytes : CURL_WRITEFUNC_ERROR;
 }
@@ -252,7 +278,16 @@ static int Http(lua_State* L) {
     if (!url) return luaL_error(L, "http: url is required");
     const char* method = StringField(L, "method", "GET");
     if (!Token(method)) return luaL_error(L, "http: invalid method");
-    const char* output = StringField(L, "to", NULL);
+    lua_getfield(L, 1, "to");
+    int destination = lua_gettop(L);
+    bool streaming = lua_isfunction(L, destination);
+    const char* output = NULL;
+    if (!streaming && !lua_isnil(L, destination)) {
+        luaL_checktype(L, destination, LUA_TSTRING);
+        size_t length;
+        output = lua_tolstring(L, destination, &length);
+        if (memchr(output, 0, length)) return luaL_error(L, "http: to contains a NUL byte");
+    }
     long connect_timeout = TimeoutField(L, "connect_timeout", 30);
     long timeout = TimeoutField(L, "timeout", 0);
     lua_getfield(L, 1, "check");
@@ -276,6 +311,7 @@ static int Http(lua_State* L) {
     memset(request, 0, sizeof(*request));
     luaL_setmetatable(L, "dotcmd.http.request");
     lua_toclose(L, -1);
+    int request_index = lua_gettop(L);
     request->curl = curl_easy_init();
     if (!request->curl) return luaL_error(L, "http: cannot initialize libcurl");
 
@@ -357,7 +393,23 @@ static int Http(lua_State* L) {
     OPTION(CURLOPT_HTTPHEADER, request->headers);
 #undef OPTION
     if (output) OpenOutput(L, request, output);
+    int consumer = 0;
+    if (streaming) {
+        lua_pushvalue(L, destination);
+        lua_call(L, 0, 1);
+        luaL_checktype(L, -1, LUA_TFUNCTION);
+        consumer = lua_gettop(L);
+        lua_pushvalue(L, consumer);
+        lua_pushvalue(L, request_index);
+        lua_pushcclosure(L, ConsumeChunk, 2);
+        request->callback_index = lua_gettop(L);
+        request->lua = L;
+        luaL_checkstack(L, 2, "HTTP consumer callback");
+    }
     CURLcode code = curl_easy_perform(request->curl);
+    // Preserve the original error object, including tables and allocation
+    // failures, and unwind only after libcurl has returned.
+    if (request->consumer_failed) return lua_error(L);
     if (code != CURLE_OK)
         return luaL_error(L, "http: %s", *request->error ? request->error : curl_easy_strerror(code));
     long status = 0;
@@ -380,7 +432,11 @@ static int Http(lua_State* L) {
     lua_setfield(L, -2, "status");
     ResponseHeaders(L, &request->response_headers);
     lua_setfield(L, -2, "headers");
-    if (!output) {
+    if (streaming) {
+        lua_pushvalue(L, consumer);
+        lua_call(L, 0, 1);
+        lua_setfield(L, -2, "body");
+    } else if (!output) {
         lua_pushlstring(L, request->body.data ? request->body.data : "", request->body.size);
         lua_setfield(L, -2, "body");
     } else if (status >= 200 && status < 300) {

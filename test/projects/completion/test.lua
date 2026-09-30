@@ -191,6 +191,7 @@ test("PowerShell setup queries the selected runtime and preserves the reported p
             return require(name)
         end
         assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({
+            chdir = function(path) return path end,
             completion_scripts = { powershell = "# adapter\n" },
             detect_shell = function()
                 assert(not requested, "explicit shell should not run detection")

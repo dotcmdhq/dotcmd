@@ -126,6 +126,32 @@ static char* WorkingDirectory() {
 #endif
 }
 
+static int ChangeDirectory(lua_State* L) {
+    const char* path = luaL_checkstring(L, 1);
+#ifdef _WIN32
+    int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, NULL, 0);
+    if (!size) return luaL_error(L, "cannot convert working directory path");
+    wchar_t* wide = (wchar_t*)malloc((size_t)size * sizeof(wchar_t));
+    if (!wide) return luaL_error(L, "out of memory");
+    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, wide, size)) {
+        free(wide);
+        return luaL_error(L, "cannot convert working directory path");
+    }
+    int result = _wchdir(wide);
+    int error = errno;
+    free(wide);
+#else
+    int result = chdir(path);
+    int error = errno;
+#endif
+    if (result != 0) return luaL_error(L, "cannot change working directory to '%s': %s", path, strerror(error));
+    char* cwd = WorkingDirectory();
+    if (!cwd) return luaL_error(L, "cannot determine working directory");
+    lua_pushstring(L, cwd);
+    free(cwd);
+    return 1;
+}
+
 static char* ExecutablePath() {
 #ifdef _WIN32
     wchar_t* wide = (wchar_t*)malloc(32768 * sizeof(wchar_t));
@@ -217,11 +243,15 @@ static int Run(lua_State* L) {
     RegisterTerminal(L);
     // Built-in modules remain available. Do not pick up an installed Lua tree.
     lua_getglobal(L, "package");
-    SetString(L, "path", "");
+    SetString(L, "path", "./?.lua;./?/init.lua");
     SetString(L, "cpath", "");
     lua_getfield(L, -1, "searchers");
+    for (int i = 4; i >= 2; --i) {
+        lua_rawgeti(L, -1, i);
+        lua_rawseti(L, -2, i + 1);
+    }
     lua_pushcfunction(L, SearchBuiltin);
-    lua_rawseti(L, -2, 2); // Replace the Lua filesystem searcher.
+    lua_rawseti(L, -2, 2); // Search embedded modules before filesystem modules.
     lua_pop(L, 2);
     lua_createtable(L, 0, 7);
     SetString(L, "os", DOTCMD_OS);
@@ -241,14 +271,16 @@ static int Run(lua_State* L) {
     free(path);
     path = WorkingDirectory();
     if (!path) return luaL_error(L, "cannot determine working directory");
-    SetString(L, "cwd", path);
+    SetString(L, "invocation_dir", path);
     free(path);
     lua_setglobal(L, "host");
     if (luaL_loadbufferx(L, (const char*)main_lua, sizeof(main_lua), "@embedded/main.lua", "t") != LUA_OK)
         return lua_error(L);
     // Pass private resources as one table to the main.lua chunk.
-    lua_createtable(L, 0, 5);
+    lua_createtable(L, 0, 6);
     SetString(L, "version", DOTCMD_VERSION);
+    lua_pushcfunction(L, ChangeDirectory);
+    lua_setfield(L, -2, "chdir");
 #ifdef _WIN32
     lua_pushcfunction(L, DetectShell);
     lua_setfield(L, -2, "detect_shell");

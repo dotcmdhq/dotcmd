@@ -126,11 +126,11 @@ test("fs realpath returns usable absolute paths for files and directories", func
     fs.mkdir("realpath ü/child")
     t.write("realpath ü/file", "contents")
     local path = fs.realpath("realpath ü/child/../file")
-    assert(path == fs.realpath(host.cwd .. "/realpath ü/file"))
+    assert(path == fs.realpath(host.project_dir .. "/realpath ü/file"))
     assert(t.read(path) == "contents")
     assert(fs.realpath(path) == path)
     assert(fs.realpath("realpath ü/child/..") == fs.realpath("realpath ü"))
-    assert(fs.realpath(".") == fs.realpath(host.cwd))
+    assert(fs.realpath(".") == fs.realpath(host.project_dir))
     t.assert_error("fs.realpath:", function() fs.realpath("does-not-exist") end)
     t.assert_error("fs:", function() fs.realpath("") end)
     t.assert_error("fs:", function() fs.realpath("file\0ignored") end)
@@ -158,7 +158,7 @@ if host.os == "windows" then
     test("fs realpath resolves Windows directory junctions", function()
         fs.mkdir("junction-target")
         t.write("junction-target/file", "contents")
-        exec { "cmd.exe", "/d", "/c", "mklink", "/J", "junction", host.cwd .. "/junction-target",
+        exec { "cmd.exe", "/d", "/c", "mklink", "/J", "junction", host.project_dir .. "/junction-target",
             stdout = "discard" }
         assert(fs.realpath("junction") == fs.realpath("junction-target"))
         assert(fs.realpath("junction/file") == fs.realpath("junction-target/file"))

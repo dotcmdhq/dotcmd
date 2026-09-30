@@ -7,8 +7,8 @@
 ---@field path_sep ":"|";" Separator between PATH entries.
 ---@field dir_sep "/"|"\\" Directory separator.
 ---@field executable string Absolute executable path.
----@field cwd string Initial working directory.
----@field project_dir string Directory containing the launcher.
+---@field project_dir string Directory containing the launcher; relative paths resolve here.
+---@field invocation_dir string Initial working directory before entering the project.
 ---@field cache_dir string Shared cache root; honors DOTCMD_CACHE_DIR.
 
 ---Called with binary string chunks; chunk boundaries are arbitrary and empty strings are valid.
@@ -50,7 +50,7 @@
 
 ---@class dotcmd.Command
 ---@field [integer] string|dotcmd.Command Index 1 is a program string or inner command; remaining indexed values are string arguments.
----@field cwd? string Child working directory; the outermost specified value wins and otherwise defaults to the caller's cwd.
+---@field cwd? string Child working directory; the outermost specified value wins and otherwise defaults to the project directory. Use host.invocation_dir to run where dotcmd was invoked.
 ---@field env? table<string, dotcmd.EnvValue> Overlay inherited and inner command variables; outer values win. An update function receives the effective old value, or nil when absent; nil or false removes the variable.
 
 ---Execution settings are read only from the command table passed directly to exec, never from inner commands.

@@ -107,7 +107,9 @@ test("CLI built-ins work when checking the project file fails", function()
         if path == project_path then error("stat failure") end
         return fs.stat(path, options)
     end }, { __index = fs })
-    assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({ version = version })
+    assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({
+        version = version, chdir = function(path) return path end,
+    })
     assert(env.main({ "--launcher", child .. "/.cmd", "--version" }) == 0)
 end)
 test("CLI clean errors for missing project and unknown task", function()
@@ -420,11 +422,50 @@ test("CLI argument boundaries and Unicode", function()
     end
     assert(success(t.run_project(child, "args", table.unpack(args))) == expected)
 end)
-test("CLI caller cwd and project directory", function()
+test("CLI project cwd and invocation directory", function()
     local cwd = child .. "/subdirectory"; fs.mkdir(cwd)
-    local actual = success(t.run_project(child, { cwd = cwd }, "context"))
-    local expected = normalized(cwd) .. "\n" .. normalized(child) .. "\n" .. host.os .. "\n" .. host.arch .. "\n"
-    assert(normalized(actual) == expected, actual)
+    local expected = normalized(child) .. "\n" .. normalized(cwd)
+        .. "\n" .. host.os .. "\n" .. host.arch .. "\n"
+    for _, launcher in ipairs({ child .. "/.cmd", "../.cmd" }) do
+        local actual = success(exec {
+            host.executable, "--launcher", launcher, "context", cwd = cwd,
+            stdout = "capture", stderr = "capture",
+        })
+        assert(normalized(actual) == expected, actual)
+    end
+end)
+test("CLI enters the project before loading Lua and running children", function()
+    local project = t.project("working directory ü", [[
+assert(fs.realpath(".") == fs.realpath(host.project_dir))
+assert(fs.read("marker") == "project")
+fs.write("loaded", "project")
+return { check = function()
+    fs.write("ran", "project")
+    local command = { host.executable, "--launcher", host.project_dir .. "/probe/.cmd", "directory" }
+    for _, directory in ipairs({ host.project_dir, host.invocation_dir }) do
+        local options = { command, stdout = "capture" }
+        if directory == host.invocation_dir then options.cwd = directory end
+        local output = exec(options).stdout:gsub("[\r\n]+$", "")
+        assert(fs.realpath(output) == fs.realpath(directory))
+        local process <close> = spawn(options)
+        output = process:wait().stdout:gsub("[\r\n]+$", "")
+        assert(fs.realpath(output) == fs.realpath(directory))
+    end
+end }
+]])
+    local caller = project .. "/caller"; fs.mkdir(caller)
+    t.write(project .. "/marker", "project")
+    t.write(caller .. "/marker", "caller")
+    t.write(project .. "/probe/.cmd.lua", [[
+return { directory = function() print(host.invocation_dir) end }
+]])
+    success(t.run_project(project, { cwd = caller }, "check"))
+    assert(t.read(project .. "/loaded") == "project" and not fs.stat(caller .. "/loaded"))
+    assert(t.read(project .. "/ran") == "project" and not fs.stat(caller .. "/ran"))
+end)
+test("CLI reports an unavailable project working directory", function()
+    failure(t.run_project(child .. "/missing", { cwd = host.project_dir }, "--version"),
+        "cannot change working directory")
 end)
 test("CLI explicit exit status propagation is silent", function()
     for _, code in ipairs({ 0, 1, 42, 255 }) do

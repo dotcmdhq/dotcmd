@@ -22,7 +22,7 @@ return {
     env = function(...)
         for i = 1, select("#", ...) do print(os.getenv(select(i, ...)) or "<missing>") end
     end,
-    cwd = function() print(host.cwd) end,
+    cwd = function() print(host.invocation_dir) end,
     status = function(code)
         io.stderr:write("child failure"); error({ exit_code = tonumber(code) })
     end,

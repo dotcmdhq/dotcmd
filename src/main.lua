@@ -226,10 +226,12 @@ function main(argv)
     launcher = opts.launcher
     if host.os == "windows" then launcher = launcher:gsub("\\", "/") end
     if launcher:sub(1, 1) ~= "/" and not (host.os == "windows" and launcher:match("^%a:/")) then
-        launcher = host.cwd .. "/" .. launcher
+        launcher = host.invocation_dir .. "/" .. launcher
     end
-    host.project_dir = launcher:match("^(.*)/")
-    if host.project_dir == "" then host.project_dir = "/" end
+    local project_dir = launcher:match("^(.*)/")
+    if project_dir == "" then project_dir = "/"
+    elseif host.os == "windows" and project_dir:match("^%a:$") then project_dir = project_dir .. "/" end
+    host.project_dir = internal.chdir(project_dir)
     project_path = host.project_dir .. "/.cmd.lua"
     local ok, project, missing = pcall(function()
         if not fs.stat(project_path, { follow = false }) then return {}, true end

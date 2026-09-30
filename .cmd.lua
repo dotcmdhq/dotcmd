@@ -1,6 +1,5 @@
 local root = host.project_dir
 local windows = host.os == "windows"
-local suffix = windows and ".exe" or ""
 
 local function build(mode)
     mode = mode or "release"
@@ -40,7 +39,7 @@ local function build(mode)
             extract { path = input, to = output, strip_components = 1 }
         end,
     }
-    local cmake = cmake_dir .. (host.os == "macos" and "/CMake.app/Contents/bin/cmake" or "/bin/cmake" .. suffix)
+    local cmake = cmake_dir .. (host.os == "macos" and "/CMake.app/Contents/bin/cmake" or "/bin/cmake" .. host.exe_suffix)
 
     local ninja = plugin(
         "https://raw.githubusercontent.com/dotcmdhq/plugins/de05a2fd460bce2c4b37134f805ba3f06ce01204/ninja.lua",
@@ -70,12 +69,12 @@ local function build(mode)
     local configure = {
         cmake_command,
         "-S",
-        windows and root:gsub("\\", "/") or root,
+        root:gsub(host.dir_sep, "/"),
         "-B",
-        windows and output:gsub("\\", "/") or output,
+        output:gsub(host.dir_sep, "/"),
         "-G",
         "Ninja",
-        "-DCMAKE_MAKE_PROGRAM=" .. (windows and ninja:gsub("\\", "/") or ninja),
+        "-DCMAKE_MAKE_PROGRAM=" .. ninja:gsub(host.dir_sep, "/"),
         "-DCMAKE_BUILD_TYPE=" .. (mode == "debug" and "Debug" or "MinSizeRel"),
         "-DDOTCMD_VERSION=" .. (os.getenv("DOTCMD_VERSION") or "dev"),
     }
@@ -122,11 +121,11 @@ local function build(mode)
             end,
         }
         configure[#configure + 1] = "-DCMAKE_C_COMPILER=" ..
-            toolchain:gsub("\\", "/") .. "/bin/" .. arch .. "-w64-mingw32-clang.exe"
+            toolchain:gsub(host.dir_sep, "/") .. "/bin/" .. arch .. "-w64-mingw32-clang" .. host.exe_suffix
         configure[#configure + 1] = "-DCMAKE_CXX_COMPILER=" ..
-            toolchain:gsub("\\", "/") .. "/bin/" .. arch .. "-w64-mingw32-clang++.exe"
+            toolchain:gsub(host.dir_sep, "/") .. "/bin/" .. arch .. "-w64-mingw32-clang++" .. host.exe_suffix
         configure[#configure + 1] = "-DCMAKE_RC_COMPILER=" ..
-            toolchain:gsub("\\", "/") .. "/bin/" .. arch .. "-w64-mingw32-windres.exe"
+            toolchain:gsub(host.dir_sep, "/") .. "/bin/" .. arch .. "-w64-mingw32-windres" .. host.exe_suffix
     end
 
     -- Configure and build locally; CMake owns dependencies and incremental builds.
@@ -158,7 +157,7 @@ Downloads the required build tools and builds into target/<mode>.
         description = "Build and run the local dotcmd executable",
         run = function(...)
             build()
-            exec { root .. "/target/release/dotcmd" .. suffix,
+            exec { root .. "/target/release/dotcmd" .. host.exe_suffix,
                 "--launcher", root .. "/.cmd", ... }
         end,
     },

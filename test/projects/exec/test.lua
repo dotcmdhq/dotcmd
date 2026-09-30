@@ -5,7 +5,7 @@ local function windows_drive_test(name, fn)
     test(name, function()
         local target = host.project_dir .. "/" .. name:gsub("[^%w]+", "-")
         fs.mkdir(target)
-        local parent_drive = host.cwd:match("^([A-Za-z]):")
+        local parent_drive = host.project_dir:match("^([A-Za-z]):")
         local drive
         for letter = string.byte("Z"), string.byte("D"), -1 do
             local candidate = string.char(letter) .. ":"

@@ -1,5 +1,4 @@
 assert(type(host) == "table") -- Available while loading the project, not just in tasks.
-assert(host.version == nil and host.build == nil and host.compiler == nil and host.lua_version == nil)
 if host.os == "windows" then
     assert(host.exe_suffix == ".exe" and host.path_sep == ";" and host.dir_sep == "\\")
 else
@@ -24,7 +23,9 @@ return {
         print(select("#", ...))
         for i = 1, select("#", ...) do print(hex(select(i, ...))) end
     end},
-    context = function() print(host.cwd); print(host.project_dir); print(host.os); print(host.arch) end,
+    context = function()
+        print(host.project_dir); print(host.invocation_dir); print(host.os); print(host.arch)
+    end,
     status = function(code) error({ exit_code = tonumber(code) }) end,
     nothing = function() end,
     values = function()

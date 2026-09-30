@@ -29,7 +29,7 @@ return {
         end
     end,
     context = function(...)
-        print(host.cwd)
+        print(host.invocation_dir)
         print(os.getenv("DOTCMD_SPAWN_SET"))
         print(os.getenv("USERPROFILE") or "<missing>")
         for i = 1, select("#", ...) do io.write(select(i, ...), "\0") end

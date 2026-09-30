@@ -127,7 +127,7 @@ return {get = function(url) io.write(http(url).body) end}
         "get", url .. "/body"), "http:")
     t.failure(t.run_project(client, "get", url:gsub("127%.0%.0%.1", "localhost") .. "/body"), "http:")
     t.write("invalid CA.pem", "not a certificate")
-    t.failure(t.run_project(client, { env = { SSL_CERT_FILE = host.cwd .. "/invalid CA.pem" } },
+    t.failure(t.run_project(client, { env = { SSL_CERT_FILE = host.project_dir .. "/invalid CA.pem" } },
         "get", url .. "/body"), "http:")
 end)
 

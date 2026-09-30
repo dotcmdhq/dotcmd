@@ -25,7 +25,7 @@ local function run(options, ...)
     for k, v in pairs(io) do env.io[k] = v end
     for k, v in pairs(fs) do env.fs[k] = v end
     for k, v in pairs(options.fs or {}) do env.fs[k] = v end
-    env.host.cwd = project
+    env.host.invocation_dir = project
     local result = { stdout = "", stderr = "", path = path, requests = {} }
     local stdout <close> = assert(io.tmpfile())
     env.io.stdout = stdout
@@ -51,7 +51,9 @@ local function run(options, ...)
         t.write(request.to, options.replacement or replacement)
         return {}
     end
-    assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({ version = options.version or "1.0.0" })
+    assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({
+        version = options.version or "1.0.0", chdir = function(path) return path end,
+    })
     local args = { ... }
     table.insert(args, 1, path)
     table.insert(args, 1, "--launcher")

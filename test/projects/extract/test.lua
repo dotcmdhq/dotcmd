@@ -148,9 +148,9 @@ end)
 
 test("extract leaves the caller cwd and locale unchanged", function()
     local locale = os.setlocale(nil, "ctype")
-    local cwd = host.cwd
+    local cwd = fs.realpath(".")
     extract { path = "fixtures/sdk.zip", to = "trailing-slash/" }
-    assert(os.setlocale(nil, "ctype") == locale and host.cwd == cwd)
+    assert(os.setlocale(nil, "ctype") == locale and fs.realpath(".") == cwd)
     assert(t.read("trailing-slash/sdk/lib/value") == "library")
 end)
 

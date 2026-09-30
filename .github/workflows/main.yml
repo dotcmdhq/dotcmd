@@ -77,11 +77,13 @@ jobs:
           path: dist
           merge-multiple: true
       - name: Prepare launcher
+        # Temporary source until root .cmd is updated to the positional-launcher
+        # release. Then delete src/launcher.cmd and use root .cmd again.
         env:
           VERSION: ${{ needs.version.outputs.version }}
         shell: bash
         run: |
-          sed "s/^:; version=.*/:; version=$VERSION/" .cmd > dist/dotcmd.cmd
+          sed "s/^:; version=.*/:; version=$VERSION/" src/launcher.cmd > dist/dotcmd.cmd
           for platform in linux-x64 linux-arm64 macos-x64 macos-arm64 windows-x64 windows-arm64; do
             asset="dist/dotcmd-$platform"
             case "$platform" in windows-*) asset="$asset.exe";; esac

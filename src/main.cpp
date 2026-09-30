@@ -126,16 +126,15 @@ static char* WorkingDirectory() {
 #endif
 }
 
-static int ChangeDirectory(lua_State* L) {
-    const char* path = luaL_checkstring(L, 1);
+static void ChangeDirectory(lua_State* L, const char* path) {
 #ifdef _WIN32
     int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, NULL, 0);
-    if (!size) return luaL_error(L, "cannot convert working directory path");
+    if (!size) luaL_error(L, "cannot convert working directory path");
     wchar_t* wide = (wchar_t*)malloc((size_t)size * sizeof(wchar_t));
-    if (!wide) return luaL_error(L, "out of memory");
+    if (!wide) luaL_error(L, "out of memory");
     if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, wide, size)) {
         free(wide);
-        return luaL_error(L, "cannot convert working directory path");
+        luaL_error(L, "cannot convert working directory path");
     }
     int result = _wchdir(wide);
     int error = errno;
@@ -144,12 +143,7 @@ static int ChangeDirectory(lua_State* L) {
     int result = chdir(path);
     int error = errno;
 #endif
-    if (result != 0) return luaL_error(L, "cannot change working directory to '%s': %s", path, strerror(error));
-    char* cwd = WorkingDirectory();
-    if (!cwd) return luaL_error(L, "cannot determine working directory");
-    lua_pushstring(L, cwd);
-    free(cwd);
-    return 1;
+    if (result != 0) luaL_error(L, "cannot change working directory to '%s': %s", path, strerror(error));
 }
 
 static char* ExecutablePath() {
@@ -186,6 +180,148 @@ static char* ExecutablePath() {
 static void SetString(lua_State* L, const char* key, const char* value) {
     lua_pushstring(L, value);
     lua_setfield(L, -2, key);
+}
+
+static bool PathSeparator(char c) {
+#ifdef _WIN32
+    return c == '/' || c == '\\';
+#else
+    return c == '/';
+#endif
+}
+
+static bool AbsolutePath(const char* path) {
+#ifdef _WIN32
+    bool drive = ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z'))
+        && path[1] == ':' && PathSeparator(path[2]);
+    return drive || (PathSeparator(path[0]) && PathSeparator(path[1]));
+#else
+    return path[0] == '/';
+#endif
+}
+
+// Keep environment strings on the Lua stack while assembling paths.
+static const char* Environment(lua_State* L, const char* name) {
+#ifdef _WIN32
+    wchar_t wide_name[32];
+    size_t i = 0;
+    do { wide_name[i] = (wchar_t)name[i]; } while (name[i++]);
+    const wchar_t* wide = _wgetenv(wide_name);
+    if (!wide || !wide[0]) return NULL;
+    char* value = Utf8(wide);
+    if (!value) luaL_error(L, "cannot convert %s to UTF-8", name);
+    lua_pushstring(L, value);
+    free(value);
+#else
+    const char* value = getenv(name);
+    if (!value || !value[0]) return NULL;
+    lua_pushstring(L, value);
+#endif
+    return lua_tostring(L, -1);
+}
+
+static void SetCacheDirectory(lua_State* L) {
+    int host = lua_gettop(L);
+    const char* path = Environment(L, "DOTCMD_CACHE_DIR");
+    if (path) {
+        if (!AbsolutePath(path)) luaL_error(L, "DOTCMD_CACHE_DIR must be an absolute path");
+        lua_pushstring(L, path);
+    } else {
+#ifdef _WIN32
+        path = Environment(L, "LOCALAPPDATA");
+        if (path) {
+            lua_pushfstring(L, "%s\\dotcmd\\Cache", path);
+        } else {
+            path = Environment(L, "USERPROFILE");
+            if (!path) luaL_error(L, "neither LOCALAPPDATA nor USERPROFILE is set");
+            lua_pushfstring(L, "%s\\AppData\\Local\\dotcmd\\Cache", path);
+        }
+#else
+#if !defined(__APPLE__)
+        path = Environment(L, "XDG_CACHE_HOME");
+        if (path && AbsolutePath(path)) {
+            lua_pushfstring(L, "%s/dotcmd", path);
+        } else
+#endif
+        {
+            path = Environment(L, "HOME");
+            if (!path) luaL_error(L, "HOME is not set");
+#ifdef __APPLE__
+            lua_pushfstring(L, "%s/Library/Caches/dotcmd", path);
+#else
+            lua_pushfstring(L, "%s/.cache/dotcmd", path);
+#endif
+        }
+#endif
+    }
+    lua_setfield(L, host, "cache_dir");
+    lua_settop(L, host);
+}
+
+static const char* InitializeHost(lua_State* L, Invocation* invocation) {
+    char* path = ExecutablePath();
+    if (!path) luaL_error(L, "cannot determine executable path");
+    lua_pushstring(L, path);
+    free(path);
+    const char* executable = lua_tostring(L, -1);
+    path = WorkingDirectory();
+    if (!path) luaL_error(L, "cannot determine working directory");
+    lua_pushstring(L, path);
+    free(path);
+    const char* invocation_dir = lua_tostring(L, -1);
+#ifdef _WIN32
+    DWORD size = GetFullPathNameW(invocation->argv[1], 0, NULL, NULL);
+    if (!size) luaL_error(L, "cannot resolve launcher path");
+    wchar_t* wide = (wchar_t*)malloc((size_t)size * sizeof(wchar_t));
+    if (!wide) luaL_error(L, "out of memory");
+    DWORD length = GetFullPathNameW(invocation->argv[1], size, wide, NULL);
+    path = (length && length < size) ? Utf8(wide) : NULL;
+    free(wide);
+    if (!path) luaL_error(L, "cannot resolve launcher path");
+    lua_pushstring(L, path);
+    free(path);
+#else
+    const char* argument = invocation->argv[1];
+    if (AbsolutePath(argument)) lua_pushstring(L, argument);
+    else lua_pushfstring(L, "%s/%s", invocation_dir, argument);
+#endif
+    const char* launcher = lua_tostring(L, -1);
+    const char* separator = launcher;
+    for (const char* p = launcher; *p; ++p) {
+        if (PathSeparator(*p)) separator = p;
+    }
+    size_t directory_size = (size_t)(separator - launcher);
+    if (directory_size == 0) directory_size = 1;
+#ifdef _WIN32
+    if (directory_size == 2 && launcher[1] == ':') directory_size = 3;
+#endif
+    lua_pushlstring(L, launcher, directory_size);
+    ChangeDirectory(L, lua_tostring(L, -1));
+    lua_pop(L, 1);
+    path = WorkingDirectory();
+    if (!path) luaL_error(L, "cannot determine working directory");
+    lua_pushstring(L, path);
+    free(path);
+    const char* project_dir = lua_tostring(L, -1);
+
+    lua_createtable(L, 0, 9);
+    SetString(L, "os", DOTCMD_OS);
+    SetString(L, "arch", DOTCMD_ARCH);
+#ifdef _WIN32
+    SetString(L, "exe_suffix", ".exe");
+    SetString(L, "path_sep", ";");
+    SetString(L, "dir_sep", "\\");
+#else
+    SetString(L, "exe_suffix", "");
+    SetString(L, "path_sep", ":");
+    SetString(L, "dir_sep", "/");
+#endif
+    SetString(L, "invocation_dir", invocation_dir);
+    SetString(L, "project_dir", project_dir);
+    SetString(L, "executable", executable);
+    SetCacheDirectory(L);
+    lua_setglobal(L, "host");
+    return launcher;
 }
 
 static int FormatError(lua_State* L) {
@@ -233,6 +369,12 @@ static int SearchBuiltin(lua_State* L) {
 // The whole initialization/call runs inside lua_pcall, including allocations.
 static int Run(lua_State* L) {
     Invocation* invocation = (Invocation*)lua_touserdata(L, 1);
+    if (invocation->argc < 2 || !invocation->argv[1][0]) {
+        fputs("dotcmd: invoke the project's .cmd launcher\n", stderr);
+        lua_pushinteger(L, 2);
+        return 1;
+    }
+    const char* launcher = InitializeHost(L, invocation);
     luaL_openlibs(L);
     RegisterHttp(L);
     RegisterExec(L);
@@ -253,34 +395,12 @@ static int Run(lua_State* L) {
     lua_pushcfunction(L, SearchBuiltin);
     lua_rawseti(L, -2, 2); // Search embedded modules before filesystem modules.
     lua_pop(L, 2);
-    lua_createtable(L, 0, 7);
-    SetString(L, "os", DOTCMD_OS);
-    SetString(L, "arch", DOTCMD_ARCH);
-#ifdef _WIN32
-    SetString(L, "exe_suffix", ".exe");
-    SetString(L, "path_sep", ";");
-    SetString(L, "dir_sep", "\\");
-#else
-    SetString(L, "exe_suffix", "");
-    SetString(L, "path_sep", ":");
-    SetString(L, "dir_sep", "/");
-#endif
-    char* path = ExecutablePath();
-    if (!path) return luaL_error(L, "cannot determine executable path");
-    SetString(L, "executable", path);
-    free(path);
-    path = WorkingDirectory();
-    if (!path) return luaL_error(L, "cannot determine working directory");
-    SetString(L, "invocation_dir", path);
-    free(path);
-    lua_setglobal(L, "host");
     if (luaL_loadbufferx(L, (const char*)main_lua, sizeof(main_lua), "@embedded/main.lua", "t") != LUA_OK)
         return lua_error(L);
     // Pass private resources as one table to the main.lua chunk.
     lua_createtable(L, 0, 6);
+    SetString(L, "launcher", launcher);
     SetString(L, "version", DOTCMD_VERSION);
-    lua_pushcfunction(L, ChangeDirectory);
-    lua_setfield(L, -2, "chdir");
 #ifdef _WIN32
     lua_pushcfunction(L, DetectShell);
     lua_setfield(L, -2, "detect_shell");
@@ -299,11 +419,9 @@ static int Run(lua_State* L) {
     lua_pushlstring(L, (const char*)completion_powershell, sizeof(completion_powershell));
     lua_setfield(L, -2, "powershell");
     lua_setfield(L, -2, "completion_scripts");
-    lua_call(L, 1, 0);
-    lua_getglobal(L, "main");
-    if (!lua_isfunction(L, -1)) return luaL_error(L, "main.lua must define main(args)");
-    lua_createtable(L, invocation->argc - 1, 0);
-    for (int i = 1; i < invocation->argc; ++i) {
+    lua_call(L, 1, 1);
+    lua_createtable(L, invocation->argc - 2, 0);
+    for (int i = 2; i < invocation->argc; ++i) {
 #ifdef _WIN32
         char* argument = Utf8(invocation->argv[i]);
         if (!argument) return luaL_error(L, "cannot convert argument to UTF-8");
@@ -312,7 +430,7 @@ static int Run(lua_State* L) {
 #else
         lua_pushstring(L, invocation->argv[i]);
 #endif
-        lua_rawseti(L, -2, i);
+        lua_rawseti(L, -2, i - 1);
     }
     lua_call(L, 1, 1);
     if (!lua_isinteger(L, -1)) return luaL_error(L, "main must return an integer exit code");

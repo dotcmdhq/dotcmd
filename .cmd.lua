@@ -156,7 +156,7 @@ Downloads the required build tools and builds into target/<mode>.
         run = function(...)
             build()
             exec { "target/release/dotcmd" .. host.exe_suffix,
-                "--launcher", ".cmd", ... }
+                ".cmd", ... }
         end,
     },
     test = {

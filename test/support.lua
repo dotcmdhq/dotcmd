@@ -38,7 +38,7 @@ function t.symlink(target, path, directory)
 end
 
 function t.command(project, ...)
-    return { host.executable, "--launcher", project .. "/.cmd", ... }
+    return { host.executable, project .. "/.cmd", ... }
 end
 
 function t.run_project(project, config, ...)

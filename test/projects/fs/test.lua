@@ -105,7 +105,7 @@ if host.os ~= "windows" then
 end}]])
         fs.write(project .. "/target", "before")
         t.success(exec { "/bin/sh", "-c", 'trap "" XFSZ; ulimit -f 0; exec "$@"', "write-test",
-            host.executable, "--launcher", project .. "/.cmd", "check", stdout = "capture", stderr = "capture" })
+            host.executable, project .. "/.cmd", "check", stdout = "capture", stderr = "capture" })
     end)
 end
 
@@ -242,7 +242,7 @@ end}]])
             { "640", "111", "640" }, { "651", "077", "751" },
         }) do
             t.success(exec { "/bin/sh", "-c", "umask \"$1\"; shift; exec \"$@\"", "chmod-test", case[2],
-                host.executable, "--launcher", project .. "/.cmd", "check", case[1], case[3], case[2],
+                host.executable, project .. "/.cmd", "check", case[1], case[3], case[2],
                 stdout = "capture", stderr = "capture" })
         end
     end)

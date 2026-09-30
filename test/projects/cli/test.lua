@@ -21,31 +21,29 @@ test("CLI initializes a missing project and suggests setup", function()
     local project = t.project("initialize")
     local path = project .. "/.cmd.lua"
     local output = success(t.run_project(project, "--init"))
-    assert(normalized(output):find("Created " .. normalized(path), 1, true), output)
+    assert(output:find("Created .cmd.lua\n", 1, true), output)
     assert(output:find("Optional: run .cmd --setup completions to enable shell completions.", 1, true), output)
     local source = t.read(path)
     assert(source == "---@type dotcmd.Tasks\nreturn {}\n", source)
     local help = success(t.run_project(project, "--help"))
     assert(not help:find("Run .cmd --init", 1, true), help)
-    local message = failure(t.run_project(project, "--init"))
-    assert(normalized(message):find(normalized(path) .. " already exists", 1, true), message)
+    failure(t.run_project(project, "--init"), ".cmd.lua already exists")
     assert(t.read(path) == source)
 end)
 test("CLI init refuses existing and broken project files", function()
     for _, project in ipairs({ child, broken }) do
         local path = project .. "/.cmd.lua"
         local source = t.read(path)
-        local message = failure(t.run_project(project, "--init"))
-        assert(normalized(message):find(normalized(path) .. " already exists", 1, true), message)
+        failure(t.run_project(project, "--init"), ".cmd.lua already exists")
         assert(t.read(path) == source)
     end
 end)
-test("CLI launcher accepts separate and attached values before tasks", function()
+test("CLI takes the launcher as its first argument", function()
     for _, args in ipairs({
-        { "--launcher=" .. child .. "/.cmd", "-?" },
-        { "--launcher", child .. "/.cmd", "-h" },
-        { "--launcher", broken .. "/.cmd", "--version" },
-        { "--launcher=" .. child .. "/.cmd", "--", "nothing" },
+        { child .. "/.cmd", "-?" },
+        { child .. "/.cmd", "-h" },
+        { broken .. "/.cmd", "--version" },
+        { child .. "/.cmd", "nothing" },
     }) do
         local command = { host.executable, table.unpack(args) }
         command.stdout, command.stderr = "capture", "capture"
@@ -58,7 +56,7 @@ test("CLI launcher accepts separate and attached values before tasks", function(
     end
 end)
 test("CLI requires the launcher when invoked as a binary", function()
-    for _, args in ipairs({ { "nothing" }, { "--launcher=", "nothing" } }) do
+    for _, args in ipairs({ {}, { "", "nothing" } }) do
         local command = { host.executable, table.unpack(args) }
         command.cwd, command.stdout, command.stderr = child, "capture", "capture"
         command.check = false
@@ -66,21 +64,6 @@ test("CLI requires the launcher when invoked as a binary", function()
         assert(result.code == 2, result.stderr)
         assert(result.stdout == "", result.stdout)
         assert(result.stderr:gsub("\r\n", "\n") == "dotcmd: invoke the project's .cmd launcher\n", result.stderr)
-    end
-end)
-test("CLI option errors use the shared parser", function()
-    for _, case in ipairs({
-        { "requires a value", "--launcher" },
-        { "may only appear once", "--launcher=a", "--launcher=b" },
-    }) do
-        local command = { host.executable, table.unpack(case, 2) }
-        command.stdout, command.stderr = "capture", "capture"
-        command.check = false
-        local result = exec(command)
-        assert(result.code == 2, result.stderr)
-        assert(result.stdout == "", result.stdout)
-        assert(result.stderr:find(case[1], 1, true), result.stderr)
-        assert(not result.stderr:find("stack traceback", 1, true), result.stderr)
     end
 end)
 test("CLI built-ins work when project loading fails", function()
@@ -101,18 +84,17 @@ test("CLI built-ins work when project loading fails", function()
     end
 end)
 test("CLI built-ins work when checking the project file fails", function()
-    local project_path = child .. "/.cmd.lua"
     local env = setmetatable({}, { __index = _ENV })
     env._G = env
-    env.host = setmetatable({}, { __index = host })
+    env.host = setmetatable({ project_dir = child }, { __index = host })
     env.fs = setmetatable({ stat = function(path, options)
-        if path == project_path then error("stat failure") end
+        if path == ".cmd.lua" then error("stat failure") end
         return fs.stat(path, options)
     end }, { __index = fs })
-    assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({
-        version = version, chdir = function(path) return path end,
+    local main = assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({
+        version = version, launcher = child .. "/.cmd",
     })
-    assert(env.main({ "--launcher", child .. "/.cmd", "--version" }) == 0)
+    assert(main({ "--version" }) == 0)
 end)
 test("CLI clean errors for missing project and unknown task", function()
     assert(not failure(t.run_project(empty, "unknown"), "unknown task"):find("stack traceback", 1, true))
@@ -328,7 +310,6 @@ test("CLI general help shows sorted tasks with first-line summaries", function()
         local position = assert(output:find("  " .. name, 1, true), output)
         assert(position > builtin_section, output)
     end
-    assert(not output:find("--launcher", 1, true), output)
     assert(not output:find("Arguments:", 1, true), output)
     assert(success(t.run_project(empty, "--help")):find("Built-in tasks:", 1, true))
 end)
@@ -428,13 +409,29 @@ test("CLI project cwd and invocation directory", function()
     local cwd = child .. "/subdirectory"; fs.mkdir(cwd)
     local expected = normalized(child) .. "\n" .. normalized(cwd)
         .. "\n" .. host.os .. "\n" .. host.arch .. "\n"
-    for _, launcher in ipairs({ child .. "/.cmd", "../.cmd" }) do
+    local launchers = { child .. "/.cmd", "../.cmd", ".././.cmd" }
+    if host.os == "windows" then launchers[#launchers + 1] = "..\\.cmd" end
+    for _, launcher in ipairs(launchers) do
         local actual = success(exec {
-            host.executable, "--launcher", launcher, "context", cwd = cwd,
+            host.executable, launcher, "context", cwd = cwd,
             stdout = "capture", stderr = "capture",
         })
         assert(normalized(actual) == expected, actual)
     end
+    local actual = success(exec {
+        host.executable, ".cmd", "context", cwd = child,
+        stdout = "capture", stderr = "capture",
+    })
+    expected = normalized(child) .. "\n" .. normalized(child)
+        .. "\n" .. host.os .. "\n" .. host.arch .. "\n"
+    assert(normalized(actual) == expected, actual)
+end)
+test("CLI treats a launcher path beginning with a dash as a path", function()
+    t.project("-launcher", "return {}")
+    assert(success(exec {
+        host.executable, "-launcher/.cmd", "--version", cwd = host.project_dir,
+        stdout = "capture", stderr = "capture",
+    }) == "dotcmd " .. version .. "\n")
 end)
 test("CLI enters the project before loading Lua and running children", function()
     local project = t.project("working directory ü", [[
@@ -443,7 +440,7 @@ assert(fs.read("marker") == "project")
 fs.write("loaded", "project")
 return { check = function()
     fs.write("ran", "project")
-    local command = { host.executable, "--launcher", host.project_dir .. "/probe/.cmd", "directory" }
+    local command = { host.executable, host.project_dir .. "/probe/.cmd", "directory" }
     for _, directory in ipairs({ host.project_dir, host.invocation_dir }) do
         local options = { command, stdout = "capture" }
         if directory == host.invocation_dir then options.cwd = directory end

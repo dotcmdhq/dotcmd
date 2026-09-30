@@ -181,39 +181,42 @@ test("PowerShell setup queries the selected runtime and preserves the reported p
         fs.mkdir(home .. "/redirected documents")
         t.write(profile, "# keep\r\n")
         local env = setmetatable({}, { __index = _ENV })
-        env.host = setmetatable({ os = "windows" }, { __index = host })
+        env.host = setmetatable({ os = "windows", project_dir = child }, { __index = host })
         env.os = setmetatable({ getenv = function(key) return variables[key] or nil end }, { __index = os })
         local query
         env.exec = function(args) query = args; return { stdout = profile, code = 0 } end
         env.print = function() end
+        env.loadfile = function(file, mode)
+            return loadfile(file == ".cmd.lua" and child .. "/.cmd.lua" or file, mode, env)
+        end
         env.require = function(name)
             if name == "dotcmd.completion" then return assert(loadfile(host.project_dir .. "/../completion.lua", "t", env))() end
             return require(name)
         end
-        assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({
-            chdir = function(path) return path end,
+        local main = assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({
+            launcher = child .. "/.cmd",
             completion_scripts = { powershell = "# adapter\n" },
             detect_shell = function()
                 assert(not requested, "explicit shell should not run detection")
                 return shell
             end,
         })
-        local arguments = { "--launcher", child .. "/.cmd", "--setup", "completions" }
+        local arguments = { "--setup", "completions" }
         if requested then arguments[#arguments + 1] = requested end
-        equal(env.main(arguments), 0)
+        equal(main(arguments), 0)
         equal(query[1], shell == "pwsh" and "pwsh" or "powershell.exe")
         assert(query[6]:find("$PROFILE.CurrentUserAllHosts", 1, true))
         local contents = t.read(profile)
         assert(contents:find("home '' ü", 1, true), contents)
         equal(contents:sub(1, 11), "\239\187\191# keep\r\n")
         equal(t.read(variables.XDG_CONFIG_HOME .. "/dotcmd/completions.ps1"), "# adapter\n")
-        equal(env.main(arguments), 0)
+        equal(main(arguments), 0)
         equal(t.read(profile), contents)
         local invalid = "# caf\233\r\n"
         t.write(profile, invalid)
         fs.remove(variables.XDG_CONFIG_HOME .. "/dotcmd/completions.ps1")
         t.assert_error("profile must use UTF-8", function()
-            env.main({ "--launcher", child .. "/.cmd", "--setup", "completions", shell })
+            main({ "--setup", "completions", shell })
         end)
         equal(t.read(profile), invalid)
         assert(not fs.stat(variables.XDG_CONFIG_HOME .. "/dotcmd/completions.ps1"))

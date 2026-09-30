@@ -92,7 +92,7 @@ test("exec composes environment update functions from inner to outer", function(
     local separator = host.path_sep
     local executable_dir, executable = host.executable:match("^(.*)[/\\]([^/\\]+)$")
     assert(executable_dir and executable)
-    local inner = { executable, "--launcher", child .. "/.cmd", "env", "PATH",
+    local inner = { executable, child .. "/.cmd", "env", "PATH",
         "DOTCMD_UPDATE_CHAIN", "DOTCMD_UPDATE_REMOVED", "DOTCMD_UPDATE_EMPTY", "DOTCMD_UPDATE_ABSENT" }
     inner.env = {
         DOTCMD_UPDATE_CHAIN = function(old)
@@ -190,7 +190,7 @@ end)
 
 windows_drive_test("exec resolves a root-relative executable on the child drive", function(cwd, rooted)
     t.write(rooted .. "/dotcmd.exe", t.read(host.executable))
-    local options = { "\\rooted\\dotcmd.exe", "--launcher", child .. "/.cmd", "emit", cwd = cwd,
+    local options = { "\\rooted\\dotcmd.exe", child .. "/.cmd", "emit", cwd = cwd,
         stdout = "capture", stderr = "capture" }
     local result = exec(options)
     assert(result.stdout == "OUT\0\255" and result.stderr == "ERR\0\254")
@@ -198,7 +198,7 @@ end)
 
 windows_drive_test("exec resolves a root-relative PATH entry on the child drive", function(cwd, rooted)
     t.write(rooted .. "/dotcmd.exe", t.read(host.executable))
-    local options = { "dotcmd", "--launcher", child .. "/.cmd", "emit", cwd = cwd,
+    local options = { "dotcmd", child .. "/.cmd", "emit", cwd = cwd,
         env = { PATH = "\\rooted" }, stdout = "capture", stderr = "capture" }
     local result = exec(options)
     assert(result.stdout == "OUT\0\255" and result.stderr == "ERR\0\254")
@@ -219,7 +219,7 @@ end)
 
 test("exec positional calls check nonzero exits by default", function()
     local project = t.project("default check", ([[return {test = function()
-        exec(host.executable, "--launcher", %q, "status", "17")
+        exec(host.executable, %q, "status", "17")
     end}]]):format(child .. "/.cmd"))
     local result = t.run_project(project, "test")
     assert(result.code == 17 and result.stdout == "", result.stderr)
@@ -228,7 +228,7 @@ end)
 
 test("exec omits its error message when merged stderr is inherited", function()
     local project = t.project("merged inherited check", ([[return {test = function()
-        exec({host.executable, "--launcher", %q, "status", "17", stderr = "stdout"})
+        exec({host.executable, %q, "status", "17", stderr = "stdout"})
     end}]]):format(child .. "/.cmd"))
     local result = t.run_project(project, "test")
     assert(result.code == 17 and result.stdout == "child failure" and result.stderr == "", result.stderr)

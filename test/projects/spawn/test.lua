@@ -134,7 +134,7 @@ end)
 
 test("spawn wait omits its error message when stderr is inherited", function()
     local project = t.project("spawn inherited check", ([[return {test = function()
-        local process <close> = spawn(host.executable, "--launcher", %q, "status", "17")
+        local process <close> = spawn(host.executable, %q, "status", "17")
         process:wait()
     end}]]):format(child .. "/.cmd"))
     local result = t.run_project(project, "test")

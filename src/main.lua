@@ -8,35 +8,6 @@ local output = format.writer(io.stdout)
 -- Project tasks are {name = function(...) ... end} or
 -- {name = {description = "...", run = function(...) ... end}} from .cmd.lua.
 -- host is global; optional opts/args schemas prepare the arguments to run.
-local function cache_dir()
-    local function env(name)
-        local value = os.getenv(name)
-        return value ~= "" and value or nil
-    end
-    local override = env("DOTCMD_CACHE_DIR")
-    if override then
-        local absolute = host.os == "windows"
-            and (override:match("^%a:[/\\]") or override:match("^[/\\][/\\]"))
-            or (host.os ~= "windows" and override:sub(1, 1) == "/")
-        assert(absolute, "DOTCMD_CACHE_DIR must be an absolute path")
-        return override
-    end
-    if host.os == "windows" then
-        local base = env("LOCALAPPDATA")
-        if not base then
-            base = assert(env("USERPROFILE"), "neither LOCALAPPDATA nor USERPROFILE is set") .. "/AppData/Local"
-        end
-        return base .. "/dotcmd/Cache"
-    end
-    if host.os == "linux" then
-        local xdg = env("XDG_CACHE_HOME")
-        if xdg and xdg:sub(1, 1) == "/" then return xdg .. "/dotcmd" end
-    end
-    return assert(env("HOME"), "HOME is not set")
-        .. (host.os == "macos" and "/Library/Caches/dotcmd" or "/.cache/dotcmd")
-end
-host.cache_dir = cache_dir()
-
 -- Completed entries are trusted; only fresh downloads are verified.
 function fetch(options, hash)
     if type(options) == "string" then options = { url = options, sha256 = hash } end
@@ -117,14 +88,8 @@ function plugin(url, hash)
     return table.unpack(values, 1, values.n)
 end
 
-local main_task = {
-    args = { end_opts = true, { "args", arity = "*", default = { "--help" } } },
-    opts = {
-        launcher = { hidden = true },
-    },
-}
-
-local all_tasks, launcher, project_path, project_missing
+local launcher = internal.launcher
+local all_tasks, project_missing
 
 local builtin_tasks = {
     __complete = {
@@ -160,10 +125,10 @@ Writes a minimal file that returns an empty task table.
 Does not overwrite an existing .cmd.lua.]],
         args = {},
         run = function()
-            fs.write(project_path, [[---@type dotcmd.Tasks
+            fs.write(".cmd.lua", [[---@type dotcmd.Tasks
 return {}
 ]], { if_exists = "error" })
-            output:write({ "Created ", project_path, "\nOptional: run ",
+            output:write({ "Created .cmd.lua\nOptional: run ",
                 { bold = true, ".cmd --setup completions" }, " to enable shell completions.\n" }):flush()
         end,
     },
@@ -205,37 +170,15 @@ The next invocation downloads the selected binary if it is not already cached.]]
         description = "Show help for a task, or list tasks",
         args = { { "task", arity = "*", description = "Task path to describe" } },
         run = function(...)
-            return require("dotcmd.help")(all_tasks, main_task, project_missing, ...)
+            return require("dotcmd.help")(all_tasks, project_missing, ...)
         end,
     },
 }
 
-function main(argv)
-    local parsed, message = args.parse(main_task, argv)
-    if not parsed then
-        io.stderr:write("dotcmd: " .. message .. "\n")
-        return 2
-    end
-    local opts = table.remove(parsed, 1)
-    local name = table.remove(parsed, 1)
-
-    if not opts.launcher or opts.launcher == "" then
-        io.stderr:write("dotcmd: invoke the project's .cmd launcher\n")
-        return 2
-    end
-    launcher = opts.launcher
-    if host.os == "windows" then launcher = launcher:gsub("\\", "/") end
-    if launcher:sub(1, 1) ~= "/" and not (host.os == "windows" and launcher:match("^%a:/")) then
-        launcher = host.invocation_dir .. "/" .. launcher
-    end
-    local project_dir = launcher:match("^(.*)/")
-    if project_dir == "" then project_dir = "/"
-    elseif host.os == "windows" and project_dir:match("^%a:$") then project_dir = project_dir .. "/" end
-    host.project_dir = internal.chdir(project_dir)
-    project_path = host.project_dir .. "/.cmd.lua"
+return function(argv)
     local ok, project, missing = pcall(function()
-        if not fs.stat(project_path, { follow = false }) then return {}, true end
-        return assert(loadfile(project_path, "t"))(), false
+        if not fs.stat(".cmd.lua", { follow = false }) then return {}, true end
+        return assert(loadfile(".cmd.lua", "t"))(), false
     end)
     project_missing = missing or false
     local task_definitions = ok and project or {}
@@ -243,9 +186,8 @@ function main(argv)
 
     all_tasks = tasks.normalize(task_definitions)
 
-    local words = { name }
-    for _, word in ipairs(parsed) do words[#words + 1] = word end
-    local resolution, resolve_error, error_code = tasks.resolve(all_tasks, words)
+    if #argv == 0 then argv = { "--help" } end
+    local resolution, resolve_error, error_code = tasks.resolve(all_tasks, argv)
     if not resolution then
         if not ok then
             if type(project) == "table" then error(project) end
@@ -264,7 +206,7 @@ function main(argv)
             io.stderr:write("dotcmd " .. table.concat(path, " ") .. ": " .. message .. "\n")
             return 2
         end
-        return require("dotcmd.help")(all_tasks, main_task, project_missing, table.unpack(path)) or 0
+        return require("dotcmd.help")(all_tasks, project_missing, table.unpack(path)) or 0
     end
     local results
     if schema.opts ~= nil or schema.args ~= nil then

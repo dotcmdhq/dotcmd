@@ -113,7 +113,7 @@ local function usage(name, task, opts)
     return result
 end
 
-return function(all_tasks, main_task, project_missing, ...)
+return function(all_tasks, project_missing, ...)
     local path = { ... }
     if #path == 0 then
         output:write({ keyword("Usage:"), " .cmd <task> [args...]\n" })
@@ -136,7 +136,6 @@ return function(all_tasks, main_task, project_missing, ...)
         end
         print_section("Project tasks", rows)
         print_section("Built-in tasks", builtin_rows)
-        print_options(main_task.opts)
         if project_missing then
             output:write({ "\nNo .cmd.lua found. Run ", keyword(".cmd --init"), " to create one.\n" })
         end

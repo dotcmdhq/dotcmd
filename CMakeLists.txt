@@ -265,8 +265,10 @@ endif()
 # Run the existing public .cmd tests with this build's executable.
 set(CMAKE_CTEST_ARGUMENTS --verbose)
 enable_testing()
-configure_file(.cmd .cmd COPYONLY)
+# Temporary until root .cmd is updated to the release using a positional launcher
+# argument. Then delete src/launcher.cmd and use root .cmd here and in test/run.lua.
+configure_file(src/launcher.cmd .cmd COPYONLY)
 file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/.cmd.lua" CONTENT
     "return {test = assert(loadfile([==[${CMAKE_CURRENT_SOURCE_DIR}/test/run.lua]==]))()}\n" @ONLY)
-add_test(NAME dotcmd COMMAND dotcmd --launcher "${CMAKE_BINARY_DIR}/.cmd" test "${CMAKE_CURRENT_SOURCE_DIR}")
+add_test(NAME dotcmd COMMAND dotcmd "${CMAKE_BINARY_DIR}/.cmd" test "${CMAKE_CURRENT_SOURCE_DIR}")
 set_tests_properties(dotcmd PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")

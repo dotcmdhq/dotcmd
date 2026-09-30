@@ -25,14 +25,19 @@ local function run(options, ...)
     for k, v in pairs(io) do env.io[k] = v end
     for k, v in pairs(fs) do env.fs[k] = v end
     for k, v in pairs(options.fs or {}) do env.fs[k] = v end
-    env.host.invocation_dir = project
+    env.fs.stat = function(file, config)
+        return fs.stat(file == ".cmd.lua" and project .. "/.cmd.lua" or file, config)
+    end
+    env.host.project_dir = project
     local result = { stdout = "", stderr = "", path = path, requests = {} }
     local stdout <close> = assert(io.tmpfile())
     env.io.stdout = stdout
     env.print = function(value) result.stdout = result.stdout .. value .. "\n" end
     env.io.stderr = { write = function(_, value) result.stderr = result.stderr .. value end }
     env.io.open = function() error("updater must not access launcher contents through Lua") end
-    env.loadfile = function(file, mode) return loadfile(file, mode, env) end
+    env.loadfile = function(file, mode)
+        return loadfile(file == ".cmd.lua" and project .. "/.cmd.lua" or file, mode, env)
+    end
     env.require = function(name)
         if name == "dotcmd.update" then return assert(loadfile(host.project_dir .. "/../update.lua", "t", env))() end
         if name == "dotcmd.help" then return assert(loadfile(host.project_dir .. "/../help.lua", "t", env))() end
@@ -51,13 +56,11 @@ local function run(options, ...)
         t.write(request.to, options.replacement or replacement)
         return {}
     end
-    assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({
-        version = options.version or "1.0.0", chdir = function(path) return path end,
+    local main = assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({
+        version = options.version or "1.0.0", launcher = path,
     })
     local args = { ... }
-    table.insert(args, 1, path)
-    table.insert(args, 1, "--launcher")
-    local ok, code = pcall(env.main, args)
+    local ok, code = pcall(main, args)
     result.code = ok and code or 1
     if not ok then result.stderr = result.stderr .. tostring(code) end
     assert(stdout:seek("set") == 0)

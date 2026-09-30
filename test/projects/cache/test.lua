@@ -116,10 +116,12 @@ end)
 test("cache rejects a relative override", function()
     local env = environment(); env.DOTCMD_CACHE_DIR = "relative/cache"
     t.failure(run(env), "DOTCMD_CACHE_DIR must be an absolute path")
+    t.failure(t.run_project(project, { env = env }, "--cache-dir"), "DOTCMD_CACHE_DIR must be an absolute path")
     if windows then
         for _, path in ipairs({ "C:cache", "\\cache" }) do
             env.DOTCMD_CACHE_DIR = path
             t.failure(run(env), "DOTCMD_CACHE_DIR must be an absolute path")
+            t.failure(t.run_project(project, { env = env }, "--cache-dir"), "DOTCMD_CACHE_DIR must be an absolute path")
         end
     end
 end)

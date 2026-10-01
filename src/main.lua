@@ -133,7 +133,7 @@ Writes a minimal file that returns an empty task table.
 Does not overwrite an existing .cmd.lua.]],
         args = {},
         run = function()
-            fs.write(".cmd.lua", [[---@type dotcmd.Tasks
+            fs.write(".cmd.lua", [[---@type Tasks
 return {}
 ]], { if_exists = "error" })
             output:write({ "Created .cmd.lua\nOptional: run ",
@@ -176,8 +176,8 @@ The next invocation downloads the selected binary if it is not already cached.]]
     __api = {
         description = [[Show Lua API documentation
 
-Without a name, lists functions, runtime tables, and type definitions.
-A name shows signatures, fields, and descriptions, including related types.
+Without a name, lists functions and runtime tables.
+A name shows signatures, fields, and descriptions.
 
 Examples:
   .cmd --api fetch

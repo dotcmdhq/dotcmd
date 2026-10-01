@@ -28,7 +28,7 @@ test("CLI initializes a missing project and suggests setup", function()
     assert(output:find("Created .cmd.lua\n", 1, true), output)
     assert(output:find("Optional: run .cmd --setup completions to enable shell completions.", 1, true), output)
     local source = t.read(path)
-    assert(source == "---@type dotcmd.Tasks\nreturn {}\n", source)
+    assert(source == "---@type Tasks\nreturn {}\n", source)
     local help = success(t.run_project(project, "--help"))
     assert(not help:find("Run .cmd --init", 1, true), help)
     failure(t.run_project(project, "--init"), ".cmd.lua already exists")
@@ -479,16 +479,16 @@ test("CLI explicit exit status propagation is silent", function()
     end
 end)
 
-test("API index lists runtime entries and types without command help", function()
+test("API index lists runtime entries without command help", function()
     local api = require("dotcmd.api")
     for _, project in ipairs({ empty, broken, load_error }) do
         local output = success(t.run_project(project, "--api"))
         assert(output:match("^Lua API\n"), output)
-        for _, section in ipairs({ "Functions:", "Runtime tables:", "Type definitions:" }) do
+        for _, section in ipairs({ "Functions:", "Runtime tables:" }) do
             assert(output:find(section, 1, true), output)
         end
         for name in pairs(api.schema.fields) do assert(output:find("  " .. name .. " ", 1, true), output) end
-        for name in pairs(api.definitions) do assert(output:find("  " .. name .. " ", 1, true), output) end
+        assert(not output:find("Type definitions:", 1, true), output)
         assert(not output:find("Examples:", 1, true) and not output:find("Usage:", 1, true), output)
         assert(not output:find("---@", 1, true) and not output:find("\27", 1, true), output)
         assert(not output:find("  show ", 1, true), output)
@@ -499,33 +499,50 @@ test("API index lists runtime entries and types without command help", function(
     assert(not help:find("--luals", 1, true), help)
 end)
 
-test("API function documentation includes overloads, inherited options and callbacks", function()
+test("API function documentation includes overloads without expanding referenced types", function()
     local output = success(t.run_project(empty, "--api", "fetch"))
     for _, text in ipairs({ "fetch(options: FetchOptions) -> string", "fetch(url: string, sha256: string) -> string",
-        "FetchOptions\nExtends PinnedSource", "sha256", "Pinned download hash.", "HTTPS download URL.",
-        "Prepare(input: string, output: string)", "Its parent exists; output does not.", "Input is the cached download",
-        "Return values are ignored.", "Run only on a prepared-cache miss." }) do
+        "Accepts (url, sha256) or an options table.",
+        "Arguments (overload 1):\n  [1] options  FetchOptions\n    Pinned download and optional preparation.",
+        "Arguments (overload 2):\n  [1] url  string\n  [2] sha256  string" }) do
         assert(output:find(text, 1, true), output)
     end
-    local _, count = output:gsub("\nPrepare\n", "")
-    assert(count == 1 and not output:find("Examples:", 1, true), output)
+    assert(not output:find("\nFetchOptions\n", 1, true) and not output:find("\nPrepare\n", 1, true), output)
+    assert(not output:find("Examples:", 1, true), output)
 end)
 
-test("API dotted paths and type definitions include fields and finite recursive references", function()
+test("API entries use concise signatures and declaration-first field rows", function()
     local stat = success(t.run_project(empty, "--api", "fs.stat"))
-    assert(stat:find("fs.stat(path: string, options?: { follow?: boolean }|nil) -> Stat|nil", 1, true), stat)
+    assert(stat:find("fs.stat(path: string, options?: { follow?: boolean }) -> Stat|nil", 1, true), stat)
     assert(stat:find("Missing paths return nil; follow defaults to true.", 1, true), stat)
-    assert(stat:find("follow?", 1, true) and stat:find("Stat\n", 1, true), stat)
+    assert(not stat:find("\nStat\n", 1, true), stat)
+    local exec_docs = success(t.run_project(empty, "--api", "exec"))
+    assert(exec_docs:find("exec(command: Command|ExecCommand) -> ExecResult\n"
+        .. "exec(program: string, arguments...: string) -> ExecResult", 1, true), exec_docs)
+    assert(not exec_docs:find("\nCommand\n", 1, true), exec_docs)
+    local command = success(t.run_project(empty, "--api", "Command"))
+    assert(command:find("  [1] command  string|Command\n"
+        .. "    Program string or inner command at index 1.", 1, true), command)
+    local host_docs = success(t.run_project(empty, "--api", "host"))
+    assert(host_docs:find("  arch  \"x64\"|\"arm64\"\n"
+        .. "  cache_dir  string\n    Shared cache root; honors DOTCMD_CACHE_DIR.", 1, true), host_docs)
+    local if_exists = success(t.run_project(empty, "--api", "IfExists"))
+    assert(if_exists:find("IfExists\n\"error\"|\"skip\"|\"replace\"", 1, true), if_exists)
+    local json_docs = success(t.run_project(empty, "--api", "json.encode"))
+    assert(json_docs:find("json.encode(value: any, options?: JsonEncodeOptions) -> string", 1, true), json_docs)
+end)
+
+test("API dotted paths and named type definitions remain available", function()
     local fs_docs = success(t.run_project(empty, "--api", "fs"))
     assert(fs_docs:find("Fields:", 1, true) and fs_docs:find("chmod", 1, true), fs_docs)
     local task = success(t.run_project(empty, "--api", "Task"))
     assert(task:match("^Task\n"), task)
-    for _, text in ipairs({ "Fields:", "run?", "opts?", "args?", "tasks?", "Extends ValueSpec",
-        "Custom conversion/validation", "Arity\n", "ArgType\n" }) do
+    for _, text in ipairs({ "Fields:", "run?", "opts?", "args?", "tasks?", "Option",
+        "Arguments", "Tasks" }) do
         assert(task:find(text, 1, true), task)
     end
-    local _, count = task:gsub("\nTask\n", "")
-    assert(count == 0 and #task < 20000, task)
+    local option = success(t.run_project(empty, "--api", "Option"))
+    assert(option:find("Extends ValueSpec", 1, true), option)
     local cwd = success(t.run_project(empty, "--api", "ExecCommand.cwd"))
     assert(cwd:find("Child working directory", 1, true), cwd)
     local json = success(t.run_project(empty, "--api", "json"))

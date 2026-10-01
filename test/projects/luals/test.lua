@@ -19,15 +19,15 @@ test("primitives, literals, unions and maps describe input types", function()
         },
         schema = S.table { fields = { labels = S.ref { name = "Labels" } } },
     }
-    local text = L.generate(schema, "example")
-    contains(text, "---@alias example.Count integer")
-    contains(text, "---@alias example.Number number")
-    contains(text, "---@alias example.Flag boolean")
-    contains(text, "---@alias example.Nothing nil")
-    contains(text, "---@alias example.Handle file*")
-    contains(text, "---@alias example.Choice \"a\\nb\"|false|nil")
-    contains(text, "---@alias example.Labels table<string, string[]>")
-    contains(text, "---@type example.Labels\nlabels = nil")
+    local text = L.generate(schema)
+    contains(text, "---@alias Count integer")
+    contains(text, "---@alias Number number")
+    contains(text, "---@alias Flag boolean")
+    contains(text, "---@alias Nothing nil")
+    contains(text, "---@alias Handle file*")
+    contains(text, "---@alias Choice \"a\\nb\"|false|nil")
+    contains(text, "---@alias Labels table<string, string[]>")
+    contains(text, "---@type Labels\nlabels = nil")
     assert(load(text))
 end)
 
@@ -60,11 +60,11 @@ test("forward and recursive references remain named", function()
             Names = S.array { items = S.ref { name = "Name" } }, Name = S.string(),
         },
         schema = S.table { fields = { node = S.ref { name = "Node" }, union = S.ref { name = "RecursiveUnion" } } },
-    }, "tree")
-    contains(text, "---@field children tree.Node[]")
-    contains(text, "---@alias tree.RecursiveArray tree.RecursiveArray[]")
-    contains(text, "---@alias tree.Names tree.Name[]")
-    contains(text, "---@alias tree.RecursiveUnion tree.RecursiveUnion|string")
+    })
+    contains(text, "---@field children Node[]")
+    contains(text, "---@alias RecursiveArray RecursiveArray[]")
+    contains(text, "---@alias Names Name[]")
+    contains(text, "---@alias RecursiveUnion RecursiveUnion|string")
     assert(text == L.generate(S.registry {
         definitions = {
             Names = S.array { items = S.ref { name = "Name" } }, Name = S.string(),
@@ -73,7 +73,7 @@ test("forward and recursive references remain named", function()
             Node = S.table { fields = { children = S.array { items = S.ref { name = "Node" } } } },
         },
         schema = S.table { fields = { node = S.ref { name = "Node" }, union = S.ref { name = "RecursiveUnion" } } },
-    }, "tree"))
+    }))
 end)
 
 test("nested registries shadow locally and preserve outer references", function()
@@ -84,11 +84,11 @@ test("nested registries shadow locally and preserve outer references", function(
     local text = L.generate(S.registry {
         definitions = { Name = S.string(), Outer = S.boolean(), ["Scope1.Name"] = S.number() },
         schema = S.table { fields = { nested = nested, name = S.ref { name = "Name" } } },
-    }, "scoped")
-    contains(text, "---@alias scoped.Scope1.Name number")
-    contains(text, "---@alias scoped.Scope1.Name_2 integer")
-    contains(text, "---@type { local_name: scoped.Scope1.Name_2, outer: scoped.Outer }")
-    contains(text, "---@type scoped.Name\nname = nil")
+    })
+    contains(text, "---@alias Scope1.Name number")
+    contains(text, "---@alias Scope1.Name_2 integer")
+    contains(text, "---@type { local_name: Scope1.Name_2, outer: Outer }")
+    contains(text, "---@type Name\nname = nil")
 end)
 
 test("non-record roots get an alias without colliding with definitions", function()
@@ -169,23 +169,24 @@ end)
 
 test("full API emits every public global and preserves schema contracts", function()
     local api = require("dotcmd.api")
-    local text = L.generate(api, "dotcmd")
+    local text = L.generate(api)
     for name, schema in pairs(api.schema.fields) do
         if schema.type == "function" then contains(text, "function " .. name .. "(")
         else contains(text, name .. " = nil") end
     end
     contains(text, "---@overload fun(url: string, sha256: string): string")
-    contains(text, "---@param command dotcmd.Command|dotcmd.ExecCommand")
-    contains(text, "---@param command dotcmd.Command|dotcmd.SpawnCommand")
+    contains(text, "---@param command Command|ExecCommand")
+    contains(text, "---@param command Command|SpawnCommand")
     contains(text, "---@field body? string|any Binary-safe response string by default")
     contains(text, "---@field stdin file* Present when stdin is piped.")
     contains(text, "---@field stdout file* Present when stdout is piped.")
     contains(text, "---@field stderr file* Present when stderr is piped.")
-    assert(not text:find("dotcmd.FileHandle", 1, true))
+    assert(not text:find("FileHandle", 1, true))
     contains(text, "---@field stdout string Present when captured.")
     contains(text, "---@field stderr string Present when captured.")
     contains(text, "---@field check? any False disables HTTP status checking;")
-    assert(not text:find("dotcmd.Format", 1, true))
+    assert(not text:find("Format", 1, true))
+    assert(not text:find("dotcmd%.[A-Z]"))
     assert(load(text))
 end)
 
@@ -198,10 +199,10 @@ test("named children emit inheritance and only their own fields", function()
         },
         schema = S.table { fields = {} },
     }
-    local text = L.generate(schema, "example")
-    contains(text, "---@class (exact) example.Child: example.Parent\n---@field count string\n---@field enabled boolean\n\n")
-    contains(text, "---@class (exact) example.Grandchild: example.Child\n\n")
-    contains(text, "---@class (exact) example.Parent\n---@field count integer\n---@field name string Parent name.")
+    local text = L.generate(schema)
+    contains(text, "---@class (exact) Child: Parent\n---@field count string\n---@field enabled boolean\n\n")
+    contains(text, "---@class (exact) Grandchild: Child\n\n")
+    contains(text, "---@class (exact) Parent\n---@field count integer\n---@field name string Parent name.")
     assert(schema.definitions.Child.fields.name == nil)
 end)
 
@@ -225,10 +226,10 @@ test("anonymous inherited records and signatures preserve reference scopes", fun
                 } } },
             } },
         },
-    }, "scoped")
-    contains(text, "---@class (exact) scoped.Scope1.Child: scoped.Parent\n---@field number scoped.Scope1.Value")
-    contains(text, "---@type { name: scoped.Value, number: scoped.Scope1.Value }")
-    contains(text, "---@param text scoped.Value\n---@return scoped.Value text\nfunction run(text) end")
+    })
+    contains(text, "---@class (exact) Scope1.Child: Parent\n---@field number Scope1.Value")
+    contains(text, "---@type { name: Value, number: Scope1.Value }")
+    contains(text, "---@param text Value\n---@return Value text\nfunction run(text) end")
 end)
 
 test("inherited roots expose inherited globals", function()

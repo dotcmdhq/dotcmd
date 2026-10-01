@@ -53,17 +53,12 @@ local function join_union(types)
 end
 
 ---Generate a standalone LuaLS definition document. Root record fields are globals;
----other roots are a Value alias. Namespace qualifies registry definitions only.
+---other roots are a Value alias.
 ---Descriptions/defaults are included; callbacks and inputs are never modified or executed.
 ---@param schema dotcmd.schema.Schema
----@param namespace? string For example "dotcmd"; omitted means unqualified names.
 ---@return string annotations
-function L.generate(schema, namespace)
-    namespace = namespace or ""
+function L.generate(schema)
     local pending, scopes, scope_count, names = {}, {}, 0, {}
-    local function qualify(name)
-        return namespace == "" and name or namespace .. "." .. name
-    end
     local function allocate(name)
         local candidate, suffix = name, 2
         while names[candidate] do candidate = name .. "_" .. suffix; suffix = suffix + 1 end
@@ -74,10 +69,10 @@ function L.generate(schema, namespace)
         local siblings = scopes[parent or false]
         if not siblings then siblings = {}; scopes[parent or false] = siblings end
         if siblings[registry] then return siblings[registry] end
-        local prefix = namespace
+        local prefix = ""
         if parent then
             scope_count = scope_count + 1
-            prefix = qualify("Scope" .. scope_count)
+            prefix = "Scope" .. scope_count
         end
         local scope = { parent = parent, definitions = {} }
         siblings[registry] = scope
@@ -381,7 +376,7 @@ function L.generate(schema, namespace)
             end
         end
     else
-        pending[#pending + 1] = { name = allocate(qualify("Value")), schema = root, scope = scope }
+        pending[#pending + 1] = { name = allocate("Value"), schema = root, scope = scope }
     end
     local index = 1
     while index <= #pending do

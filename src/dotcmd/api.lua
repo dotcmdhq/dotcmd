@@ -353,7 +353,8 @@ function api.show(name)
     local function sequence_text(sequence, returns)
         local result = {}
         for _, entry in ipairs(sequence) do
-            local arity, text = entry.arity or "1", type_text(entry[2])
+            local arity = entry.arity or "1"
+            local text = type_text(entry[2], not returns and arity == "?")
             if returns then
                 if arity == "?" and not nullable(entry[2]) then text = text .. "|nil" end
                 if arity == "*" then text = text .. "..."
@@ -420,25 +421,26 @@ function api.show(name)
         output:write({ "\n", { bold = true, title }, ":\n" })
         local indent = string.rep(" ", width + 4)
         for _, row in ipairs(entries) do
-            output:write({ "  ", { bold = true, row[1] }, string.rep(" ", width - #row[1] + 2),
-                { dim = true, row[2] or "" }, row[3] and ("  " .. row[3]:gsub("\n", "\n" .. indent)) or "", "\n" })
+            local text, utility = row[2] or "", row[3]
+            if utility ~= nil then
+                output:write({ "  ", { bold = true, row[1] }, { dim = true, "  ", utility }, "\n" })
+                if text ~= "" then output:write({ "    ", text:gsub("\n", "\n    "), "\n" }) end
+            else
+                output:write({ "  ", { bold = true, row[1] }, string.rep(" ", width - #row[1] + 2),
+                    text:gsub("\n", "\n" .. indent), "\n" })
+            end
         end
     end
     if not name then
         output:write({ bold = true, "Lua API\n" })
-        local functions, tables, types = {}, {}, {}
+        local functions, tables = {}, {}
         for _, key in ipairs(sorted_keys(api.schema.fields)) do
             local value = api.schema.fields[key]
             local list = resolve(value).type == "function" and functions or tables
             list[#list + 1] = { key, (description(value) or ""):match("^[^\n]*") }
         end
-        for _, key in ipairs(sorted_keys(api.definitions)) do
-            local value = api.definitions[key]
-            types[#types + 1] = { key, (description(value) or type_text(value)):match("^[^\n]*") }
-        end
         rows("Functions", functions)
         rows("Runtime tables", tables)
-        rows("Type definitions", types)
         output:flush()
         return
     end
@@ -448,7 +450,8 @@ function api.show(name)
     if not value then
         local available = sorted_keys(api.schema.fields)
         for _, key in ipairs(sorted_keys(api.definitions)) do available[#available + 1] = key end
-        error({ message = "unknown API entry " .. literal(path[1]) .. "\nAvailable entries: " .. table.concat(available, ", "), exit_code = 2 })
+        error({ message = "unknown API entry " .. literal(path[1])
+            .. "\nAvailable entries: " .. table.concat(available, ", "), exit_code = 2 })
     end
     for i = 2, #path do
         local parent = table.concat(path, ".", 1, i - 1)
@@ -465,30 +468,6 @@ function api.show(name)
                 .. "\nAvailable members of " .. parent .. ": " .. table.concat(available, ", "), exit_code = 2 })
         end
     end
-    local pending, seen = {}, {}
-    local shape = resolve(value)
-    if api.definitions[path[1]] then seen[path[1]] = true end
-    if value.type == "ref" then seen[value.name] = true end
-    local function collect(item)
-        local kind = item.type
-        if kind == "ref" then
-            if not seen[item.name] then
-                seen[item.name] = true
-                pending[#pending + 1] = item.name
-            end
-        elseif kind == "table" then
-            local declared = fields(item)
-            for _, key in ipairs(sorted_keys(declared)) do
-                local child = declared[key]
-                collect(type(key) == "number" and child[2] or child)
-            end
-        elseif kind == "map" then collect(item.key); collect(item.value)
-        elseif kind == "union" or kind == "alt" then
-            for _, alternative in ipairs(item.alternatives) do collect(kind == "alt" and alternative[2] or alternative) end
-        elseif kind == "function" then
-            for _, signature in ipairs(item.signatures) do collect(signature.params); collect(signature.returns) end
-        end
-    end
     local function field_rows(declared)
         local result = {}
         for _, key in ipairs(sorted_keys(declared)) do
@@ -503,7 +482,7 @@ function api.show(name)
             local text, default = description(item), property(item, "default")
             if default ~= nil then text = (text and (text .. " ") or "") .. "Default: " .. literal(default) .. "." end
             if notes then text = (text and (text .. " ") or "") .. notes end
-            result[#result + 1] = { label, type_text(item, true), text }
+            result[#result + 1] = { label, text, type_text(item, true) }
         end
         return result
     end
@@ -511,9 +490,9 @@ function api.show(name)
         local item = resolve(declared)
         output:write({ bold = true, label, "\n" })
         if item.type == "function" then
-            for _, text in ipairs(call_signatures(item, label)) do output:write({ dim = true, text, "\n" }) end
+            for _, text in ipairs(call_signatures(item, label)) do output:write({ text, "\n" }) end
         elseif item.type ~= "table" then
-            output:write({ dim = true, type_text(item), "\n" })
+            output:write({ type_text(item), "\n" })
         elseif item.extends then
             output:write({ dim = true, "Extends ", item.extends.name, "\n" })
         end
@@ -529,16 +508,8 @@ function api.show(name)
                 rows(title, field_rows(fields(signature.params)))
             end
         end
-        collect(item)
     end
     show(name, value)
-    local index = 1
-    while index <= #pending do
-        local key = pending[index]
-        output:write("\n")
-        show(key, api.definitions[key])
-        index = index + 1
-    end
     output:flush()
 end
 

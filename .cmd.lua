@@ -133,7 +133,7 @@ local function build(mode)
     return cmake_command
 end
 
----@type dotcmd.Tasks
+---@type Tasks
 return {
     build = {
         description = [[Build dotcmd

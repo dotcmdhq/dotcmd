@@ -478,3 +478,86 @@ test("CLI explicit exit status propagation is silent", function()
         assert(result.code == code and result.stdout == "" and result.stderr == "", result.stderr)
     end
 end)
+
+test("API index lists runtime entries and types without command help", function()
+    local api = require("dotcmd.api")
+    for _, project in ipairs({ empty, broken, load_error }) do
+        local output = success(t.run_project(project, "--api"))
+        assert(output:match("^Lua API\n"), output)
+        for _, section in ipairs({ "Functions:", "Runtime tables:", "Type definitions:" }) do
+            assert(output:find(section, 1, true), output)
+        end
+        for name in pairs(api.schema.fields) do assert(output:find("  " .. name .. " ", 1, true), output) end
+        for name in pairs(api.definitions) do assert(output:find("  " .. name .. " ", 1, true), output) end
+        assert(not output:find("Examples:", 1, true) and not output:find("Usage:", 1, true), output)
+        assert(not output:find("---@", 1, true) and not output:find("\27", 1, true), output)
+        assert(not output:find("  show ", 1, true), output)
+    end
+    local help = success(t.run_project(empty, "--help", "--api"))
+    assert(help:find("Usage: .cmd --api [name]", 1, true), help)
+    assert(help:find("Examples:\n  .cmd --api fetch\n  .cmd --api fs.stat\n  .cmd --api Task", 1, true), help)
+    assert(not help:find("--luals", 1, true), help)
+end)
+
+test("API function documentation includes overloads, inherited options and callbacks", function()
+    local output = success(t.run_project(empty, "--api", "fetch"))
+    for _, text in ipairs({ "fetch(options: FetchOptions) -> string", "fetch(url: string, sha256: string) -> string",
+        "FetchOptions\nExtends PinnedSource", "sha256", "Pinned download hash.", "HTTPS download URL.",
+        "Prepare(input: string, output: string)", "Its parent exists; output does not.", "Input is the cached download",
+        "Return values are ignored.", "Run only on a prepared-cache miss." }) do
+        assert(output:find(text, 1, true), output)
+    end
+    local _, count = output:gsub("\nPrepare\n", "")
+    assert(count == 1 and not output:find("Examples:", 1, true), output)
+end)
+
+test("API dotted paths and type definitions include fields and finite recursive references", function()
+    local stat = success(t.run_project(empty, "--api", "fs.stat"))
+    assert(stat:find("fs.stat(path: string, options?: { follow?: boolean }|nil) -> Stat|nil", 1, true), stat)
+    assert(stat:find("Missing paths return nil; follow defaults to true.", 1, true), stat)
+    assert(stat:find("follow?", 1, true) and stat:find("Stat\n", 1, true), stat)
+    local fs_docs = success(t.run_project(empty, "--api", "fs"))
+    assert(fs_docs:find("Fields:", 1, true) and fs_docs:find("chmod", 1, true), fs_docs)
+    local task = success(t.run_project(empty, "--api", "Task"))
+    assert(task:match("^Task\n"), task)
+    for _, text in ipairs({ "Fields:", "run?", "opts?", "args?", "tasks?", "Extends ValueSpec",
+        "Custom conversion/validation", "Arity\n", "ArgType\n" }) do
+        assert(task:find(text, 1, true), task)
+    end
+    local _, count = task:gsub("\nTask\n", "")
+    assert(count == 0 and #task < 20000, task)
+    local cwd = success(t.run_project(empty, "--api", "ExecCommand.cwd"))
+    assert(cwd:find("Child working directory", 1, true), cwd)
+    local json = success(t.run_project(empty, "--api", "json"))
+    assert(json:find("Encode and decode JSON.", 1, true) and json:find("__jsontype", 1, true), json)
+end)
+
+test("API lookup errors identify the entry and available members", function()
+    for _, case in ipairs({
+        { "unknown", "unknown API entry \"unknown\"", "Available entries:" },
+        { "fs.stats", "unknown API member \"fs.stats\"", "Available members of fs:" },
+        { "fetch.path", "API entry \"fetch\" has no declared members" },
+        { "fs..stat", "unknown API member \"fs.\"", "Available members of fs:" },
+        { "", "unknown API entry \"\"", "Available entries:" },
+    }) do
+        local result = t.run_project(empty, "--api", case[1])
+        assert(result.code == 2 and result.stdout == "", result.stderr)
+        assert(result.stderr:find(case[2], 1, true), result.stderr)
+        if case[3] then assert(result.stderr:find(case[3], 1, true), result.stderr) end
+        assert(not result.stderr:find("stack traceback", 1, true), result.stderr)
+    end
+    local extra = t.run_project(empty, "--api", "fetch", "extra")
+    assert(extra.code == 2 and extra.stderr:find("unexpected positional argument: extra", 1, true), extra.stderr)
+end)
+
+test("API discovery follows ordinary project loading without invoking schema predicates", function()
+    local project = t.project("api-project", [[
+fs.write("loaded", "yes")
+local api = require("dotcmd.api")
+api.definitions.Sha256Options.validate = function() error("must not run") end
+return {}
+]])
+    local output = success(t.run_project(project, "--api", "sha256"))
+    assert(t.read(project .. "/loaded") == "yes")
+    assert(output:find("Hash exactly one of bytes or a file path.", 1, true), output)
+end)

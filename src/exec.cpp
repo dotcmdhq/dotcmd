@@ -204,7 +204,7 @@ static const char* String(lua_State* L, int index) {
     luaL_checktype(L, index, LUA_TSTRING);
     size_t size;
     const char* value = lua_tolstring(L, index, &size);
-    if (memchr(value, 0, size)) luaL_error(L, "exec: strings must not contain NUL bytes");
+    if (memchr(value, 0, size)) luaL_error(L, "exec: command strings must contain no NUL bytes");
     return value;
 }
 
@@ -287,7 +287,7 @@ static void ApplyEnvironment(lua_State* L, Process* p, int layer, size_t* count_
     lua_pushnil(L);
     while (lua_next(L, overrides)) {
         const char* name = String(L, -2);
-        if (!*name || strchr(name, '=')) luaL_error(L, "exec: invalid environment variable name");
+        if (!*name || strchr(name, '=')) luaL_error(L, "exec: environment names must be nonempty and contain no \"=\"");
         NativeChar* native_name = Native(L, name);
         size_t name_size = Length(native_name);
         size_t match = 0;
@@ -303,8 +303,8 @@ static void ApplyEnvironment(lua_State* L, Process* p, int layer, size_t* count_
         }
         bool remove = lua_isnil(L, -1) || (lua_isboolean(L, -1) && !lua_toboolean(L, -1));
         if (!remove && lua_type(L, -1) != LUA_TSTRING) {
-            if (update) luaL_error(L, "exec: environment update for %s must return a string, false, or nil", name);
-            luaL_error(L, "exec: environment variable %s must be a string, false, or an update function", name);
+            if (update) luaL_error(L, "exec: update for field \"command.env.%s\" must return a string, false, or nil", name);
+            luaL_error(L, "exec: field \"command.env.%s\" must be a string, false, or an update function", name);
         }
         if (remove) lua_pushfstring(L, "%s=", name);
         else lua_pushfstring(L, "%s=%s", name, String(L, -1));
@@ -381,7 +381,7 @@ static void ReadStream(lua_State* L, int options, const char* name, Stream* stre
         else if (spawn && strcmp(mode, "pipe") == 0) stream->mode = PipeStream;
         else if (strcmp(mode, "discard") == 0) stream->mode = Discard;
         else if (strcmp(name, "stderr") == 0 && strcmp(mode, "stdout") == 0) stream->mode = Merge;
-        else luaL_error(L, "exec: invalid %s mode: %s", name, mode);
+        else luaL_error(L, "exec: field \"command.%s\" has invalid mode \"%s\"", name, mode);
     }
     lua_pop(L, 1);
 }
@@ -820,16 +820,16 @@ static int CloseGuard(lua_State* L) {
 // stack at consecutive indices so construction needs no separately owned list.
 static int ReadCommandLayers(lua_State* L, int supplied, size_t* count_pointer) {
     if (!lua_istable(L, 1)) {
-        if (!supplied) luaL_error(L, "exec: executable is required");
+        if (!supplied) luaL_error(L, "exec: argument \"command\" requires an executable");
         *count_pointer = (size_t)supplied;
         return 0;
     }
-    if (supplied != 1) luaL_error(L, "exec: table form accepts one argument");
+    if (supplied != 1) luaL_error(L, "exec: expected one argument for the table form");
     size_t count = 0;
     int layer = 1;
     for (;;) {
         size_t length = lua_rawlen(L, layer);
-        if (!length) luaL_error(L, "exec: executable is required");
+        if (!length) luaL_error(L, "exec: argument \"command\" requires an executable");
         luaL_checkstack(L, 1, "too many nested commands");
         lua_rawgeti(L, layer, 1);
         bool nested = lua_istable(L, -1);
@@ -894,7 +894,7 @@ static Process* NewProcess(lua_State* L, bool spawn) {
             memcpy(p->args[argument++], value, size);
         }
     }
-    if (!p->args[0][0]) luaL_error(L, "exec: executable must not be empty");
+    if (!p->args[0][0]) luaL_error(L, "exec: argument \"command\" must name a nonempty executable");
     if (inner) {
         // cwd composes; the outermost command layer that specifies it wins.
         for (int layer = 1; layer <= inner; ++layer) {

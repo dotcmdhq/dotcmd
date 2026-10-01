@@ -173,7 +173,7 @@ static void PushValue(lua_State* L, Document* document, yyjson_val* root) {
 
 static int Decode(lua_State* L) {
     if (lua_gettop(L) != 1 || lua_type(L, 1) != LUA_TSTRING)
-        return luaL_error(L, "json.decode expects one string");
+        return luaL_error(L, "json.decode: expected one string argument \"text\"");
     size_t size;
     const char* source = lua_tolstring(L, 1, &size);
 
@@ -363,7 +363,7 @@ static yyjson_mut_val* EncodeValue(lua_State* L, Encoder* encoder, int index, in
 static int Encode(lua_State* L) {
     int arguments = lua_gettop(L);
     if (arguments < 1 || arguments > 2)
-        return luaL_error(L, "json.encode expects a value and optional options table");
+        return luaL_error(L, "json.encode: expected a value and optional options table");
     bool pretty = false;
     if (arguments == 2 && !lua_isnil(L, 2)) {
         luaL_checktype(L, 2, LUA_TTABLE);

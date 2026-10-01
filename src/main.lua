@@ -3,13 +3,19 @@ local args = require("dotcmd.args")
 local tasks = require("dotcmd.tasks")
 local format = require("dotcmd.format")
 local pretty = require("dotcmd.pretty")
+local S = require("dotcmd.schema")
+local api = require("dotcmd.api")
+local fetch_schema = S.at(api, { "fetch" })
+local plugin_schema = S.at(api, { "plugin" })
 local output = format.writer(io.stdout)
 
 -- Project tasks are {name = function(...) ... end} or
 -- {name = {description = "...", run = function(...) ... end}} from .cmd.lua.
 -- host is global; optional opts/args schemas prepare the arguments to run.
 -- Completed entries are trusted; only fresh downloads are verified.
-function fetch(options, hash)
+function fetch(...)
+    S.validate_call(fetch_schema, ...)
+    local options, hash = ...
     if type(options) == "string" then options = { url = options, sha256 = hash } end
     hash = options.sha256
     local prepare = options.prepare
@@ -76,7 +82,9 @@ end
 
 local loaded_plugins = {}
 
-function plugin(url, hash)
+function plugin(...)
+    S.validate_call(plugin_schema, ...)
+    local url, hash = ...
     local values = loaded_plugins[hash]
     if values then return table.unpack(values, 1, values.n) end
 
@@ -164,6 +172,19 @@ The next invocation downloads the selected binary if it is not already cached.]]
         description = "Show dependency licenses",
         args = {},
         run = function() io.write(internal.licenses) end,
+    },
+    __api = {
+        description = [[Show Lua API documentation
+
+Without a name, lists functions, runtime tables, and type definitions.
+A name shows signatures, fields, and descriptions, including related types.
+
+Examples:
+  .cmd --api fetch
+  .cmd --api fs.stat
+  .cmd --api Task]],
+        args = { { "name", arity = "?", description = "Global, dotted member path, or named type" } },
+        run = function(name) api.show(name) end,
     },
     __help = {
         aliases = { "-h", "-?" },

@@ -275,3 +275,13 @@ test("http consumers preserve false and nil results and support nested requests"
     end }
     assert(nested and response.body == nil)
 end)
+
+test("http preserves truthy checks and native option coercions", function()
+    for _, check in ipairs { true, 0, "yes", {} } do
+        t.assert_error("HTTP status 404", function()
+            http { url = url .. "/status/404", check = check }
+        end)
+    end
+    assert(http({ url = url .. "/body", timeout = "5", connect_timeout = "5", unrelated = true }, "ignored").body == bytes)
+    assert(http { url = url .. "/status/404", check = false }.status == 404)
+end)

@@ -114,7 +114,7 @@ static PathChar* Path(lua_State* L, State* state, int slot, int index) {
     luaL_checktype(L, index, LUA_TSTRING);
     size_t size;
     const char* value = lua_tolstring(L, index, &size);
-    if (!size || memchr(value, 0, size)) luaL_error(L, "fs: paths must be nonempty strings without NUL bytes");
+    if (!size || memchr(value, 0, size)) luaL_error(L, "fs: argument \"path\" must be nonempty and contain no NUL bytes");
 #ifdef _WIN32
     int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value, -1, NULL, 0);
     if (!count) luaL_error(L, "fs: path is not valid UTF-8");
@@ -672,10 +672,10 @@ static int Chmod(lua_State* L) {
     if (add_execute) {
         size_t size;
         const char* symbolic = lua_tolstring(L, 2, &size);
-        luaL_argcheck(L, size == 2 && memcmp(symbolic, "+x", 2) == 0, 2, "expected numeric mode or '+x'");
+        luaL_argcheck(L, size == 2 && memcmp(symbolic, "+x", 2) == 0, 2, "mode must be an integer or \"+x\"");
     } else {
         mode = luaL_checkinteger(L, 2);
-        luaL_argcheck(L, mode >= 0 && mode <= 0777, 2, "expected permission bits between 0 and 0777");
+        luaL_argcheck(L, mode >= 0 && mode <= 0777, 2, "mode must be between 0 and 0777");
     }
     State* state = NewState(L);
     PathChar* path = Path(L, state, 0, 1);

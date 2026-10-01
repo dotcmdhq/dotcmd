@@ -44,9 +44,9 @@ test("json rejects malformed and non-standard input", function()
 end)
 
 test("json validates its argument", function()
-    t.assert_error("expects one string", function() json.decode() end)
-    t.assert_error("expects one string", function() json.decode(1) end)
-    t.assert_error("expects one string", function() json.decode("{}", "{}") end)
+    t.assert_error("json.decode: expected one string argument \"text\"", function() json.decode() end)
+    t.assert_error("json.decode: expected one string argument \"text\"", function() json.decode(1) end)
+    t.assert_error("json.decode: expected one string argument \"text\"", function() json.decode("{}", "{}") end)
 end)
 
 test("json converts deeply nested values iteratively", function()
@@ -181,8 +181,8 @@ test("json rejects unsupported values and invalid strings", function()
     for _, value in ipairs({ string.char(255), { [string.char(255)] = true } }) do
         t.assert_error("json.encode:", function() json.encode(value) end)
     end
-    t.assert_error("expects a value", function() json.encode() end)
-    t.assert_error("expects a value", function() json.encode(1, {}, {}) end)
+    t.assert_error("expected a value", function() json.encode() end)
+    t.assert_error("expected a value", function() json.encode(1, {}, {}) end)
     t.assert_error("table expected", function() json.encode(1, true) end)
     t.assert_error("boolean expected", function() json.encode(1, { pretty = "yes" }) end)
 end)

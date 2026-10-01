@@ -102,7 +102,7 @@ static int Consume(lua_State* L) {
     Hash* hash = (Hash*)lua_touserdata(L, lua_upvalueindex(1));
     if (hash->finished) return luaL_error(L, "sha256: consumer is already complete");
     if (lua_gettop(L) == 0) return Finish(L, hash);
-    if (lua_gettop(L) != 1) return luaL_error(L, "sha256: consumer expects one chunk or no arguments");
+    if (lua_gettop(L) != 1) return luaL_error(L, "sha256.consumer: expected one string argument \"chunk\" or no arguments");
     luaL_checktype(L, 1, LUA_TSTRING);
     size_t size;
     const char* bytes = lua_tolstring(L, 1, &size);
@@ -117,18 +117,18 @@ static int Sha256(lua_State* L) {
         lua_pushcclosure(L, Consume, 1);
         return 1;
     }
-    if (lua_gettop(L) != 1) return luaL_error(L, "sha256 expects no arguments, {bytes=...} or {path=...}");
+    if (lua_gettop(L) != 1) return luaL_error(L, "sha256: expected no arguments or one options table with \"bytes\" or \"path\"");
     luaL_checktype(L, 1, LUA_TTABLE);
     lua_getfield(L, 1, "bytes");
     lua_getfield(L, 1, "path");
     bool from_file = !lua_isnil(L, -1);
     if (from_file == !lua_isnil(L, -2))
-        return luaL_error(L, "sha256: specify exactly one of 'bytes' or 'path'");
+        return luaL_error(L, "sha256: specify exactly one of \"options.bytes\" or \"options.path\"");
     int input = lua_gettop(L) - (from_file ? 0 : 1);
     luaL_checktype(L, input, LUA_TSTRING);
     size_t size;
     const char* value = lua_tolstring(L, input, &size);
-    if (from_file && memchr(value, 0, size)) return luaL_error(L, "sha256: path must not contain NUL bytes");
+    if (from_file && memchr(value, 0, size)) return luaL_error(L, "sha256: field \"options.path\" must contain no NUL bytes");
 
     Hash* hash = NewHash(L);
     lua_toclose(L, -1);

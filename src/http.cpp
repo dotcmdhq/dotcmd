@@ -250,7 +250,7 @@ static const char* StringField(lua_State* L, const char* name, const char* fallb
         luaL_checktype(L, -1, LUA_TSTRING);
         size_t length;
         value = lua_tolstring(L, -1, &length);
-        if (memchr(value, 0, length)) luaL_error(L, "http: %s contains a NUL byte", name);
+        if (memchr(value, 0, length)) luaL_error(L, "http: field \"options.%s\" must contain no NUL bytes", name);
     }
     // Keep values rooted even when the options table uses __index.
     return value;
@@ -261,7 +261,7 @@ static long TimeoutField(lua_State* L, const char* name, long fallback) {
     if (lua_isnil(L, -1)) return fallback;
     lua_Integer value = luaL_checkinteger(L, -1);
     if (value < 0 || (uint64_t)value > LONG_MAX)
-        luaL_error(L, "http: %s must be a nonnegative integer in seconds", name);
+        luaL_error(L, "http: field \"options.%s\" must be a nonnegative integer in seconds", name);
     return (long)value;
 }
 
@@ -361,7 +361,7 @@ static void AddHeader(lua_State* L, Request* request, const char* name) {
     size_t length;
     const char* value = lua_tolstring(L, -1, &length);
     if (memchr(value, 0, length) || memchr(value, '\r', length) || memchr(value, '\n', length))
-        luaL_error(L, "http: invalid request header value");
+        luaL_error(L, "http: header values must contain no NUL, CR or LF bytes");
     // A trailing semicolon tells libcurl to send an empty header value.
     lua_pushfstring(L, length ? "%s: %s" : "%s;%s", name, value);
     curl_slist* headers = curl_slist_append(request->headers, lua_tostring(L, -1));
@@ -379,9 +379,9 @@ static int Http(lua_State* L) {
     }
     luaL_checktype(L, 1, LUA_TTABLE);
     const char* url = StringField(L, "url", NULL);
-    if (!url) return luaL_error(L, "http: url is required");
+    if (!url) return luaL_error(L, "http: field \"options.url\" is required");
     const char* method = StringField(L, "method", "GET");
-    if (!Token(method)) return luaL_error(L, "http: invalid method");
+    if (!Token(method)) return luaL_error(L, "http: field \"options.method\" must be an HTTP token");
     lua_getfield(L, 1, "to");
     int destination = lua_gettop(L);
     bool streaming = lua_isfunction(L, destination);
@@ -390,7 +390,7 @@ static int Http(lua_State* L) {
         luaL_checktype(L, destination, LUA_TSTRING);
         size_t length;
         output = lua_tolstring(L, destination, &length);
-        if (memchr(output, 0, length)) return luaL_error(L, "http: to contains a NUL byte");
+        if (memchr(output, 0, length)) return luaL_error(L, "http: field \"options.to\" must contain no NUL bytes");
     }
     long connect_timeout = TimeoutField(L, "connect_timeout", 30);
     long timeout = TimeoutField(L, "timeout", 0);
@@ -494,7 +494,7 @@ static int Http(lua_State* L) {
             size_t name_length;
             const char* name = lua_tolstring(L, -2, &name_length);
             if (memchr(name, 0, name_length) || !Token(name))
-                return luaL_error(L, "http: invalid request header name");
+                return luaL_error(L, "http: header names must be HTTP tokens without NUL bytes");
             if (lua_istable(L, -1)) {
                 lua_Integer count = (lua_Integer)lua_rawlen(L, -1);
                 for (lua_Integer i = 1; i <= count; ++i) {

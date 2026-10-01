@@ -88,7 +88,7 @@ static const char* String(lua_State* L, int index) {
     luaL_checktype(L, index, LUA_TSTRING);
     size_t size;
     const char* value = lua_tolstring(L, index, &size);
-    if (!size || memchr(value, 0, size)) luaL_error(L, "extract: paths must be nonempty strings without NUL bytes");
+    if (!size || memchr(value, 0, size)) luaL_error(L, "extract: paths must be nonempty and contain no NUL bytes");
     return value;
 }
 
@@ -316,7 +316,7 @@ static int Extract(lua_State* L) {
     int supplied = lua_gettop(L);
     bool options = lua_istable(L, 1);
     if (supplied < 1 || supplied > (options ? 1 : 2))
-        return luaL_error(L, "extract expects a path, a path and destination, or an options table");
+        return luaL_error(L, "extract: expected a path and optional destination, or one options table");
     if (options) lua_getfield(L, 1, "path"); else lua_pushvalue(L, 1);
     const char* input = String(L, -1);
     State* s = (State*)lua_newuserdatauv(L, sizeof(State), 0);
@@ -329,7 +329,7 @@ static int Extract(lua_State* L) {
         lua_getfield(L, 1, "strip_components");
         if (!lua_isnil(L, -1)) strip = luaL_checkinteger(L, -1);
         lua_pop(L, 1);
-        if (strip < 0) return luaL_error(L, "extract: strip_components must be nonnegative");
+        if (strip < 0) return luaL_error(L, "extract: field \"options.strip_components\" must be nonnegative");
         lua_getfield(L, 1, "to");
     } else if (supplied == 2) lua_pushvalue(L, 2);
     else lua_pushnil(L);
@@ -351,11 +351,11 @@ static int Extract(lua_State* L) {
     size_t count = 0;
     if (!lua_isnil(L, filters)) {
         luaL_checktype(L, filters, LUA_TTABLE); count = lua_rawlen(L, filters);
-        if (!count) return luaL_error(L, "extract: include must be a nonempty array");
+        if (!count) return luaL_error(L, "extract: field \"options.include\" must be a nonempty array");
         lua_pushnil(L);
         while (lua_next(L, filters)) {
             if (!lua_isinteger(L, -2) || lua_tointeger(L, -2) < 1 || (lua_Unsigned)lua_tointeger(L, -2) > count)
-                return luaL_error(L, "extract: include must be an array of paths");
+                return luaL_error(L, "extract: field \"options.include\" must be an array of paths");
             String(L, -1); lua_pop(L, 1);
         }
     }
@@ -364,7 +364,7 @@ static int Extract(lua_State* L) {
     for (size_t i = 1; i <= count; ++i) {
         lua_rawgeti(L, filters, (lua_Integer)i);
         char* name = Normalize(L, &s->scratch[0], String(L, -1));
-        if (!*name) return luaL_error(L, "extract: include paths must name an entry");
+        if (!*name) return luaL_error(L, "extract: entries in \"options.include\" must name an archive entry");
         lua_pushstring(L, name); lua_rawseti(L, normalized_filters, (lua_Integer)i); lua_pop(L, 1);
     }
     lua_newtable(L); int outputs = lua_gettop(L);

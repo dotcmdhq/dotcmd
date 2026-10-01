@@ -243,7 +243,8 @@ test("fetch rejects missing outputs and invalid prepare callbacks", function()
     assert_entries_unchanged(before)
     for _, prepare in ipairs { false, "script.lua", {}, print } do
         options.prepare = prepare
-        t.assert_error("prepare must be a Lua function or named native function", function() fetch(options) end)
+        t.assert_error(prepare == print and "prepare must be a Lua function or named native function"
+            or "field \"options.prepare\" must be Prepare or nil", function() fetch(options) end)
     end
 end)
 

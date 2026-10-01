@@ -75,14 +75,21 @@ local api = S.registry {
             { "value", S.union { alternatives = { S.string(), S.literal { value = false }, S.null() } } },
         }),
         EnvValue = S.union { description = "Environment replacement, removal, or update function.", alternatives = { S.string(), S.literal { value = false }, S.ref { name = "EnvUpdate" } } },
-        Command = S.table { description = "Program or nested command, with string arguments, working directory, and environment.", fields = {
-            { "command", S.union { description = "Program string or inner command at index 1.", alternatives = { S.string(), S.ref { name = "Command" } } } },
-            { "arguments", S.string { description = "String arguments after the program or inner command." }, arity = "*" },
-            cwd = S.optional { schema = S.string { description = "Child working directory; the outermost specified value wins and otherwise defaults to the project directory. "
-                .. "Use host.invocation_dir to run where dotcmd was invoked." } },
-            env = S.optional { description = "Overlay inherited and inner command variables; outer values win. An update function receives the effective "
-                .. "old value, or nil when absent; nil or false removes the variable.", schema = S.map { key = S.string(), value = S.ref { name = "EnvValue" } } },
-        } },
+        Command = S.table {
+            description = "Program or nested command, with string arguments, working directory, and environment.",
+            examples = [[Forward all task arguments with named fields first and ... last:
+
+    exec { cwd = host.invocation_dir, env = env, program, ... }
+]],
+            fields = {
+                { "command", S.union { description = "Program string or inner command at index 1.", alternatives = { S.string(), S.ref { name = "Command" } } } },
+                { "arguments", S.string { description = "String arguments after the program or inner command." }, arity = "*" },
+                cwd = S.optional { schema = S.string { description = "Child working directory; the outermost specified value wins and otherwise defaults to the project directory. "
+                    .. "Use host.invocation_dir to run where dotcmd was invoked." } },
+                env = S.optional { description = "Overlay inherited and inner command variables; outer values win. An update function receives the effective "
+                    .. "old value, or nil when absent; nil or false removes the variable.", schema = S.map { key = S.string(), value = S.ref { name = "EnvValue" } } },
+            },
+        },
         ExecCommand = S.table {
             description = "Execution settings are read only from the command table passed directly to exec, never from inner commands.",
             extends = S.ref { name = "Command" },
@@ -151,7 +158,7 @@ local api = S.registry {
                 { description = "Sets Unix permission bits (0 through 0777), or adds execute bits allowed by umask with \"+x\"; no-op on Windows." }),
         } },
         ExtractOptions = S.table { description = "Archive source, destination, and extraction options.", fields = {
-            path = S.string { description = "Archive file; format detected by contents." }, to = S.optional { schema = S.string { description = "New destination directory; defaults to the archive path without its suffix. Parent must exist." } },
+            path = S.string { description = "Archive file; format detected by contents." }, to = S.optional { schema = S.string { description = "New destination directory; defaults to the archive path without its suffix. Missing parents are created." } },
             if_exists = S.optional { schema = S.ref { name = "IfExists", description = "Defaults to error. Replacement swaps trees on Unix; Windows moves the old tree aside before publication." } },
             include = S.optional { schema = S.array { items = S.string { description = "Exact archive paths or directory prefixes, matched before stripping." } } },
             strip_components = S.optional { schema = S.integer { description = "Leading path components to remove; defaults to 0." } },
@@ -260,11 +267,22 @@ local api = S.registry {
         extract = S.func { signatures = {
             signature({ { "options", S.ref { name = "ExtractOptions" } } }, { { "extracted", S.boolean() } }),
             signature({ { "path", S.string() }, { "to", S.optional { schema = S.string() }, arity = "?" } }, { { "extracted", S.boolean() } }),
-        }, description = "Accepts (path, to?) or an options table. Extracts ZIP, tar, tar.gz, or tar.xz.\nReturns true on success, false when skipped; parent must exist." },
+        }, description = "Accepts (path, to?) or an options table. Extracts ZIP, tar, tar.gz, or tar.xz.\nReturns true on success, false when skipped. Missing parents are created and may remain after failure." },
         fetch = S.func { signatures = {
             signature({ { "options", S.ref { name = "FetchOptions" } } }, { { "path", S.string() } }),
             signature({ { "url", S.string() }, { "sha256", S.string() } }, { { "path", S.string() } }),
-        }, description = "Accepts (url, sha256) or an options table. Returns an absolute download or prepared path.\nDownloads are verified; cache hits are trusted." },
+        }, description = "Accepts (url, sha256) or an options table. Returns an absolute download or prepared path.\nDownloads are verified; cache hits are trusted.",
+            examples = [[Download and extract an archive into the prepared cache. extract creates output:
+
+    local sdk = fetch {
+        url = url,
+        sha256 = hash,
+        prepare = function(input, output)
+            extract { path = input, to = output, strip_components = 1 }
+        end,
+    }
+]],
+        },
         plugin = func({ { "url", S.string() }, { "sha256", S.string() } }, { { "values", S.any(), arity = "*" } },
             { description = "Executes a source SHA-256 once and caches all values returned by its chunk for this run.\nThe URL locates the "
                 .. "source and is not part of its identity.\nReturns every value returned by the plugin chunk." }),
@@ -497,7 +515,7 @@ function api.show(name)
             output:write({ dim = true, "Extends ", item.extends.name, "\n" })
         end
         local text = description(declared)
-        if text then output:write({ "\n", text, "\n" }) end
+        if text then output:write({ item.type == "table" and "" or "\n", text, "\n" }) end
         if declared.type == "ref" and declared.description and item.description and item.description ~= text then
             output:write({ "\n", item.description, "\n" })
         end
@@ -507,6 +525,11 @@ function api.show(name)
                 local title = #item.signatures == 1 and "Arguments" or "Arguments (overload " .. i .. ")"
                 rows(title, field_rows(fields(signature.params)))
             end
+        end
+        local examples = property(declared, "examples")
+        if examples then
+            output:write({ "\n", { bold = true, "Examples:" }, "\n\n" })
+            output:write({ examples, "\n" })
         end
     end
     show(name, value)

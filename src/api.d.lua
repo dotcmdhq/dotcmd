@@ -109,7 +109,7 @@
 ---@field include? string[] Exact archive paths or directory prefixes, matched before stripping.
 ---@field path string Archive file; format detected by contents.
 ---@field strip_components? integer Leading path components to remove; defaults to 0.
----@field to? string New destination directory; defaults to the archive path without its suffix.
+---@field to? string New destination directory; defaults to the archive path without its suffix. Missing parents are created.
 
 ---Creates output as a file or directory. Its parent exists; output does not.
 ---Input is the cached download and must not be modified. Return values are ignored.
@@ -216,7 +216,7 @@ function spawn(command, ...) end
 function sha256(options) end
 
 ---Accepts (path, to?) or an options table. Extracts ZIP, tar, tar.gz, or tar.xz.
----Returns true on success, false when skipped; parent must exist.
+---Returns true on success, false when skipped. Missing parents are created and may remain after failure.
 ---@param options string|ExtractOptions
 ---@param to? string
 ---@return boolean

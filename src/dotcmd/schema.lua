@@ -14,6 +14,7 @@
 
 ---@class dotcmd.schema.Properties<T>
 ---@field description? string Meaning of this value, for documentation and fallback validation messages.
+---@field examples? string Examples rendered as a separate section in API documentation.
 ---@field default? T Used for a missing declared table field or omitted ? argument, including through references. Supplied nil arguments are checked as nil. Defaults are checked unchanged; table schemas construct fresh conformed outputs. Function defaults are values, never factories.
 ---@field validate? fun(value: T): boolean?, string? Runs after structural checks and defaults, on the input shape before destructuring. Return true to accept, or false/nil and an optional message to reject. Exceptions propagate.
 

@@ -15,5 +15,8 @@ struct lua_State;
 // Writes check flushing and closing but do not sync to durable storage.
 void RegisterFs(lua_State* L);
 
+// Internal mkdir with the same parent creation and errors as fs.mkdir.
+void CreateFsDirectory(lua_State* L, const char* path);
+
 // Internal cleanup for temporary extraction trees; never follows links.
 bool RemoveFsTree(const char* path);

@@ -376,6 +376,12 @@ static int Mkdir(lua_State* L) {
     return 0;
 }
 
+void CreateFsDirectory(lua_State* L, const char* path) {
+    lua_pushcfunction(L, Mkdir);
+    lua_pushstring(L, path);
+    lua_call(L, 1, 0);
+}
+
 #ifndef _WIN32
 // Traverse through directory descriptors. O_NOFOLLOW also prevents following a
 // link substituted between inspecting a child and opening it for recursion.

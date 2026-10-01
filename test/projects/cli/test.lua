@@ -508,7 +508,7 @@ test("API function documentation includes overloads without expanding referenced
         assert(output:find(text, 1, true), output)
     end
     assert(not output:find("\nFetchOptions\n", 1, true) and not output:find("\nPrepare\n", 1, true), output)
-    assert(not output:find("Examples:", 1, true), output)
+    assert(output:find("\nExamples:\n\nDownload and extract an archive into the prepared cache.", 1, true), output)
 end)
 
 test("API entries use concise signatures and declaration-first field rows", function()
@@ -519,10 +519,18 @@ test("API entries use concise signatures and declaration-first field rows", func
     local exec_docs = success(t.run_project(empty, "--api", "exec"))
     assert(exec_docs:find("exec(command: Command|ExecCommand) -> ExecResult\n"
         .. "exec(program: string, arguments...: string) -> ExecResult", 1, true), exec_docs)
+    assert(exec_docs:find("exec(program: string, arguments...: string) -> ExecResult\n\n"
+        .. "Executes without a shell", 1, true), exec_docs)
     assert(not exec_docs:find("\nCommand\n", 1, true), exec_docs)
     local command = success(t.run_project(empty, "--api", "Command"))
+    assert(command:find("Command\nProgram or nested command", 1, true), command)
     assert(command:find("  [1] command  string|Command\n"
         .. "    Program string or inner command at index 1.", 1, true), command)
+    local fields = assert(command:find("\nFields:\n", 1, true), command)
+    local examples = assert(command:find("\nExamples:\n\n"
+        .. "Forward all task arguments with named fields first and ... last:\n\n"
+        .. "    exec { cwd = host.invocation_dir, env = env, program, ... }\n\n", 1, true), command)
+    assert(examples > fields, command)
     local host_docs = success(t.run_project(empty, "--api", "host"))
     assert(host_docs:find("  arch  \"x64\"|\"arm64\"\n"
         .. "  cache_dir  string\n    Shared cache root; honors DOTCMD_CACHE_DIR.", 1, true), host_docs)

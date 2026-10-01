@@ -218,7 +218,9 @@ static bool PrepareDestination(lua_State* L, State* s, const char* path) {
     if (!*base || !strcmp(base, ".") || !strcmp(base, "..")) luaL_error(L, "extract: destination must name a new directory");
     Copy(L, &s->scratch[1], base);
     if (slash) *slash = 0;
-    Canonical(L, &s->scratch[2], slash ? (*output ? output : "/") : ".");
+    const char* parent = slash ? (*output ? output : "/") : ".";
+    CreateFsDirectory(L, parent);
+    Canonical(L, &s->scratch[2], parent);
     lua_pushfstring(L, "%s/%s", s->scratch[2], s->scratch[1]);
     Copy(L, &s->destination, lua_tostring(L, -1)); lua_pop(L, 1);
     if (Exists(L, s->destination)) {

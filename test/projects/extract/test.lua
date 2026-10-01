@@ -55,15 +55,36 @@ test("extract strips components and skips exhausted paths", function()
     for _ in fs.list("all-skipped") do error("expected an empty directory") end
 end)
 
-test("extract refuses existing destinations and missing parents", function()
+test("extract refuses existing destinations", function()
     fs.mkdir("existing"); t.write("existing/keep", "unchanged")
     t.assert_error("destination already exists", function() extract { path = "fixtures/sdk.zip", to = "existing" } end)
     assert(t.read("existing/keep") == "unchanged")
     t.write("existing-file", "unchanged")
     t.assert_error("destination already exists", function() extract { path = "fixtures/sdk.zip", to = "existing-file" } end)
     assert(t.read("existing-file") == "unchanged")
-    fails("fixtures/sdk.zip", { to = "absent/child" })
-    assert(fs.stat("absent") == nil)
+end)
+
+test("extract creates missing destination parents in both forms", function()
+    assert(extract { path = "fixtures/sdk.zip", to = "nested ü/tools/sdk/", strip_components = 1 })
+    assert(t.read("nested ü/tools/sdk/lib/value") == "library")
+    local destination = host.project_dir .. "/absolute ü/tools/sdk"
+    assert(extract("fixtures/sdk.zip", destination))
+    assert(t.read(destination .. "/sdk/lib/value") == "library")
+end)
+
+test("extract refuses a file as a destination parent", function()
+    t.write("blocked-parent", "unchanged")
+    t.assert_error("fs.mkdir:", function()
+        extract { path = "fixtures/sdk.zip", to = "blocked-parent/child/sdk" }
+    end)
+    assert(t.read("blocked-parent") == "unchanged")
+end)
+
+test("extract failure leaves only newly created parents", function()
+    t.write("nested-garbage", "not an archive")
+    fails("nested-garbage", { to = "failed-parents/tools/sdk" })
+    assert(fs.stat("failed-parents/tools").type == "directory")
+    for name in fs.list("failed-parents/tools") do error("unexpected output: " .. name) end
 end)
 
 test("extract cleans up malformed archives and validates options", function()

@@ -70,7 +70,7 @@ test("task invokes built-ins with no extra results in eval and REPL", function()
     assert(t.success(evaluate('task("--help", "--api")')) == expected)
     assert(t.success(repl('task("--help", "--api")\n42\n')) == expected .. "42\n")
     local documentation = t.success(evaluate('task("--api", "task")'))
-    assert(documentation:find("task(arguments...: string)", 1, true), documentation)
+    assert(documentation:find("task (arguments...: string)", 1, true), documentation)
     assert(documentation:find("without reloading .cmd.lua", 1, true), documentation)
 end)
 

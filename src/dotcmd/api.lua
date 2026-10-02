@@ -16,16 +16,28 @@ end
 
 local api = S.registry {
     definitions = {
-        Host = S.table { description = "Platform, executable, project, and cache information.", fields = {
-            os = S.enum { values = { "linux", "macos", "windows" } }, arch = S.enum { values = { "x64", "arm64" } },
-            exe_suffix = S.enum { description = "Executable filename suffix.", values = { "", ".exe" } },
-            path_sep = S.enum { description = "Separator between PATH entries.", values = { ":", ";" } },
-            dir_sep = S.enum { description = "Directory separator.", values = { "/", "\\" } },
-            executable = S.string { description = "Absolute executable path." },
-            project_dir = S.string { description = "Directory containing the launcher; relative paths resolve here. Uses native separators." },
-            invocation_dir = S.string { description = "Initial working directory before entering the project. Uses native separators." },
-            cache_dir = S.string { description = "Shared cache root; honors DOTCMD_CACHE_DIR." },
-        } },
+        Host = S.table { description = "Platform, executable, project, and cache information.",
+            examples = [[Select platform-specific values from nested OS and architecture tables:
+
+    local hashes = {
+        linux = { x64 = "...", arm64 = "..." },
+        macos = { x64 = "...", arm64 = "..." },
+        windows = { x64 = "...", arm64 = "..." },
+    }
+
+    local hash = hashes[host.os][host.arch]
+]],
+            fields = {
+                os = S.enum { values = { "linux", "macos", "windows" } }, arch = S.enum { values = { "x64", "arm64" } },
+                exe_suffix = S.enum { description = "Executable filename suffix.", values = { "", ".exe" } },
+                path_sep = S.enum { description = "Separator between PATH entries.", values = { ":", ";" } },
+                dir_sep = S.enum { description = "Directory separator.", values = { "/", "\\" } },
+                executable = S.string { description = "Absolute executable path." },
+                project_dir = S.string { description = "Directory containing the launcher; relative paths resolve here. Uses native separators." },
+                invocation_dir = S.string { description = "Initial working directory before entering the project. Uses native separators." },
+                cache_dir = S.string { description = "Shared cache root; honors DOTCMD_CACHE_DIR." },
+            },
+        },
         ChunkConsumer = S.func { description = "Called with binary string chunks; chunk boundaries are arbitrary and empty strings are valid.\nCalled with no "
             .. "arguments once after success to complete; its first return value becomes the result.\nChunk-call return values "
             .. "are ignored. Errors abort the producer; failures skip completion.\nConsumers own their state and must arrange "
@@ -79,7 +91,18 @@ local api = S.registry {
         EnvValue = S.union { description = "Environment replacement, removal, or update function.", alternatives = { S.string(), S.literal { value = false }, S.ref { name = "EnvUpdate" } } },
         Command = S.table {
             description = "Program or nested command, with string arguments, working directory, and environment.",
-            examples = [[Forward all task arguments with named fields first and ... last:
+            examples = [[Reuse a command's working directory and environment while appending arguments:
+
+    local git = {
+        "git",
+        cwd = host.invocation_dir,
+        env = { GIT_TERMINAL_PROMPT = "0" },
+    }
+
+    exec { git, "status", "--short" }
+    exec { git, "diff", "--stat" }
+
+Forward all task arguments with named fields first and ... last:
 
     exec { cwd = host.invocation_dir, env = env, program, ... }
 ]],
@@ -236,7 +259,23 @@ local api = S.registry {
                     .. "Normal completion exits 0. Raise an error for failure.",
             }) },
         } },
-        Tasks = S.map { description = "Named tasks returned by .cmd.lua.\nUnderscores in keys become hyphens in CLI task names at every level.", key = S.string(), value = S.union { alternatives = { S.ref { name = "TaskFunction" }, S.ref { name = "Task" } } } },
+        Tasks = S.map {
+            description = "Named tasks returned by .cmd.lua.\nUnderscores in keys become hyphens in CLI task names at every level.",
+            examples = [[Define a task in .cmd.lua. Run it with .cmd greet Ada:
+
+---@type Tasks
+return {
+    greet = {
+        args = { { "name", type = "string" } },
+        run = function(name)
+            print("Hello, " .. name .. "!")
+        end,
+    },
+}
+]],
+            key = S.string(),
+            value = S.union { alternatives = { S.ref { name = "TaskFunction" }, S.ref { name = "Task" } } },
+        },
         JsonEncodeOptions = S.table { description = "JSON output formatting.", fields = { pretty = S.optional { schema = S.boolean { description = "Use two-space indentation; defaults to compact JSON. No trailing newline." } } } },
         Json = S.table { description = "JSON encoding and decoding.\n\nTable metatables may specify __jsontype = \"array\" or \"object\". Hints are enforced:\narrays require consecutive "
             .. "integer keys starting at 1; objects require string keys.\nNonempty untagged tables are inferred from their "
@@ -316,11 +355,11 @@ Delegate to another task and return its values:
 }
 
 ---@class dotcmd.Api: dotcmd.schema.Registry
----@field show fun(name?: string) Print the API index or documentation for a global, member, or named type.
+---@field show fun(name?: string) Print the API index or documentation for a global, named type, or member.
 ---@cast api dotcmd.Api
 
 ---Write API documentation through format; predicates and runtime functions are never called.
----@param name? string Global, dotted member path, or named type.
+---@param name? string Global, named type, or dotted member path.
 function api.show(name)
     local format = require("dotcmd.format")
     local output = format.writer(io.stdout)
@@ -458,19 +497,24 @@ function api.show(name)
         end
         return kind
     end
-    local function rows(title, entries)
+    local function rows(title, entries, prefix)
         if #entries == 0 then return end
+        prefix = prefix or ""
         local width = 0
         for _, row in ipairs(entries) do width = math.max(width, #row[1]) end
-        output:write({ "\n", { bold = true, title }, ":\n" })
-        local indent = string.rep(" ", width + 4)
+        output:write({ "\n", prefix, { bold = true, title }, ":\n" })
+        local indent = prefix .. string.rep(" ", width + 4)
         for _, row in ipairs(entries) do
             local text, utility = row[2] or "", row[3]
             if utility ~= nil then
-                output:write({ "  ", { bold = true, row[1] }, { dim = true, "  ", utility }, "\n" })
-                if text ~= "" then output:write({ "    ", text:gsub("\n", "\n    "), "\n" }) end
+                output:write({ prefix, "  ", { bold = true, row[1] },
+                    ":", { dim = true, " ", utility }, "\n" })
+                if text ~= "" then
+                    local description_indent = prefix .. "    "
+                    output:write({ description_indent, text:gsub("\n", "\n" .. description_indent), "\n" })
+                end
             else
-                output:write({ "  ", { bold = true, row[1] }, string.rep(" ", width - #row[1] + 2),
+                output:write({ prefix, "  ", { bold = true, row[1] }, string.rep(" ", width - #row[1] + 2),
                     text:gsub("\n", "\n" .. indent), "\n" })
             end
         end
@@ -486,11 +530,7 @@ function api.show(name)
         end
         rows("Functions", functions)
         rows("Runtime tables", tables)
-        local types = {}
-        for _, key in ipairs(sorted_keys(api.definitions)) do
-            types[#types + 1] = { key, (description(api.definitions[key]) or ""):match("^[^\n]*") }
-        end
-        rows("Type definitions", types)
+        rows("Configuration types", { { "Tasks", description(api.definitions.Tasks):match("^[^\n]*") } })
         output:flush()
         return
     end
@@ -499,7 +539,8 @@ function api.show(name)
     local value = api.schema.fields[path[1]] or api.definitions[path[1]]
     if not value then
         local available = sorted_keys(api.schema.fields)
-        for _, key in ipairs(sorted_keys(api.definitions)) do available[#available + 1] = key end
+        for key in pairs(api.definitions) do available[#available + 1] = key end
+        table.sort(available)
         error({ message = "unknown API entry " .. literal(path[1])
             .. "\nAvailable entries: " .. table.concat(available, ", "), exit_code = 2 })
     end
@@ -532,39 +573,102 @@ function api.show(name)
             local text, default = description(item), property(item, "default")
             if default ~= nil then text = (text and (text .. " ") or "") .. "Default: " .. literal(default) .. "." end
             if notes then text = (text and (text .. " ") or "") .. notes end
-            result[#result + 1] = { label, text, type_text(item, true) }
+            result[#result + 1] = { label, text or "", type_text(item, true) }
         end
         return result
     end
-    local function show(label, declared)
+    local function show(label, declared, prefix)
+        prefix = prefix or ""
+        local body_indent = prefix == "" and "" or prefix .. "  "
         local item = resolve(declared)
-        output:write({ bold = true, label, "\n" })
         if item.type == "function" then
-            for _, text in ipairs(call_signatures(item, label)) do output:write({ text, "\n" }) end
-        elseif item.type ~= "table" then
-            output:write({ type_text(item), "\n" })
-        elseif item.extends then
-            output:write({ dim = true, "Extends ", item.extends.name, "\n" })
+            for _, text in ipairs(call_signatures(item, label)) do
+                output:write({ prefix, { bold = true, label }, " ", { dim = true, text:sub(#label + 1) }, "\n" })
+            end
+        else
+            local declaration = ""
+            if item.type ~= "table" then
+                declaration = { dim = true, " ", type_text(item) }
+            elseif item.extends then
+                declaration = { dim = true, " (extends ", item.extends.name, ")" }
+            end
+            output:write({ prefix, { bold = true, label },
+                declaration, "\n" })
         end
         local text = description(declared)
-        if text then output:write({ item.type == "table" and "" or "\n", text, "\n" }) end
-        if declared.type == "ref" and declared.description and item.description and item.description ~= text then
-            output:write({ "\n", item.description, "\n" })
+        if text then
+            output:write({ prefix == "" and "\n" or "", text:gsub("[^\n]+", body_indent .. "%0"), "\n" })
         end
-        if item.type == "table" then rows("Fields", field_rows(fields(item))) end
+        if declared.type == "ref" and declared.description and item.description and item.description ~= text then
+            output:write({ "\n", item.description:gsub("[^\n]+", body_indent .. "%0"), "\n" })
+        end
+        if item.type == "table" then rows("Fields", field_rows(item.fields), body_indent) end
         if item.type == "function" then
+            local overloads, described = {}, false
             for i, signature in ipairs(item.signatures) do
-                local title = #item.signatures == 1 and "Arguments" or "Arguments (overload " .. i .. ")"
-                rows(title, field_rows(fields(signature.params)))
+                local entries = field_rows(fields(signature.params))
+                overloads[i] = entries
+                for _, row in ipairs(entries) do if row[2] ~= "" then described = true end end
+            end
+            if described then
+                for i, entries in ipairs(overloads) do
+                    local title = #item.signatures == 1 and "Arguments" or "Arguments (overload " .. i .. ")"
+                    if #entries == 0 then
+                        output:write({ "\n", body_indent, { bold = true, title }, ":\n",
+                            body_indent, "  No arguments.\n" })
+                    else
+                        rows(title, entries, body_indent)
+                    end
+                end
             end
         end
         local examples = property(declared, "examples")
         if examples then
-            output:write({ "\n", { bold = true, "Examples:" }, "\n\n" })
-            output:write({ examples, "\n" })
+            output:write({ "\n", body_indent, { bold = true, "Examples:" }, "\n\n",
+                examples:gsub("[^\n]+", body_indent .. "  %0"), "\n" })
         end
     end
     show(name, value)
+    local referenced, seen = {}, { [name] = true }
+    local root = value
+    while root.type == "ref" do
+        seen[root.name] = true
+        root = api.definitions[root.name]
+    end
+    local function collect(item)
+        if item.type == "ref" then
+            if seen[item.name] then return end
+            seen[item.name] = true
+            referenced[item.name] = api.definitions[item.name]
+            collect(referenced[item.name])
+        elseif item.type == "table" then
+            if item.extends then collect(item.extends) end
+            for key, field in pairs(item.fields) do
+                collect(type(key) == "number" and field[2] or field)
+            end
+        elseif item.type == "function" then
+            for _, signature in ipairs(item.signatures) do
+                collect(signature.params)
+                collect(signature.returns)
+            end
+        elseif item.type == "map" then
+            collect(item.key)
+            collect(item.value)
+        elseif item.type == "union" or item.type == "alt" then
+            for _, alternative in ipairs(item.alternatives) do
+                collect(item.type == "alt" and alternative[2] or alternative)
+            end
+        end
+    end
+    collect(root)
+    local names = sorted_keys(referenced)
+    if #names > 0 then
+        output:write({ "\n", { bold = true, "Referenced types:" }, "\n" })
+        for _, type_name in ipairs(names) do
+            output:write("\n")
+            show(type_name, referenced[type_name], "  ")
+        end
+    end
     output:flush()
 end
 

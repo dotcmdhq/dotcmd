@@ -238,14 +238,14 @@ The next invocation downloads the selected binary if it is not already cached.]]
     __api = {
         description = [[Show Lua API documentation
 
-Without a name, lists functions, runtime tables, and named types.
-A name shows signatures, fields, and descriptions.
+Without a name, lists functions, runtime tables, and configuration types.
+A name shows signatures, fields, and descriptions, followed by referenced type definitions.
 
 Examples:
   .cmd --api fetch
   .cmd --api fs.stat
-  .cmd --api Task]],
-        args = { { "name", arity = "?", type = "string", description = "Global, dotted member path, or named type" } },
+  .cmd --api Tasks]],
+        args = { { "name", arity = "?", type = "string", description = "Global, named type, or dotted member path" } },
         run = function(name) api.show(name) end,
     },
     __help = {

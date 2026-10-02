@@ -194,6 +194,13 @@ fs = nil
 ---@type Json
 json = nil
 
+---Returns an environment updater that prepends directories to PATH.
+---Use as env.PATH with exec or spawn. Preserves the effective inherited or inner command PATH;
+---an absent or empty PATH adds no trailing separator. Does not normalize or deduplicate directories.
+---@param ... string Directories to prepend in the given order, using host.path_sep. At least one is required.
+---@return EnvUpdate
+function prepend_path(...) end
+
 ---Invokes a task with CLI words, including built-ins, aliases, nested tasks, defaults, and conversions.
 ---Uses the loaded project task definitions without reloading .cmd.lua. Available after project loading completes.
 ---Returns the task's original Lua values without printing them; explicit task output is retained.

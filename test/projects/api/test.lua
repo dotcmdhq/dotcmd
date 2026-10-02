@@ -3,7 +3,7 @@ local api = require("dotcmd.api")
 
 test("API registry describes every public global", function()
     local globals = { host = host, fs = fs, json = json, http = http, exec = exec, spawn = spawn,
-        sha256 = sha256, extract = extract, fetch = fetch, plugin = plugin, task = task }
+        sha256 = sha256, extract = extract, fetch = fetch, plugin = plugin, task = task, prepend_path = prepend_path }
     assert(S.validate(api, globals) == globals)
     -- Resolve nested named types without losing the root registry's scope.
     assert(S.validate_call(S.at(api, { "fs", "stat" }), "path", { follow = false }))
@@ -18,6 +18,8 @@ test("API registry describes every public global", function()
 end)
 
 test("Lua entry points validate before doing any work", function()
+    t.assert_error("prepend_path:", function() prepend_path() end)
+    t.assert_error("prepend_path:", function() prepend_path("bin", false) end)
     t.assert_error("fetch: argument \"options\"", function() fetch(false) end)
     t.assert_error("fetch: field \"options.sha256\" is required", function() fetch { url = "https://example.com/file" } end)
     t.assert_error("fetch: field \"options.prepare\" must be Prepare or nil", function()
@@ -27,6 +29,14 @@ test("Lua entry points validate before doing any work", function()
     t.assert_error("fetch: unknown field \"options.preapre\"", function()
         fetch { url = "https://example.com/file", sha256 = "unused", preapre = function() end }
     end)
+end)
+
+test("prepend_path preserves directory order and handles absent and empty PATH", function()
+    local update = prepend_path("sdk ü/bin", "other sdk/bin")
+    local prefix = "sdk ü/bin" .. host.path_sep .. "other sdk/bin"
+    assert(update() == prefix and update("") == prefix)
+    assert(update("existing") == prefix .. host.path_sep .. "existing")
+    assert(prepend_path("bin")("bin") == "bin" .. host.path_sep .. "bin")
 end)
 
 test("native custom errors identify arguments and fields", function()

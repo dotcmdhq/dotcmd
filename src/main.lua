@@ -8,7 +8,18 @@ local api = require("dotcmd.api")
 local fetch_schema = S.at(api, { "fetch" })
 local plugin_schema = S.at(api, { "plugin" })
 local task_schema = S.at(api, { "task" })
+local prepend_path_schema = S.at(api, { "prepend_path" })
 local output = format.writer(io.stdout)
+
+function prepend_path(...)
+    S.validate_call(prepend_path_schema, ...)
+    local separator = host.path_sep
+    local prefix = table.concat({ ... }, separator)
+    return function(old)
+        if old == nil or old == "" then return prefix end
+        return prefix .. separator .. old
+    end
+end
 
 -- Project tasks are {name = function(...) ... end} or
 -- {name = {description = "...", run = function(...) ... end}} from .cmd.lua.

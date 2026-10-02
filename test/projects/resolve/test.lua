@@ -130,6 +130,46 @@ test("resolve release tag is encoded and one result is still an array", function
     assert(result.requests[1] == api_base .. "/releases/tags/release%2Fnext%2Bbuild")
 end)
 
+test("resolve asset filters skip downloads and budget checks for unmatched assets", function()
+    local routes = release_routes {
+        asset("huge.zip", nil, 300000000), asset("tool-standalone.jar", nil, 3),
+        asset("tool-standalone.jar.sha256", nil, 300000000), asset("other-standalone.jar", hash_b),
+    }
+    routes[download_base .. "tool-standalone.jar"] = "jar"
+    local result = run(routes, "--resolve", "github-release", "owner/repo", "--asset", "*-standalone.jar", "--format", "json")
+    local values = json.decode(t.success(result))
+    assert(#values == 2 and values[1].url == download_base .. "tool-standalone.jar")
+    assert(values[1].sha256 == sha256 { bytes = "jar" } and values[2].sha256 == hash_b)
+    assert(#result.requests == 2 and result.requests[2] == download_base .. "tool-standalone.jar")
+end)
+
+test("resolve asset globs match whole case-sensitive names with literal punctuation", function()
+    local names = { "tool.zip", "toolXzip", "tool1.zip", "tool12.zip", "TOOL.zip", "prefix-tool.zip", "tool.zip.sha256",
+        "tool+[1](x)%^-$.zip" }
+    local assets = {}
+    for _, name in ipairs(names) do assets[#assets + 1] = asset(name, hash_a) end
+    for _, case in ipairs {
+        { "tool.zip", "tool.zip" },
+        { "tool?.zip", "tool1.zip" },
+        { "tool*.zip", "tool.zip", "tool1.zip", "tool12.zip", "tool+[1](x)%^-$.zip" },
+        { "tool+[1](x)%^-$.zip", "tool+[1](x)%^-$.zip" },
+    } do
+        local result = run(release_routes(assets), "--resolve", "github-release", "owner/repo", "--asset", case[1], "--format", "json")
+        local values = json.decode(t.success(result))
+        assert(#values == #case - 1 and #result.requests == 1)
+        for i, value in ipairs(values) do assert(value.url == download_base .. case[i + 1]) end
+    end
+end)
+
+test("resolve unmatched asset globs produce an empty array or empty text", function()
+    for _, format in ipairs { "text", "json" } do
+        local result = run(release_routes { asset("tool.zip", nil, 300000000) },
+            "--resolve", "github-release", "owner/repo", "--asset", "*.jar", "--format", format)
+        assert(t.success(result) == (format == "text" and "" or "[]\n"))
+        assert(#result.requests == 1)
+    end
+end)
+
 test("resolve release text separates URL and hash pairs with blank lines", function()
     local result = run(release_routes({ asset("a.zip", hash_a), asset("b.zip", hash_b) }),
         "--resolve", "github-release", "owner/repo")
@@ -254,14 +294,17 @@ test("resolve help documents modes, units, format and first-error behavior", fun
         "1 MB = 1,000,000 bytes", "default: 64", "Stops on the first error" } do
         assert(output:find(expected, 1, true), output)
     end
+    output = t.success(run({}, "--help", "--resolve", "github-release"))
+    for _, expected in ipairs { "--asset", "default: *", "Case-sensitive", "? matches one", "Quote the glob", "no matches produce []" } do
+        assert(output:find(expected, 1, true), output)
+    end
 end)
 
-test("resolve rejects invalid formats, limits, repositories and unimplemented selectors", function()
+test("resolve rejects invalid formats, limits, repositories and options", function()
     for _, argv in ipairs {
         { "url", "https://example.com/file", "--format", "lua" },
         { "url", "https://example.com/file", "--max-download-mb", "not-a-number" },
         { "github-file", "owner", "file" },
-        { "github-release", "owner/repo", "--asset", "*.zip" },
         { "url", "https://example.com/file", "--json" },
     } do
         local result = run({}, "--resolve", table.unpack(argv))

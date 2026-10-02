@@ -139,6 +139,19 @@ test("exec composes environment update functions from inner to outer", function(
         result.stdout)
 end)
 
+test("prepend_path composes with inherited and inner command PATH", function()
+    local inner = t.command(child, "env", "PATH")
+    inner.env = { PATH = prepend_path("inner bin") }
+    local result = exec { inner, env = { PATH = prepend_path("outer bin", "another bin") }, stdout = "capture" }
+    local prefix = table.concat({ "outer bin", "another bin", "inner bin" }, host.path_sep)
+    assert(result.stdout:gsub("\r\n", "\n") == prefix .. host.path_sep .. os.getenv("PATH") .. "\n", result.stdout)
+    for _, value in ipairs { false, "" } do
+        inner.env.PATH = value
+        result = exec { inner, env = { PATH = prepend_path("outer bin") }, stdout = "capture" }
+        assert(result.stdout:gsub("\r\n", "\n") == "outer bin\n", result.stdout)
+    end
+end)
+
 test("exec rejects invalid environment update results", function()
     for _, update in ipairs({ function() return true end, function() return 17 end, function() return {} end }) do
         t.assert_error("must return a string, false, or nil", function()

@@ -22,7 +22,7 @@ local api = S.registry {
     local hashes = {
         linux = { x64 = "...", arm64 = "..." },
         macos = { x64 = "...", arm64 = "..." },
-        windows = { x64 = "...", arm64 = "..." },
+        windows = { x64 = "...", arm64 = "..." }
     }
 
     local hash = hashes[host.os][host.arch]
@@ -96,7 +96,7 @@ local api = S.registry {
     local git = {
         "git",
         cwd = host.invocation_dir,
-        env = { GIT_TERMINAL_PROMPT = "0" },
+        env = { GIT_TERMINAL_PROMPT = "0" }
     }
 
     exec { git, "status", "--short" }
@@ -261,16 +261,22 @@ Forward all task arguments with named fields first and ... last:
         } },
         Tasks = S.map {
             description = "Named tasks returned by .cmd.lua.\nUnderscores in keys become hyphens in CLI task names at every level.",
-            examples = [[Define a task in .cmd.lua. Run it with .cmd greet Ada:
+            examples = [[Define a task in .cmd.lua that downloads, extracts, and launches a tool.
+Assume rg_config[os][arch] contains url and sha256 for each platform's archive,
+with rg (or rg.exe on Windows) at the archive root.
+Run it with .cmd search '*.lua' TODO src --hidden:
 
 ---@type Tasks
 return {
-    greet = {
-        args = { { "name", type = "string" } },
-        run = function(name)
-            print("Hello, " .. name .. "!")
-        end,
-    },
+    search = {
+        description = "Search files matching a glob with ripgrep",
+        args = { end_opts = true, { "glob", type = "string" }, { "args", arity = "*" } },
+        run = function(glob, ...)
+            local config = rg_config[host.os][host.arch]
+            local dir = fetch { url = config.url, sha256 = config.sha256, prepare = extract }
+            exec { cwd = host.invocation_dir, dir .. "/rg" .. host.exe_suffix, "--glob", glob, ... }
+        end
+    }
 }
 ]],
             key = S.string(),
@@ -296,6 +302,19 @@ return {
         fields = {
         host = S.ref { name = "Host" }, fs = S.ref { name = "Fs" },
         json = S.ref { name = "Json", description = "Encode and decode JSON." },
+        prepend_path = func({ { "directories", S.string { description = "Directories to prepend in the given order, using host.path_sep." }, arity = "+" } },
+            { { "update", S.ref { name = "EnvUpdate" } } }, {
+                description = "Returns an environment updater that prepends directories to PATH.\n"
+                    .. "Use as env.PATH with exec or spawn. Preserves the effective inherited or inner command PATH;\n"
+                    .. "an absent or empty PATH adds no trailing separator. Does not normalize or deduplicate directories.",
+                examples = [[Prepend a tool's bin directory while preserving the effective PATH:
+
+    exec { "tool", env = { PATH = prepend_path(sdk .. "/bin") } }
+
+Prepend multiple directories in order:
+
+    exec { "tool", env = { PATH = prepend_path(sdk .. "/bin", other_sdk .. "/bin") } }]],
+            }),
         task = func({ { "arguments", S.string { description = "CLI words: task path followed by options and positional arguments." }, arity = "*" } },
             { { "values", S.any(), arity = "*" } }, {
                 description = "Invokes a task with CLI words, including built-ins, aliases, nested tasks, defaults, and conversions.\n"
@@ -344,7 +363,7 @@ Delegate to another task and return its values:
         sha256 = hash,
         prepare = function(input, output)
             extract { path = input, to = output, strip_components = 1 }
-        end,
+        end
     }
 ]],
         },

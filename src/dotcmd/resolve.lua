@@ -2,6 +2,11 @@ local function encode(value)
     return (value:gsub("[^%w._~-]", function(byte) return ("%%%02X"):format(byte:byte()) end))
 end
 
+local function asset_pattern(glob)
+    return "^" .. glob:gsub("([%^%$%(%)%%%.%[%]%+%-])", "%%%1")
+        :gsub("%*", ".*"):gsub("%?", ".") .. "$"
+end
+
 local function new_budget(options)
     return { remaining = options.max_download_mb * 1000000, max_download_mb = options.max_download_mb }
 end
@@ -110,12 +115,18 @@ Outputs a commit-pinned raw-file URL and SHA-256. JSON output is a single object
             end,
         },
         github_release = {
-            description = [[Resolve all assets in a GitHub release
+            description = [[Resolve matching assets in a GitHub release
 
 Uses the release's download URLs and published SHA-256 digests.
-Assets without a SHA-256 digest are streamed and hashed without saving them.
-JSON output is always an array.]],
-            opts = { tag = { default = "latest", description = "Release tag or latest" } },
+Matching assets without a SHA-256 digest are streamed and hashed without saving them.
+JSON output is always an array; no matches produce [] or empty text.
+
+Example:
+  .cmd --resolve github-release owner/repo --asset '*-windows-arm64.zip']],
+            opts = {
+                tag = { default = "latest", description = "Release tag or latest" },
+                asset = { default = "*", description = "Case-sensitive asset name glob: * matches any characters, ? matches one. Quote the glob to prevent shell expansion." },
+            },
             args = { repo_argument },
             run = function(options, repo)
                 local budget = new_budget(options)
@@ -123,11 +134,14 @@ JSON output is always an array.]],
                 if options.tag == "latest" then endpoint = endpoint .. "latest"
                 else endpoint = endpoint .. "tags/" .. encode(options.tag) end
                 local release = github(endpoint, budget)
+                local pattern = asset_pattern(options.asset)
                 local results = json.decode("[]")
                 for _, asset in ipairs(release.assets) do
-                    local hash = asset.digest and asset.digest:match("^sha256:(.+)$")
-                    if not hash then hash = download_hash(asset.browser_download_url, budget, asset.size) end
-                    results[#results + 1] = { url = asset.browser_download_url, sha256 = hash:lower() }
+                    if asset.name:match(pattern) then
+                        local hash = asset.digest and asset.digest:match("^sha256:(.+)$")
+                        if not hash then hash = download_hash(asset.browser_download_url, budget, asset.size) end
+                        results[#results + 1] = { url = asset.browser_download_url, sha256 = hash:lower() }
+                    end
                 end
                 if options.format == "json" then
                     assert(io.stdout:write(json.encode(results), "\n"))

@@ -1,28 +1,28 @@
----@alias dotcmd.Color "black"|"red"|"green"|"yellow"|"blue"|"magenta"|"cyan"|"white"|"bright_black"|"bright_red"|"bright_green"|"bright_yellow"|"bright_blue"|"bright_magenta"|"bright_cyan"|"bright_white"|integer|string
+---@alias Color "black"|"red"|"green"|"yellow"|"blue"|"magenta"|"cyan"|"white"|"bright_black"|"bright_red"|"bright_green"|"bright_yellow"|"bright_blue"|"bright_magenta"|"bright_cyan"|"bright_white"|integer|string
 
----@class dotcmd.Style
----@field fg? dotcmd.Color|false Named color, palette index from 0 to 255, #RRGGBB, or false for the default.
----@field bg? dotcmd.Color|false Named color, palette index from 0 to 255, #RRGGBB, or false for the default.
+---@class Style
+---@field fg? Color|false Named color, palette index from 0 to 255, #RRGGBB, or false for the default.
+---@field bg? Color|false Named color, palette index from 0 to 255, #RRGGBB, or false for the default.
 ---@field bold? boolean
 ---@field dim? boolean
 ---@field underline? boolean
 
----@alias dotcmd.Markup string|number|boolean|dotcmd.MarkupNode
+---@alias Markup string|number|boolean|MarkupNode
 
----@class dotcmd.MarkupNode: dotcmd.Style
----@field style? dotcmd.Style Applied before keys directly on the node.
----@field [integer] dotcmd.Markup
+---@class MarkupNode: Style
+---@field style? Style Applied before keys directly on the node.
+---@field [integer] Markup
 
----@class dotcmd.Format
----@field plain fun(markup: dotcmd.Markup): string
----@field ansi fun(markup: dotcmd.Markup): string
----@field writer fun(file: file*): dotcmd.FormatWriter Detects terminal support once when constructed.
+---@class Format
+---@field plain fun(markup: Markup): string
+---@field ansi fun(markup: Markup): string
+---@field writer fun(file: file*): FormatWriter Detects terminal support once when constructed.
 
----@class dotcmd.FormatWriter
+---@class FormatWriter
 ---@field file file*
----@field render fun(markup: dotcmd.Markup): string
----@field write fun(self: dotcmd.FormatWriter, markup: dotcmd.Markup): dotcmd.FormatWriter
----@field flush fun(self: dotcmd.FormatWriter): dotcmd.FormatWriter
+---@field render fun(markup: Markup): string
+---@field write fun(self: FormatWriter, markup: Markup): FormatWriter
+---@field flush fun(self: FormatWriter): FormatWriter
 
 local is_terminal = require("dotcmd._terminal")
 
@@ -116,13 +116,13 @@ local function render(markup, decorated)
     return table.concat(output)
 end
 
----@param markup dotcmd.Markup
+---@param markup Markup
 ---@return string
 function format.plain(markup)
     return render(markup, false)
 end
 
----@param markup dotcmd.Markup
+---@param markup Markup
 ---@return string
 function format.ansi(markup)
     return render(markup, true)
@@ -131,23 +131,23 @@ end
 local writer = {}
 writer.__index = writer
 
----@param self dotcmd.FormatWriter
----@param markup dotcmd.Markup
----@return dotcmd.FormatWriter
+---@param self FormatWriter
+---@param markup Markup
+---@return FormatWriter
 function writer:write(markup)
     assert(self.file:write(self.render(markup)))
     return self
 end
 
----@param self dotcmd.FormatWriter
----@return dotcmd.FormatWriter
+---@param self FormatWriter
+---@return FormatWriter
 function writer:flush()
     assert(self.file:flush())
     return self
 end
 
 ---@param file file*
----@return dotcmd.FormatWriter
+---@return FormatWriter
 function format.writer(file)
     local renderer = decorations_enabled and is_terminal(file) and format.ansi or format.plain
     return setmetatable({ file = file, render = renderer }, writer)

@@ -50,13 +50,13 @@
 
 ---Exit code and requested captured output.
 ---@class (exact) ExecResult
----@field exit_code integer Exit code.
+---@field exit_code integer
 ---@field stderr string Present when captured.
 ---@field stdout string Present when captured.
 
 ---Archive source, destination, and extraction options.
 ---@class (exact) ExtractOptions
----@field if_exists? IfExists Defaults to error. Replacement swaps trees on Unix; Windows moves the old tree aside before publication.
+---@field if_exists? IfExists Defaults to error.
 ---@field include? string[] Exact archive paths or directory prefixes, matched before stripping.
 ---@field path string Archive file; format detected by contents.
 ---@field progress? boolean Show approximate progress through archive bytes on terminal stderr after a short delay; defaults to true.
@@ -66,7 +66,7 @@
 ---Pinned download and optional preparation.
 ---@class (exact) FetchOptions: PinnedSource
 ---@field name? string Download filename; defaults to the URL filename, or download.
----@field prepare? Prepare Run only on a prepared-cache miss. Accepts a function; errors discard partial output.
+---@field prepare? Prepare Runs only on a prepared-cache miss; errors discard partial output.
 
 ---File path for command stream redirection.
 ---@class (exact) File
@@ -82,7 +82,7 @@
 ---@field remove fun(path: string, options?: { recursive?: boolean }|nil) Ignores missing paths; never traverses symlinks.
 ---@field rename fun(from: string, to: string, options?: { if_exists?: IfExists }|nil): boolean Atomic rename; if_exists defaults to error. Returns true on success, false when skipped; failures raise.
 ---@field stat fun(path: string, options?: { follow?: boolean }|nil): Stat|nil Missing paths return nil; follow defaults to true.
----@field write fun(path: string, bytes: string, options?: WriteOptions|nil): boolean Atomic whole-file write; true on success, false only when skipped. Checks writing and closing; does not sync to durable storage.
+---@field write fun(path: string, bytes: string, options?: WriteOptions|nil): boolean Atomic whole-file write; true on success, false only when skipped.
 
 ---Platform, executable, project, and cache information.
 ---@class (exact) Host
@@ -186,16 +186,16 @@
 
 ---Task or group, with options, positional arguments, and children.
 ---
----Errors print without an added traceback and default to exit 1. For a custom status, raise
----error({message = "...", exit_code = 2}). message is optional and converted with tostring;
----exit_code must be an integer from 0 to 255, otherwise it falls back to 1.
+---Errors print without a traceback and default to exit 1. Raise error({message = "...", exit_code = 2}) for a custom status. Omit message for a silent exit; supplied messages use tostring. exit_code must be an integer from 0 to 255; invalid values fall back to 1.
+---
+---Every returned value is printed on its own line, including nil; returning no values prints nothing. Strings are quoted and escaped as Lua literals. Plain tables are printed deterministically; tables with a __tostring metamethod and other non-table values retain print behavior. Return values are syntax-colored on terminals unless NO_COLOR is set or TERM is dumb; redirected output remains plain. Values and keys that have no Lua literal representation, including functions, userdata, threads, cycles, table keys, and non-finite numbers, are shown as angle-bracketed tostring pseudo-values. Normal completion exits 0. Raise an error for failure.
 ---@class (exact) Task
 ---@field aliases? string[] Additional literal CLI names, listed after the primary name in help.
 ---@field args? Arguments Leaf positional schema; omitted means unrestricted strings, empty means no positionals. Cannot be combined with tasks.
 ---@field description? string First line is the summary in task listings; task help shows the full text.
 ---@field hidden? boolean Omit this task and its aliases from help listings and completion suggestions; it remains callable.
 ---@field opts? table<string, Option> Result keys; underscores become hyphens in long-option spellings. Inherited by descendants; their option spellings must not conflict.
----@field run? (fun(...: any): ...: any) Required on leaves. Receives one combined opts table first when this task or an ancestor declares opts, then individual positionals. On a group, runs only when no child is selected; omitting it shows group help. Every returned value is printed on its own line, including nil; returning no values prints nothing. Strings are quoted and escaped as Lua literals. Plain tables are printed deterministically; tables with a __tostring metamethod and other non-table values retain print behavior. Return values are syntax-colored on terminals unless NO_COLOR is set or TERM is dumb; redirected output remains plain. Values and keys that have no Lua literal representation, including functions, userdata, threads, cycles, table keys, and non-finite numbers, are shown as angle-bracketed tostring pseudo-values. Normal completion exits 0. Raise an error for failure.
+---@field run? (fun(...: any): ...: any) Required on leaves. Receives one combined opts table first when this task or an ancestor declares opts, then individual positionals. On a group, runs only when no child is selected; omitting it shows group help.
 ---@field tasks? Tasks Named child tasks. May be combined with opts and a run for bare invocation, but not args.
 
 ---Task function receiving unparsed command-line arguments.

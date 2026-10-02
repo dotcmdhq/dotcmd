@@ -139,7 +139,7 @@ Forward all task arguments with named fields first and ... last:
             },
         },
         ExecResult = S.table { description = "Exit code and requested captured output.", fields = {
-            exit_code = S.integer { description = "Exit code." }, stdout = S.string { description = "Present when captured." },
+            exit_code = S.integer(), stdout = S.string { description = "Present when captured." },
             stderr = S.string { description = "Present when captured." },
         } },
         Process = S.table { description = "Running process, with requested pipes and lifecycle methods.", fields = {
@@ -166,7 +166,7 @@ Forward all task arguments with named fields first and ... last:
             read = func({ { "path", S.string() } }, { { "bytes", S.optional { schema = S.string() } } }, { description = "Reads the whole file as binary bytes; nil when missing, other failures raise." }),
             write = func({ { "path", S.string() }, { "bytes", S.string() },
                 { "options", S.optional { schema = S.ref { name = "WriteOptions" } }, arity = "?" } }, { { "written", S.boolean() } },
-                { description = "Atomic whole-file write; true on success, false only when skipped. Checks writing and closing; does not sync to durable storage." }),
+                { description = "Atomic whole-file write; true on success, false only when skipped." }),
             stat = func({ { "path", S.string() }, { "options", S.optional { schema = S.table { fields = {
                 follow = S.optional { schema = S.boolean { description = "Follow symlinks; defaults to true." } },
             } } }, arity = "?" } }, { { "stat", S.optional { schema = S.ref { name = "Stat" } } } }, { description = "Missing paths return nil; follow defaults to true." }),
@@ -184,7 +184,7 @@ Forward all task arguments with named fields first and ... last:
         } },
         ExtractOptions = S.table { description = "Archive source, destination, and extraction options.", fields = {
             path = S.string { description = "Archive file; format detected by contents." }, to = S.optional { schema = S.string { description = "New destination directory; defaults to the archive path without its suffix. Missing parents are created." } },
-            if_exists = S.optional { schema = S.ref { name = "IfExists", description = "Defaults to error. Replacement swaps trees on Unix; Windows moves the old tree aside before publication." } },
+            if_exists = S.optional { schema = S.ref { name = "IfExists", description = "Defaults to error." } },
             include = S.optional { schema = S.array { items = S.string { description = "Exact archive paths or directory prefixes, matched before stripping." } } },
             strip_components = S.optional { schema = S.integer { description = "Leading path components to remove; defaults to 0." } },
             progress = S.optional { schema = S.boolean { description = "Show approximate progress through archive bytes on terminal stderr after a short delay; defaults to true." } },
@@ -200,7 +200,7 @@ Forward all task arguments with named fields first and ... last:
         } },
         FetchOptions = S.table { description = "Pinned download and optional preparation.", extends = S.ref { name = "PinnedSource" }, fields = {
             name = S.optional { schema = S.string { description = "Download filename; defaults to the URL filename, or download." } },
-            prepare = S.optional { schema = S.ref { name = "Prepare", description = "Run only on a prepared-cache miss. Accepts a function; errors discard partial output." } },
+            prepare = S.optional { schema = S.ref { name = "Prepare", description = "Runs only on a prepared-cache miss; errors discard partial output." } },
         } },
         TaskFunction = func({ { "arguments", S.string { description = "Unparsed command-line arguments, passed as individual strings." }, arity = "*" } },
             { { "values", S.any(), arity = "*" } }, {
@@ -239,9 +239,16 @@ Forward all task arguments with named fields first and ... last:
             end_opts = S.optional { schema = S.boolean { description = "The first token that is not a declared option or -- starts the positionals and ends option recognition. "
                 .. "Defaults to false; positional parsing still applies." } },
         } },
-        Task = S.table { description = "Task or group, with options, positional arguments, and children.\n\nErrors print without an added traceback and default to exit 1. For a custom status, raise\nerror({message = "
-            .. "\"...\", exit_code = 2}). message is optional and converted with tostring;\nexit_code must be an integer from 0 "
-            .. "to 255, otherwise it falls back to 1.", fields = {
+        Task = S.table { description = "Task or group, with options, positional arguments, and children.\n\n"
+            .. "Errors print without a traceback and default to exit 1. Raise error({message = \"...\", exit_code = 2}) for a custom status. "
+            .. "Omit message for a silent exit; supplied messages use tostring. exit_code must be an integer from 0 to 255; invalid values fall back to 1.\n\n"
+            .. "Every returned value is printed on its own line, including nil; returning no values prints nothing. Strings are "
+            .. "quoted and escaped as Lua literals. Plain tables are printed deterministically; tables with a __tostring "
+            .. "metamethod and other non-table values retain print "
+            .. "behavior. Return values are syntax-colored on terminals unless NO_COLOR is set or TERM is dumb; redirected "
+            .. "output remains plain. Values and keys that have no Lua literal representation, including functions, userdata, "
+            .. "threads, cycles, table keys, and non-finite numbers, are shown as angle-bracketed tostring pseudo-values. "
+            .. "Normal completion exits 0. Raise an error for failure.", fields = {
             hidden = S.optional { description = "Omit this task and its aliases from help listings and completion suggestions; it remains callable.", schema = S.boolean() },
             aliases = S.optional { description = "Additional literal CLI names, listed after the primary name in help.", schema = S.array { items = S.string() } },
             description = S.optional { description = "First line is the summary in task listings; task help shows the full text.", schema = S.string() },
@@ -250,14 +257,7 @@ Forward all task arguments with named fields first and ... last:
             tasks = S.optional { description = "Named child tasks. May be combined with opts and a run for bare invocation, but not args.", schema = S.ref { name = "Tasks" } },
             run = S.optional { schema = func({ { "arguments", S.any(), arity = "*" } }, { { "values", S.any(), arity = "*" } }, {
                 description = "Required on leaves. Receives one combined opts table first when this task or an ancestor declares opts, then "
-                    .. "individual positionals. On a group, runs only when no child is selected; omitting it shows group help. Every "
-                    .. "returned value is printed on its own line, including nil; returning no values prints nothing. Strings are "
-                    .. "quoted and escaped as Lua literals. Plain tables are printed deterministically; tables with a __tostring "
-                    .. "metamethod and other non-table values retain print "
-                    .. "behavior. Return values are syntax-colored on terminals unless NO_COLOR is set or TERM is dumb; redirected "
-                    .. "output remains plain. Values and keys that have no Lua literal representation, including functions, userdata, "
-                    .. "threads, cycles, table keys, and non-finite numbers, are shown as angle-bracketed tostring pseudo-values. "
-                    .. "Normal completion exits 0. Raise an error for failure.",
+                    .. "individual positionals. On a group, runs only when no child is selected; omitting it shows group help.",
             }) },
         } },
         Tasks = S.map {
@@ -374,9 +374,9 @@ Delegate to another task and return its values:
     } },
 }
 
----@class dotcmd.Api: dotcmd.schema.Registry
+---@class Api: schema.Registry
 ---@field show fun(name?: string) Print the API index or documentation for a global, named type, or member.
----@cast api dotcmd.Api
+---@cast api Api
 
 ---Write API documentation through format; predicates and runtime functions are never called.
 ---@param name? string Global, named type, or dotted member path.

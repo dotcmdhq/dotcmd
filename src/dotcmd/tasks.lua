@@ -69,16 +69,16 @@ local function lookup(tasks_by_spelling, name)
     return task
 end
 
----@class dotcmd.Resolution
----@field task dotcmd.Task
+---@class Resolution
+---@field task Task
 ---@field arguments string[]
 ---@field path string[]
----@field opts? table<string, dotcmd.Option>
+---@field opts? table<string, Option>
 
 -- Start at the implicit project group and remove only dispatch names. Keep all
 -- options and separators in their original order so the leaf parser applies
 -- defaults, repetition, and end_opts once.
----@return dotcmd.Resolution? resolution
+---@return Resolution? resolution
 ---@return string? message
 ---@return integer? error_code
 function tasks.resolve(tasks_by_spelling, words)

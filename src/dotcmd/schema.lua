@@ -12,139 +12,139 @@
 -- fields with positional entries and reject undeclared fields. Maps describe
 -- arbitrary keys/values separately; numeric keys and n are ordinary map data.
 
----@class dotcmd.schema.Properties<T>
+---@class schema.Properties<T>
 ---@field description? string Meaning of this value, for documentation and fallback validation messages.
 ---@field examples? string Examples rendered as a separate section in API documentation.
 ---@field default? T Used for a missing declared table field or omitted ? argument, including through references. Supplied nil arguments are checked as nil. Defaults are checked unchanged; table schemas construct fresh conformed outputs. Function defaults are values, never factories.
 ---@field validate? fun(value: T): boolean?, string? Runs after structural checks and defaults, on the input shape before destructuring. Return true to accept, or false/nil and an optional message to reject. Exceptions propagate.
 
----@class dotcmd.schema.StringProperties: dotcmd.schema.Properties<string>
+---@class schema.StringProperties: schema.Properties<string>
 
----@class dotcmd.schema.String: dotcmd.schema.StringProperties
+---@class schema.String: schema.StringProperties
 ---@field type "string"
 
----@class dotcmd.schema.NumberProperties: dotcmd.schema.Properties<number>
+---@class schema.NumberProperties: schema.Properties<number>
 
----@class dotcmd.schema.Number: dotcmd.schema.NumberProperties
+---@class schema.Number: schema.NumberProperties
 ---@field type "number"
 
----@class dotcmd.schema.IntegerProperties: dotcmd.schema.Properties<integer>
+---@class schema.IntegerProperties: schema.Properties<integer>
 
----@class dotcmd.schema.Integer: dotcmd.schema.IntegerProperties
+---@class schema.Integer: schema.IntegerProperties
 ---@field type "integer"
 
----@class dotcmd.schema.BooleanProperties: dotcmd.schema.Properties<boolean>
+---@class schema.BooleanProperties: schema.Properties<boolean>
 
----@class dotcmd.schema.Boolean: dotcmd.schema.BooleanProperties
+---@class schema.Boolean: schema.BooleanProperties
 ---@field type "boolean"
 
----@class dotcmd.schema.NullProperties: dotcmd.schema.Properties<nil>
+---@class schema.NullProperties: schema.Properties<nil>
 
----@class dotcmd.schema.Null: dotcmd.schema.NullProperties
+---@class schema.Null: schema.NullProperties
 ---@field type "nil"
 
----@class dotcmd.schema.AnyProperties: dotcmd.schema.Properties<any>
+---@class schema.AnyProperties: schema.Properties<any>
 
----@class dotcmd.schema.Any: dotcmd.schema.AnyProperties
+---@class schema.Any: schema.AnyProperties
 ---@field type "any"
 
----@class dotcmd.schema.FileProperties: dotcmd.schema.Properties<file*>
+---@class schema.FileProperties: schema.Properties<file*>
 
----@class dotcmd.schema.File: dotcmd.schema.FileProperties
+---@class schema.File: schema.FileProperties
 ---@field type "file"
 
----@class dotcmd.schema.LiteralProperties<T>: dotcmd.schema.Properties<T>
+---@class schema.LiteralProperties<T>: schema.Properties<T>
 ---@field value T Compared using Lua equality.
 
----@class dotcmd.schema.Literal<T>: dotcmd.schema.LiteralProperties<T>
+---@class schema.Literal<T>: schema.LiteralProperties<T>
 ---@field type "literal"
 
----@class dotcmd.schema.UnionProperties: dotcmd.schema.Properties<any>
----@field alternatives dotcmd.schema.Schema[] Nonempty; any matching branch accepts the value.
+---@class schema.UnionProperties: schema.Properties<any>
+---@field alternatives schema.Schema[] Nonempty; any matching branch accepts the value.
 
----@class dotcmd.schema.Union: dotcmd.schema.UnionProperties
+---@class schema.Union: schema.UnionProperties
 ---@field type "union"
 
----@class dotcmd.schema.OptionalProperties: dotcmd.schema.Properties<any>
----@field schema dotcmd.schema.Schema Schema to union with nil.
+---@class schema.OptionalProperties: schema.Properties<any>
+---@field schema schema.Schema Schema to union with nil.
 
----@class dotcmd.schema.EnumProperties: dotcmd.schema.Properties<any>
+---@class schema.EnumProperties: schema.Properties<any>
 ---@field values any[] Nonempty list of non-nil literal values.
 
----@class dotcmd.schema.ArrayProperties: dotcmd.schema.Properties<table>
----@field items dotcmd.schema.Schema Schema for each array entry; conformance binds repeated entries to "items".
+---@class schema.ArrayProperties: schema.Properties<table>
+---@field items schema.Schema Schema for each array entry; conformance binds repeated entries to "items".
 
----@class dotcmd.schema.TableProperties: dotcmd.schema.Properties<table>
----@field fields dotcmd.schema.Fields Named fields and positional entries. Undeclared fields are rejected.
----@field extends? dotcmd.schema.Reference Parent table definition. Named fields merge, with child overrides; a child positional sequence replaces the whole inherited sequence. Inherited references retain the parent's registry scope. Both tables' predicates run after combined defaults.
+---@class schema.TableProperties: schema.Properties<table>
+---@field fields schema.Fields Named fields and positional entries. Undeclared fields are rejected.
+---@field extends? schema.Reference Parent table definition. Named fields merge, with child overrides; a child positional sequence replaces the whole inherited sequence. Inherited references retain the parent's registry scope. Both tables' predicates run after combined defaults.
 
----@class dotcmd.schema.Table: dotcmd.schema.TableProperties
+---@class schema.Table: schema.TableProperties
 ---@field type "table"
 
----@class dotcmd.schema.MapProperties: dotcmd.schema.Properties<table>
----@field key dotcmd.schema.Schema Schema for every key; conformance preserves key identity.
----@field value dotcmd.schema.Schema Schema for every value.
+---@class schema.MapProperties: schema.Properties<table>
+---@field key schema.Schema Schema for every key; conformance preserves key identity.
+---@field value schema.Schema Schema for every value.
 
----@class dotcmd.schema.Map: dotcmd.schema.MapProperties
+---@class schema.Map: schema.MapProperties
 ---@field type "map"
 
----@alias dotcmd.schema.Arity "1"|"?"|"*"|"+"
+---@alias schema.Arity "1"|"?"|"*"|"+"
 
----@class dotcmd.schema.Entry
+---@class schema.Entry
 ---@field [1] string Argument name used in errors and documentation.
----@field [2] dotcmd.schema.Schema Schema for each supplied value.
----@field arity? dotcmd.schema.Arity Defaults to 1. Only the final entry may use ?, *, or +. Omission differs from a supplied nil.
+---@field [2] schema.Schema Schema for each supplied value.
+---@field arity? schema.Arity Defaults to 1. Only the final entry may use ?, *, or +. Omission differs from a supplied nil.
 
----@class dotcmd.schema.Fields
----@field [integer] dotcmd.schema.Entry Ordered positional entries; use table.pack inputs to distinguish omission from nil. An omitted ? entry may use its default; required entries must be supplied.
----@field [string] dotcmd.schema.Schema Named field schemas. Missing fields use their defaults, otherwise they are checked as nil. A declared n field is ordinary data, not packed sequence metadata.
+---@class schema.Fields
+---@field [integer] schema.Entry Ordered positional entries; use table.pack inputs to distinguish omission from nil. An omitted ? entry may use its default; required entries must be supplied.
+---@field [string] schema.Schema Named field schemas. Missing fields use their defaults, otherwise they are checked as nil. A declared n field is ordinary data, not packed sequence metadata.
 
----@class dotcmd.schema.Branch
+---@class schema.Branch
 ---@field [1] string Unique branch name used in errors and conformed matches.
----@field [2] dotcmd.schema.TableSchema Branch schema.
+---@field [2] schema.TableSchema Branch schema.
 
----@class dotcmd.schema.AlternativeProperties: dotcmd.schema.Properties<table>
----@field alternatives dotcmd.schema.Branch[] Nonempty ordered branches; the first match conforms to {tag = name, value = branch_output}.
+---@class schema.AlternativeProperties: schema.Properties<table>
+---@field alternatives schema.Branch[] Nonempty ordered branches; the first match conforms to {tag = name, value = branch_output}.
 
----@class dotcmd.schema.Alternative: dotcmd.schema.AlternativeProperties
+---@class schema.Alternative: schema.AlternativeProperties
 ---@field type "alt"
 
----@alias dotcmd.schema.TableSchema dotcmd.schema.Table|dotcmd.schema.Alternative|dotcmd.schema.Reference|dotcmd.schema.Registry
+---@alias schema.TableSchema schema.Table|schema.Alternative|schema.Reference|schema.Registry
 
----@class dotcmd.schema.Signature
----@field params dotcmd.schema.TableSchema Argument table, normally with positional entries.
----@field returns dotcmd.schema.TableSchema Return-value table; no positional entries means no return values.
+---@class schema.Signature
+---@field params schema.TableSchema Argument table, normally with positional entries.
+---@field returns schema.TableSchema Return-value table; no positional entries means no return values.
 
----@class dotcmd.schema.FunctionProperties: dotcmd.schema.Properties<function>
----@field signatures dotcmd.schema.Signature[] Nonempty overload list.
+---@class schema.FunctionProperties: schema.Properties<function>
+---@field signatures schema.Signature[] Nonempty overload list.
 ---@field name? string Function name used in call validation/conformance errors, such as "fetch" or "fs.stat". Defaults to the path selected by at, then the enclosing reference name.
 
----@class dotcmd.schema.Function: dotcmd.schema.FunctionProperties
+---@class schema.Function: schema.FunctionProperties
 ---@field type "function"
 -- Checking a function value does not invoke or wrap it.
 
----@class dotcmd.schema.ReferenceProperties: dotcmd.schema.Properties<any>
+---@class schema.ReferenceProperties: schema.Properties<any>
 ---@field name string Definition name resolved in the enclosing registry, then its parents. No global registry.
 
----@class dotcmd.schema.Reference: dotcmd.schema.ReferenceProperties
+---@class schema.Reference: schema.ReferenceProperties
 ---@field type "ref"
 
----@class dotcmd.schema.RegistryProperties: dotcmd.schema.Properties<any>
----@field definitions table<string, dotcmd.schema.Schema> Named definitions scoped to this registry; references can express recursion without cyclic schema tables.
----@field schema dotcmd.schema.Schema Root schema checked within this registry.
+---@class schema.RegistryProperties: schema.Properties<any>
+---@field definitions table<string, schema.Schema> Named definitions scoped to this registry; references can express recursion without cyclic schema tables.
+---@field schema schema.Schema Root schema checked within this registry.
 ---@field name? string Function path for call errors, supplied by at. An explicit function name takes precedence.
 
----@class dotcmd.schema.Registry: dotcmd.schema.RegistryProperties
+---@class schema.Registry: schema.RegistryProperties
 ---@field type "registry"
 
----@alias dotcmd.schema.Schema dotcmd.schema.String|dotcmd.schema.Number|dotcmd.schema.Integer|dotcmd.schema.Boolean|dotcmd.schema.Null|dotcmd.schema.Any|dotcmd.schema.File|dotcmd.schema.Literal<any>|dotcmd.schema.Union|dotcmd.schema.Table|dotcmd.schema.Map|dotcmd.schema.Alternative|dotcmd.schema.Function|dotcmd.schema.Reference|dotcmd.schema.Registry
----@alias dotcmd.schema.FunctionSchema dotcmd.schema.Function|dotcmd.schema.Reference|dotcmd.schema.Registry
----@alias dotcmd.schema.ErrorCode "type"|"required"|"sparse"|"unexpected"|"unknown_field"|"union"|"validation"
+---@alias schema.Schema schema.String|schema.Number|schema.Integer|schema.Boolean|schema.Null|schema.Any|schema.File|schema.Literal<any>|schema.Union|schema.Table|schema.Map|schema.Alternative|schema.Function|schema.Reference|schema.Registry
+---@alias schema.FunctionSchema schema.Function|schema.Reference|schema.Registry
+---@alias schema.ErrorCode "type"|"required"|"sparse"|"unexpected"|"unknown_field"|"union"|"validation"
 
----@class dotcmd.schema.Error
----@field code dotcmd.schema.ErrorCode
+---@class schema.Error
+---@field code schema.ErrorCode
 ---@field path any[] Field keys and positional indices from the validated root to the failing value.
----@field expected dotcmd.schema.Schema Schema that rejected the value.
+---@field expected schema.Schema Schema that rejected the value.
 ---@field actual_type "nil"|"boolean"|"number"|"string"|"table"|"function"|"userdata"|"thread" Lua type of the failing value.
 ---@field type_kind? string Cached primitive expectation for deferred message formatting.
 ---@field literal_value? any Cached literal expectation for deferred message formatting.
@@ -155,7 +155,7 @@
 ---@field branch? string Name of the failing alternative branch.
 ---@field function_name? string Function whose call arguments failed to match.
 
----@class dotcmd.schema.ValidationError
+---@class schema.ValidationError
 ---@field message string Formatted validation explanation including the failing path.
 ---@field exit_code integer Always 1.
 
@@ -171,47 +171,47 @@ local function node(kind, properties)
     return schema
 end
 
----@param properties? dotcmd.schema.StringProperties
----@return dotcmd.schema.String
+---@param properties? schema.StringProperties
+---@return schema.String
 function S.string(properties) return node("string", properties) end
 
----@param properties? dotcmd.schema.NumberProperties
----@return dotcmd.schema.Number
+---@param properties? schema.NumberProperties
+---@return schema.Number
 function S.number(properties) return node("number", properties) end
 
----@param properties? dotcmd.schema.IntegerProperties
----@return dotcmd.schema.Integer
+---@param properties? schema.IntegerProperties
+---@return schema.Integer
 function S.integer(properties) return node("integer", properties) end
 
----@param properties? dotcmd.schema.BooleanProperties
----@return dotcmd.schema.Boolean
+---@param properties? schema.BooleanProperties
+---@return schema.Boolean
 function S.boolean(properties) return node("boolean", properties) end
 
----@param properties? dotcmd.schema.NullProperties
----@return dotcmd.schema.Null
+---@param properties? schema.NullProperties
+---@return schema.Null
 function S.null(properties) return node("nil", properties) end
 
----@param properties? dotcmd.schema.AnyProperties
----@return dotcmd.schema.Any
+---@param properties? schema.AnyProperties
+---@return schema.Any
 function S.any(properties) return node("any", properties) end
 
 ---An open Lua file handle. Closed files are rejected; conformance retains identity.
----@param properties? dotcmd.schema.FileProperties
----@return dotcmd.schema.File
+---@param properties? schema.FileProperties
+---@return schema.File
 function S.file(properties) return node("file", properties) end
 
 ---@generic T
----@param properties dotcmd.schema.LiteralProperties<T>
----@return dotcmd.schema.Literal<T>
+---@param properties schema.LiteralProperties<T>
+---@return schema.Literal<T>
 function S.literal(properties) return node("literal", properties) end
 
----@param properties dotcmd.schema.UnionProperties
----@return dotcmd.schema.Union
+---@param properties schema.UnionProperties
+---@return schema.Union
 function S.union(properties) return node("union", properties) end
 
 ---A nullable schema, expressed as a union with nil.
----@param properties dotcmd.schema.OptionalProperties
----@return dotcmd.schema.Union
+---@param properties schema.OptionalProperties
+---@return schema.Union
 function S.optional(properties)
     local schema = node("union", properties)
     schema.alternatives = { properties.schema, S.null() }
@@ -220,8 +220,8 @@ function S.optional(properties)
 end
 
 ---A union of literal values.
----@param properties dotcmd.schema.EnumProperties
----@return dotcmd.schema.Union
+---@param properties schema.EnumProperties
+---@return schema.Union
 function S.enum(properties)
     local schema = node("union", properties)
     schema.alternatives = {}
@@ -230,13 +230,13 @@ function S.enum(properties)
     return schema
 end
 
----@param properties dotcmd.schema.TableProperties
----@return dotcmd.schema.Table
+---@param properties schema.TableProperties
+---@return schema.Table
 function S.table(properties) return node("table", properties) end
 
 ---An array of values; conformance binds the repeated entries to "items".
----@param properties dotcmd.schema.ArrayProperties
----@return dotcmd.schema.Table
+---@param properties schema.ArrayProperties
+---@return schema.Table
 function S.array(properties)
     local schema = node("table", properties)
     schema.fields = { { "items", properties.items, arity = "*" } }
@@ -244,24 +244,24 @@ function S.array(properties)
     return schema
 end
 
----@param properties dotcmd.schema.MapProperties
----@return dotcmd.schema.Map
+---@param properties schema.MapProperties
+---@return schema.Map
 function S.map(properties) return node("map", properties) end
 
----@param properties dotcmd.schema.AlternativeProperties
----@return dotcmd.schema.Alternative
+---@param properties schema.AlternativeProperties
+---@return schema.Alternative
 function S.alt(properties) return node("alt", properties) end
 
----@param properties dotcmd.schema.FunctionProperties
----@return dotcmd.schema.Function
+---@param properties schema.FunctionProperties
+---@return schema.Function
 function S.func(properties) return node("function", properties) end
 
----@param properties dotcmd.schema.ReferenceProperties
----@return dotcmd.schema.Reference
+---@param properties schema.ReferenceProperties
+---@return schema.Reference
 function S.ref(properties) return node("ref", properties) end
 
----@param properties dotcmd.schema.RegistryProperties
----@return dotcmd.schema.Registry
+---@param properties schema.RegistryProperties
+---@return schema.Registry
 function S.registry(properties) return node("registry", properties) end
 
 local function child_path(path, key)
@@ -392,9 +392,9 @@ end
 ---registry scope and leaf properties; ancestor validation/defaults do not apply.
 ---The selected path names call errors unless the function has an explicit name.
 ---An empty path selects the root. Definitions and inputs are untouched.
----@param schema dotcmd.schema.Schema
+---@param schema schema.Schema
 ---@param path (string|integer)[] Ordered declared field keys or positional entry indices, such as {"fs", "stat"}.
----@return dotcmd.schema.Registry selected A schema with registry wrappers; usable with validate, conform, and, for functions, their call variants.
+---@return schema.Registry selected A schema with registry wrappers; usable with validate, conform, and, for functions, their call variants.
 function S.at(schema, path)
     local name = schema.type == "registry" and schema.name or nil
     local scope
@@ -695,7 +695,7 @@ check = function(schema, value, path, scope, conforming)
     return true, output, normalized
 end
 
----@param err dotcmd.schema.Error
+---@param err schema.Error
 ---@return string
 local function format_error(err)
     if err.code == "type" and err.message == nil then
@@ -750,22 +750,22 @@ local function format_error(err)
     return label .. ": " .. err.message
 end
 
----@param err dotcmd.schema.Error
----@return dotcmd.schema.ValidationError
+---@param err schema.Error
+---@return schema.ValidationError
 local function validation_error(err)
     return { message = format_error(err), exit_code = 1 }
 end
 
----Returns the original value on success; throws dotcmd.schema.ValidationError on invalid input.
+---Returns the original value on success; throws schema.ValidationError on invalid input.
 ---Defaults participate in checking but are never inserted into the caller's input.
 ---@generic T
----@param schema dotcmd.schema.Schema
+---@param schema schema.Schema
 ---@param value T
 ---@return T
 function S.validate(schema, value)
     local ok, result = check(schema, value, {}, nil, false)
     if not ok then
-        ---@cast result dotcmd.schema.Error
+        ---@cast result schema.Error
         error(validation_error(result), 0)
     end
     return value
@@ -774,13 +774,13 @@ end
 ---Returns the conformed value; throws on invalid input.
 ---Primitives, files and functions retain their value. Tables receive defaults and named
 ---positional bindings; alternatives become {tag, value}. No type coercion.
----@param schema dotcmd.schema.Schema
+---@param schema schema.Schema
 ---@param value any
 ---@return any output
 function S.conform(schema, value)
     local ok, output = check(schema, value, {}, nil, true)
     if not ok then
-        ---@cast output dotcmd.schema.Error
+        ---@cast output schema.Error
         error(validation_error(output), 0)
     end
     return output
@@ -801,13 +801,13 @@ local function check_call(schema, arguments, conforming)
 end
 
 ---Returns the matching signature; throws if none matches. Never invokes the function.
----@param schema dotcmd.schema.FunctionSchema
+---@param schema schema.FunctionSchema
 ---@param ... any Arguments, including explicit nil positions.
----@return dotcmd.schema.Signature
+---@return schema.Signature
 function S.validate_call(schema, ...)
     local signature, result = check_call(schema, table.pack(...), false)
     if not signature then
-        ---@cast result dotcmd.schema.Error
+        ---@cast result schema.Error
         error(validation_error(result), 0)
     end
     return signature
@@ -815,13 +815,13 @@ end
 
 ---Returns structured arguments for the first matching signature. Throws if none
 ---matches, identifying the function when named. Never invokes or wraps the function.
----@param schema dotcmd.schema.FunctionSchema
+---@param schema schema.FunctionSchema
 ---@param ... any Arguments, including explicit nil positions.
 ---@return table arguments Named bindings or a tagged alternative match.
 function S.conform_call(schema, ...)
     local signature, output = check_call(schema, table.pack(...), true)
     if not signature then
-        ---@cast output dotcmd.schema.Error
+        ---@cast output schema.Error
         error(validation_error(output), 0)
     end
     ---@cast output table

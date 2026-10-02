@@ -55,7 +55,7 @@ end
 ---Generate a standalone LuaLS definition document. Root record fields are globals;
 ---other roots are a Value alias.
 ---Descriptions/defaults are included; callbacks and inputs are never modified or executed.
----@param schema dotcmd.schema.Schema
+---@param schema schema.Schema
 ---@return string annotations
 local function generate(schema)
     local pending, scopes, scope_count, names = {}, {}, 0, {}

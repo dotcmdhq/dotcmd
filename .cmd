@@ -1,10 +1,10 @@
-:; version=0.1.107
-:; sha_linux_x64=d26567d3c2505aa311a2ed1674f5652d4e2bc3934a925de8d8fdd3ffdb8a3009
-:; sha_linux_arm64=97e308c387599d207f892a68cc7eecf051cc9d306a14edfb8f74f940db1883fe
-:; sha_macos_x64=fb9ec8e671f59e1a65aa6b695c759a1f94ac93ab2fae313c0e4a6f8fe0277eb8
-:; sha_macos_arm64=a3a625b4cf1860e8330a9a628b31e26924c99c8f1ead21550d15a3cc8180baee
-:; sha_windows_x64=270fd346c23c51091124237a3c09563197c0676d31c2e7212d0069702b9bf21a
-:; sha_windows_arm64=b3b4d06deb8b539d0921072a00c1c5d563a4858bf8b1355cc8d56efb63565a46
+:; version=0.1.108
+:; sha_linux_x64=5d1f85fc6a1c72fa197cb63406b458e06111ff40b207383b8a53bfb8fc7a44f6
+:; sha_linux_arm64=cd5f1b073fd061071d1db4b1e48ac4e5c0782a85886014b4e7c42449b6f2d18a
+:; sha_macos_x64=cd7d4e45215082158324fb32919114902e3d2fc727d63712eb8d19b4614e3f6a
+:; sha_macos_arm64=e77979bb309628b5616fd3fac20a356abe61f0b213d883ee26f74be135f2887a
+:; sha_windows_x64=477fcd33528e84c6fe19e4a0fdca9802c168fdc2d1cbaa247578b4c05fd4c555
+:; sha_windows_arm64=0d3e0361872bf25630984f28d076fe56afd03d2d9f70b458f7ae6cc0b62cccb9
 :; set -eu
 :; platform=$(uname -sm)
 :; case "$platform" in Linux\ *) os=linux;; Darwin\ *) os=macos;; *) echo 'dotcmd: unsupported OS' >&2; exit 1;; esac
@@ -27,7 +27,7 @@
 :; tmp=$(mktemp "$cache/.download.XXXXXX")
 :; trap 'rm -f "$tmp"' EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
 :; url="https://github.com/dotcmdhq/dotcmd/releases/download/$version/dotcmd-$os-$arch"
-:; if [ -n "$curl_path" ]; then "$curl_path" --fail --location --retry 3 --silent --show-error "$url" -o "$tmp"; else "$wget_path" -O "$tmp" "$url"; fi
+:; if [ -n "$curl_path" ]; then "$curl_path" --fail --location --retry 3 --progress-bar --show-error "$url" -o "$tmp"; else "$wget_path" -O "$tmp" "$url"; fi
 :; verify_sha "$tmp"
 :; chmod +x "$tmp"
 :; mv -f "$tmp" "$binary"
@@ -69,7 +69,7 @@ if not defined powershell_path if defined SystemRoot if exist "%SystemRoot%\Syst
 if not defined powershell_path goto curl_fallback
 setlocal
 set "PSModulePath="
-"%powershell_path%" -NoLogo -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; $tmp = Join-Path $env:cache ('.download-' + [Guid]::NewGuid() + '.exe'); try { [void][IO.Directory]::CreateDirectory($env:cache); Invoke-WebRequest -UseBasicParsing -Uri $env:dotcmd_url -OutFile $tmp; if ((Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash -ne $env:dotcmd_expected_sha) { throw 'SHA-256 mismatch' }; Move-Item -LiteralPath $tmp -Destination $env:binary -Force } catch { [Console]::Error.WriteLine('dotcmd: ' + $_.Exception.Message); exit 1 } finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }; exit 0"
+"%powershell_path%" -NoLogo -NoProfile -NonInteractive -Command "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'Continue'; $tmp = Join-Path $env:cache ('.download-' + [Guid]::NewGuid() + '.exe'); try { [void][IO.Directory]::CreateDirectory($env:cache); Invoke-WebRequest -UseBasicParsing -Uri $env:dotcmd_url -OutFile $tmp; if ((Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash -ne $env:dotcmd_expected_sha) { throw 'SHA-256 mismatch' }; Move-Item -LiteralPath $tmp -Destination $env:binary -Force } catch { [Console]::Error.WriteLine('dotcmd: ' + $_.Exception.Message); exit 1 } finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }; exit 0"
 if errorlevel 1 exit /b 1
 endlocal
 :run
@@ -83,7 +83,7 @@ exit /b 1
 :curl_fallback
 for %%P in (curl.exe certutil.exe) do if "%%~$PATH:P"=="" (echo dotcmd: Windows PowerShell or both curl.exe and certutil.exe are required. >&2 & exit /b 127)
 set "tmp=%binary%.%RANDOM%%RANDOM%.tmp"
-curl.exe --create-dirs --fail --location --retry 3 --silent --show-error "%dotcmd_url%" -o "%tmp%" || (del /q "%tmp%" 2>nul & exit /b 1)
+curl.exe --create-dirs --fail --location --retry 3 --progress-bar --show-error "%dotcmd_url%" -o "%tmp%" || (del /q "%tmp%" 2>nul & exit /b 1)
 certutil.exe -hashfile "%tmp%" SHA256 | findstr /i /l /x /c:"%dotcmd_expected_sha%" >nul || (del /q "%tmp%" 2>nul & echo dotcmd: SHA-256 verification failed >&2 & exit /b 1)
 move /y "%tmp%" "%binary%" >nul || (del /q "%tmp%" 2>nul & exit /b 1)
 goto run

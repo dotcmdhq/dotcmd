@@ -1,8 +1,9 @@
 #pragma once
 struct lua_State;
-// extract(path, to?) or extract({path, to?, strip_components=0, include?, if_exists="error"}) -> boolean.
+// extract(path, to?) or extract({path, to?, strip_components=0, include?, if_exists="error", progress=true}) -> boolean.
 // A missing `to` removes the archive suffix (or appends .unpacked).
 // Selection uses exact paths/directory prefixes before stripping components.
+// Progress reports approximate archive-byte position on terminal stderr; no extra archive pass.
 // if_exists accepts error/skip/replace. Returns true on success, false when skipped.
 // Missing parents are created and may remain after failure. New directories publish atomically. Replacement
 // exchanges trees on Unix; Windows moves the old tree aside with rollback on failure.

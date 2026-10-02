@@ -1,6 +1,7 @@
 #include "extract.h"
 #include "api.h"
 #include "fs.h"
+#include "progress.h"
 #include <archive.h>
 #include <archive_entry.h>
 #include <errno.h>
@@ -41,6 +42,9 @@ struct State {
     char* scratch[4];
     bool staged;
     int if_exists;
+    Progress progress;
+    int64_t archive_size;
+    int64_t archive_position;
 #ifdef _WIN32
     char* previous_locale;
     int previous_locale_mode;
@@ -68,6 +72,7 @@ static int Cleanup(lua_State* L) {
     bool removed = !s->staged || RemoveFsTree(s->temporary);
     if (!removed) lua_pushstring(L, s->temporary);
     s->staged = false;
+    ClearProgress(&s->progress);
     free(s->temporary); s->temporary = NULL;
     free(s->destination); s->destination = NULL;
     for (int i = 0; i < 4; ++i) { free(s->scratch[i]); s->scratch[i] = NULL; }
@@ -300,6 +305,17 @@ static bool Publish(lua_State* L, State* s) {
 #endif
 }
 
+// Sample only during entry processing: ZIP initialization seeks to its directory
+// at the end, then returns to entries ordered by their local header offsets.
+static void ExtractionProgress(State* s) {
+    if (!s->progress.enabled) return;
+    int64_t position = archive_filter_bytes(s->reader, -1);
+    if (position > s->archive_position) s->archive_position = position;
+    if (s->archive_size > 0 && s->archive_position > s->archive_size)
+        s->archive_position = s->archive_size;
+    RenderProgress(&s->progress, s->archive_size, s->archive_position);
+}
+
 static void FinishEntry(lua_State* L, State* s, struct archive_entry* entry, bool data) {
     Check(L, s->writer, archive_write_header(s->writer, entry));
     if (data) {
@@ -309,6 +325,7 @@ static void FinishEntry(lua_State* L, State* s, struct archive_entry* entry, boo
             if (result == ARCHIVE_EOF) break;
             Check(L, s->reader, result);
             Check(L, s->writer, (int)archive_write_data_block(s->writer, buffer, size, offset));
+            ExtractionProgress(s);
         }
     }
     Check(L, s->writer, archive_write_finish_entry(s->writer));
@@ -326,6 +343,11 @@ static int Extract(lua_State* L) {
     static const char* const policies[] = {"error", "skip", "replace", NULL};
     if (options) lua_getfield(L, 1, "if_exists"); else lua_pushnil(L);
     s->if_exists = luaL_checkoption(L, -1, "error", policies); lua_pop(L, 1);
+    if (options) lua_getfield(L, 1, "progress"); else lua_pushnil(L);
+    if (!lua_isnil(L, -1) && !lua_isboolean(L, -1))
+        return luaL_error(L, "extract: field \"options.progress\" must be a boolean");
+    bool progress = lua_isnil(L, -1) || lua_toboolean(L, -1);
+    lua_pop(L, 1);
     lua_Integer strip = 0;
     if (options) {
         lua_getfield(L, 1, "strip_components");
@@ -404,11 +426,29 @@ static int Extract(lua_State* L) {
 #else
     Check(L, s->reader, archive_read_open_filename(s->reader, input, 65536));
 #endif
+    if (progress) {
+        const char* name = input;
+        for (const char* p = input; *p; ++p) if (Separator(*p)) name = p + 1;
+        StartProgress(&s->progress, "Extracting", name, strlen(name));
+        if (s->progress.enabled) {
+#ifdef _WIN32
+            wchar_t* path = Wide(L, input);
+            WIN32_FILE_ATTRIBUTE_DATA info;
+            if (GetFileAttributesExW(path, GetFileExInfoStandard, &info))
+                s->archive_size = ((int64_t)info.nFileSizeHigh << 32) | info.nFileSizeLow;
+            lua_pop(L, 1);
+#else
+            struct stat info;
+            if (stat(input, &info) == 0 && S_ISREG(info.st_mode)) s->archive_size = info.st_size;
+#endif
+        }
+    }
     struct archive_entry* entry;
     for (;;) {
         int result = archive_read_next_header(s->reader, &entry);
         if (result == ARCHIVE_EOF) break;
         Check(L, s->reader, result);
+        ExtractionProgress(s);
         if (archive_entry_is_encrypted(entry)) return luaL_error(L, "extract: encrypted archives are not supported");
         const char* name = Normalize(L, &s->scratch[0], archive_entry_pathname(entry));
         bool selected = !count;
@@ -462,6 +502,7 @@ static int Extract(lua_State* L) {
             FinishEntry(L, s, entry, type == AE_IFREG);
         }
     }
+    FinalizeProgress(&s->progress);
     Check(L, s->reader, archive_read_close(s->reader));
     for (size_t i = 1; i <= count; ++i) {
         lua_rawgeti(L, matches, (lua_Integer)i); bool found = lua_toboolean(L, -1); lua_pop(L, 1);

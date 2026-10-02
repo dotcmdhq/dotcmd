@@ -1,7 +1,7 @@
 #include "http.h"
 #include "api.h"
 #include "build_config.h"
-#include "terminal.h"
+#include "progress.h"
 #include <curl/curl.h>
 #include <errno.h>
 #include <limits.h>
@@ -30,17 +30,6 @@ struct Buffer {
     size_t capacity;
 };
 
-struct Progress {
-    const char* name;
-    size_t name_size;
-    uint64_t started;
-    uint64_t updated;
-    curl_off_t total;
-    curl_off_t received;
-    bool visible;
-    bool decorated;
-};
-
 struct Request {
     CURL* curl;
     curl_slist* headers;
@@ -65,16 +54,6 @@ struct Request {
 
 static bool curl_initialized = false;
 
-static uint64_t Milliseconds() {
-#ifdef _WIN32
-    return (uint64_t)GetTickCount64();
-#else
-    struct timespec time;
-    clock_gettime(CLOCK_MONOTONIC, &time);
-    return (uint64_t)time.tv_sec * 1000 + (uint64_t)time.tv_nsec / 1000000;
-#endif
-}
-
 static void SetProgressName(Progress* progress, const char* url) {
     const char* end = url + strlen(url);
     const char* query = strpbrk(url, "?#");
@@ -89,70 +68,10 @@ static void SetProgressName(Progress* progress, const char* url) {
     progress->name_size = (size_t)(end - start);
 }
 
-static void PrintBytes(curl_off_t received, curl_off_t total) {
-    static const char* units[] = {"B", "KiB", "MiB", "GiB", "TiB"};
-    curl_off_t scale = total > 0 ? total : received;
-    int unit = 0;
-    double divisor = 1;
-    while (scale >= 1024 && unit < 4) {
-        scale /= 1024;
-        divisor *= 1024;
-        ++unit;
-    }
-    if (total > 0 && unit == 0)
-        fprintf(stderr, "%lld / %lld B", (long long)received, (long long)total);
-    else if (total > 0)
-        fprintf(stderr, "%.1f / %.1f %s",
-                (double)received / divisor, (double)total / divisor, units[unit]);
-    else if (unit == 0)
-        fprintf(stderr, "%lld B", (long long)received);
-    else
-        fprintf(stderr, "%.1f %s", (double)received / divisor, units[unit]);
-}
-
-static void RenderProgress(Progress* progress, curl_off_t total, curl_off_t received) {
-    if (received <= 0) return;
-    uint64_t now = Milliseconds();
-    if (!progress->visible) {
-        if (now - progress->started < 200) return;
-        progress->visible = true;
-    } else if (progress->total == total && progress->received == received) {
-        return;
-    } else if (now - progress->updated < 100 && !(total > 0 && received >= total)) {
-        return;
-    }
-    progress->updated = now;
-    progress->total = total;
-    progress->received = received;
-    fputs("\r\x1b[2KDownloading ", stderr);
-    if (progress->decorated) fputs("\x1b[1m", stderr);
-    fwrite(progress->name, 1, progress->name_size, stderr);
-    if (progress->decorated) fputs("\x1b[22m", stderr);
-    if (total > 0) {
-        int percent = (int)((double)received * 100.0 / (double)total);
-        if (percent < 0) percent = 0;
-        if (percent > 100) percent = 100;
-        fprintf(stderr, "  %d%%  ", percent);
-    } else {
-        fputs("  ", stderr);
-    }
-    if (progress->decorated) fputs("\x1b[2m", stderr);
-    PrintBytes(received, total);
-    if (progress->decorated) fputs("\x1b[22m", stderr);
-    fflush(stderr);
-}
-
 static int TransferProgress(void* context, curl_off_t total, curl_off_t received,
                             curl_off_t, curl_off_t) {
     RenderProgress((Progress*)context, total, received);
     return 0;
-}
-
-static void ClearProgress(Progress* progress) {
-    if (!progress->visible) return;
-    fputs("\r\x1b[2K", stderr);
-    fflush(stderr);
-    progress->visible = false;
 }
 
 // Native buffers remain request-owned, including on allocation failure.
@@ -464,15 +383,14 @@ static int Http(lua_State* L) {
     OPTION(CURLOPT_WRITEDATA, request);
     OPTION(CURLOPT_HEADERFUNCTION, WriteHeader);
     OPTION(CURLOPT_HEADERDATA, request);
-    const char* terminal = getenv("TERM");
-    if (progress && (!terminal || strcmp(terminal, "dumb") != 0) && IsTerminal(stderr)) {
+    if (progress) {
         SetProgressName(&request->progress, url);
-        const char* no_color = getenv("NO_COLOR");
-        request->progress.decorated = !no_color || !*no_color;
-        request->progress.started = Milliseconds();
-        OPTION(CURLOPT_NOPROGRESS, 0L);
-        OPTION(CURLOPT_XFERINFOFUNCTION, TransferProgress);
-        OPTION(CURLOPT_XFERINFODATA, &request->progress);
+        StartProgress(&request->progress, "Downloading", request->progress.name, request->progress.name_size);
+        if (request->progress.enabled) {
+            OPTION(CURLOPT_NOPROGRESS, 0L);
+            OPTION(CURLOPT_XFERINFOFUNCTION, TransferProgress);
+            OPTION(CURLOPT_XFERINFODATA, &request->progress);
+        }
     }
     if (strcmp(method, "POST") == 0) OPTION(CURLOPT_POST, 1L);
     if (body) {

@@ -183,6 +183,15 @@ Examples:
     __setup = {
         description = "Set up dotcmd integrations",
         tasks = {
+            luals = {
+                description = [[Generate LuaLS configuration and dotcmd API declarations
+
+Creates .luarc.json and .cmd.d.lua in the project directory.
+Configuration with "$dotcmd": true is managed: rerunning replaces both files.
+Existing unmanaged configuration or declarations are never overwritten.]],
+                args = {},
+                run = function() return require("dotcmd.luals").setup() end,
+            },
             completions = {
                 description = [[Install shell completions for the current user
 

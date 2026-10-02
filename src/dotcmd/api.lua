@@ -187,6 +187,7 @@ Forward all task arguments with named fields first and ... last:
             if_exists = S.optional { schema = S.ref { name = "IfExists", description = "Defaults to error. Replacement swaps trees on Unix; Windows moves the old tree aside before publication." } },
             include = S.optional { schema = S.array { items = S.string { description = "Exact archive paths or directory prefixes, matched before stripping." } } },
             strip_components = S.optional { schema = S.integer { description = "Leading path components to remove; defaults to 0." } },
+            progress = S.optional { schema = S.boolean { description = "Show approximate progress through archive bytes on terminal stderr after a short delay; defaults to true." } },
         } },
         Prepare = func({ { "input", S.string() }, { "output", S.string() } },
             { { "ignored", S.any(), arity = "*" } }, {

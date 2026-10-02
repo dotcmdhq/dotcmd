@@ -25,6 +25,14 @@ for _, format in ipairs({ "tar", "tar.gz", "tar.xz", "zip" }) do
     end)
 end
 
+test("extract accepts enabled and disabled progress", function()
+    for _, progress in ipairs({ true, false }) do
+        local destination = "progress-" .. tostring(progress)
+        assert(extract { path = "fixtures/sdk.zip", to = destination, progress = progress })
+        assert(t.read(destination .. "/sdk/lib/value") == "library")
+    end
+end)
+
 test("extract defaults to a sibling directory in both forms", function()
     fs.mkdir("downloads")
     t.write("downloads/sdk.zip", t.read("fixtures/sdk.zip"))
@@ -95,6 +103,7 @@ test("extract cleans up malformed archives and validates options", function()
     t.write("bad-crc.zip", zip:sub(1, data - 1) .. "!" .. zip:sub(data + 1))
     fails("bad-crc.zip")
     fails("missing.tar")
+    fails("fixtures/sdk.zip", { progress = "yes" })
     fails("fixtures/sdk.zip", { strip_components = -1 })
     fails("fixtures/sdk.zip", { include = {} })
     fails("fixtures/sdk.zip", { include = { other = "sdk" } })

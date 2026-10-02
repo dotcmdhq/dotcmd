@@ -97,7 +97,7 @@ return fields]]))
     failed = evaluate('task({"raw"})')
     assert(failed.code == 1 and failed.stderr:find("must be a string", 1, true), failed.stderr)
     local result = repl('task("fail")\ntask("unknown")\ntask("group", "leaf", "invalid")\n42\n')
-    assert(result.code == 0 and result.stdout == "42\n", result.stdout .. result.stderr)
+    assert(result.code == 0 and result.stdout:gsub("\r\n", "\n") == "42\n", result.stdout .. result.stderr)
 end)
 
 test("task keeps built-ins available when project loading fails", function()

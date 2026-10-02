@@ -35,12 +35,12 @@ local function download_hash(url, budget, size)
 end
 
 local function write_pair(result)
-    io.stdout:write("url: ", result.url, "\nsha256: ", result.sha256, "\n")
+    assert(io.stdout:write("url: ", result.url, "\nsha256: ", result.sha256, "\n"))
 end
 
 local function write_result(format, result)
     if format == "json" then
-        io.stdout:write(json.encode(result), "\n")
+        assert(io.stdout:write(json.encode(result), "\n"))
     else
         write_pair(result)
     end
@@ -115,10 +115,10 @@ JSON output is always an array.]],
                     results[#results + 1] = { url = asset.browser_download_url, sha256 = hash:lower() }
                 end
                 if options.format == "json" then
-                    io.stdout:write(json.encode(results), "\n")
+                    assert(io.stdout:write(json.encode(results), "\n"))
                 else
                     for index, result in ipairs(results) do
-                        if index > 1 then io.stdout:write("\n") end
+                        if index > 1 then assert(io.stdout:write("\n")) end
                         write_pair(result)
                     end
                 end

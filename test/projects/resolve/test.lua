@@ -45,6 +45,7 @@ local function run(routes, ...)
     local main = assert(loadfile(host.project_dir .. "/../main.lua", "t", env))({
         version = "test", launcher = host.project_dir .. "/.cmd",
     })
+    env.io.stdout = routes.stdout or stdout
     local ok, code = pcall(main, { ... })
     if ok then result.code = code
     elseif type(code) == "table" then result.code = code.exit_code
@@ -203,6 +204,28 @@ test("resolve stops on transport failure without emitting partial results", func
     local result = run(routes, "--resolve", "github-release", "owner/repo", "--format", "json")
     t.failure(result, "http: interrupted")
     assert(result.stdout == "" and #result.requests == 2)
+end)
+
+test("resolve propagates output write failures even when the final flush succeeds", function()
+    local url = "https://example.com/file"
+    for _, case in ipairs {
+        { 1, "url", url },
+        { 1, "url", url, "--format", "json" },
+        { 1, "github-release", "owner/repo", "--format", "json" },
+        { 2, "github-release", "owner/repo" },
+    } do
+        local routes = release_routes { asset("a.zip", hash_a), asset("b.zip", hash_b) }
+        routes[url] = "file"
+        local writes = 0
+        routes.stdout = { write = function(self)
+            writes = writes + 1
+            if writes == case[1] then return nil, "stdout write failed" end
+            return self
+        end }
+        local result = run(routes, "--resolve", table.unpack(case, 2))
+        t.failure(result, "stdout write failed")
+        assert(writes == case[1])
+    end
 end)
 
 test("resolve metadata errors and zero budgets fail cleanly", function()

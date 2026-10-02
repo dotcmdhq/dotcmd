@@ -488,7 +488,16 @@ test("API index lists runtime entries without command help", function()
             assert(output:find(section, 1, true), output)
         end
         for name in pairs(api.schema.fields) do assert(output:find("  " .. name .. " ", 1, true), output) end
-        assert(not output:find("Type definitions:", 1, true), output)
+        local types = assert(output:find("\nType definitions:\n", 1, true), output)
+        local names = {}
+        for name in pairs(api.definitions) do names[#names + 1] = name end
+        table.sort(names)
+        local previous = types
+        for _, name in ipairs(names) do
+            local position = assert(output:find("\n  " .. name .. "  ", types, true), output)
+            assert(position > previous, output)
+            previous = position
+        end
         assert(not output:find("Examples:", 1, true) and not output:find("Usage:", 1, true), output)
         assert(not output:find("---@", 1, true) and not output:find("\27", 1, true), output)
         assert(not output:find("  show ", 1, true), output)

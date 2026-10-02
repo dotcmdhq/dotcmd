@@ -407,6 +407,8 @@ static int Run(lua_State* L) {
 #endif
     lua_pushcfunction(L, NativeFunctionName);
     lua_setfield(L, -2, "native_function_name");
+    lua_pushcfunction(L, FormatError);
+    lua_setfield(L, -2, "format_error");
     lua_pushlstring(L, (const char*)licenses, sizeof(licenses));
     lua_setfield(L, -2, "licenses");
     lua_createtable(L, 0, 4);

@@ -100,6 +100,35 @@ local launcher = internal.launcher
 local all_tasks, project_missing
 
 local builtin_tasks = {
+    __eval = {
+        description = [[Evaluate a Lua expression or chunk
+
+Uses the same runtime globals and project working directory as tasks.
+Returned values use the task result formatter. Explicit print calls retain Lua behavior.
+
+Examples:
+  .cmd --eval 'host'
+  .cmd --eval 'local x = 40; return x + 2']],
+        args = { { "code", description = "Lua expression or chunk" } },
+        run = function(source)
+            local chunk, message = require("dotcmd.eval").compile(source, "=eval", _ENV)
+            if not chunk then error(message, 0) end
+            return chunk()
+        end,
+    },
+    __repl = {
+        description = [[Start a Lua REPL
+
+Uses the same runtime globals and project working directory as tasks.
+Expressions and returned values use the task result formatter; print retains Lua behavior.
+Accepts multiline input. Global assignments persist; locals belong to one input chunk.
+Errors are reported and the session continues. End input (EOF) to exit.
+Prompts appear only when standard input and output are terminals.]],
+        args = {},
+        run = function()
+            require("dotcmd.eval").repl(_ENV, internal.format_error)
+        end,
+    },
     __resolve = require("dotcmd.resolve"),
     __complete = {
         hidden = true,
@@ -177,7 +206,7 @@ The next invocation downloads the selected binary if it is not already cached.]]
     __api = {
         description = [[Show Lua API documentation
 
-Without a name, lists functions and runtime tables.
+Without a name, lists functions, runtime tables, and named types.
 A name shows signatures, fields, and descriptions.
 
 Examples:

@@ -71,9 +71,11 @@ local api = S.registry {
         File = S.table { description = "File path for command stream redirection.", fields = { path = S.string() } },
         Output = S.union { description = "Inherited, captured, discarded, or redirected output.", alternatives = { S.enum { values = { "inherit", "capture", "discard" } }, S.ref { name = "File" } } },
         Input = S.union { description = "Inherited, discarded, or redirected standard input.", alternatives = { S.enum { values = { "inherit", "discard" } }, S.ref { name = "File" } } },
-        EnvUpdate = func({ { "old", S.optional { schema = S.string() }, arity = "?" } }, {
+        EnvUpdate = func({ { "old", S.optional { schema = S.string { description = "Effective previous value, or nil when absent." } }, arity = "?" } }, {
             { "value", S.union { alternatives = { S.string(), S.literal { value = false }, S.null() } } },
-        }),
+        }, { description = "Update or remove a command's environment variable.\n"
+            .. "Receives the effective previous value inherited from the parent process or an inner command, or nil when absent.\n"
+            .. "Return a string to set the variable, or nil or false to remove it." }),
         EnvValue = S.union { description = "Environment replacement, removal, or update function.", alternatives = { S.string(), S.literal { value = false }, S.ref { name = "EnvUpdate" } } },
         Command = S.table {
             description = "Program or nested command, with string arguments, working directory, and environment.",
@@ -176,7 +178,12 @@ local api = S.registry {
             name = S.optional { schema = S.string { description = "Download filename; defaults to the URL filename, or download." } },
             prepare = S.optional { schema = S.ref { name = "Prepare", description = "Run only on a prepared-cache miss. Accepts a function; errors discard partial output." } },
         } },
-        TaskFunction = func({ { "arguments", S.string(), arity = "*" } }, { { "values", S.any(), arity = "*" } }),
+        TaskFunction = func({ { "arguments", S.string { description = "Unparsed command-line arguments, passed as individual strings." }, arity = "*" } },
+            { { "values", S.any(), arity = "*" } }, {
+                description = "Task function receiving unparsed command-line arguments.\n"
+                    .. "Use directly as a value in the task table returned by .cmd.lua.\n"
+                    .. "Each returned value is printed on its own line; return no values to print nothing. Errors fail the task.",
+            }),
         Arity = S.enum { description = "Required scalar (1), optional scalar (?), required repeated (+), or optional repeated (*).", values = { "1", "?", "+", "*" } },
         ArgType = S.union { description = "Built-in argument type or an enum of strings.", alternatives = { S.enum { values = { "string", "number", "integer", "boolean", "file", "directory" } }, S.array { items = S.string() } } },
         Parse = func({ { "text", S.string() } }, {
@@ -463,6 +470,11 @@ function api.show(name)
         end
         rows("Functions", functions)
         rows("Runtime tables", tables)
+        local types = {}
+        for _, key in ipairs(sorted_keys(api.definitions)) do
+            types[#types + 1] = { key, (description(api.definitions[key]) or ""):match("^[^\n]*") }
+        end
+        rows("Type definitions", types)
         output:flush()
         return
     end

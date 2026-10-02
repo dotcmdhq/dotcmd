@@ -2,8 +2,23 @@ local function encode(value)
     return (value:gsub("[^%w._~-]", function(byte) return ("%%%02X"):format(byte:byte()) end))
 end
 
+local function new_budget(options)
+    return { remaining = options.max_download_mb * 1000000, max_download_mb = options.max_download_mb }
+end
+
+local function budget_error(budget, size)
+    local needed_mb = budget.max_download_mb - budget.remaining / 1000000 + (size or 0) / 1000000
+    local retry_mb = math.max(64, math.ceil(budget.max_download_mb * 2), math.ceil(needed_mb))
+    error {
+        exit_code = 1,
+        message = ("download budget exhausted (%g MB shared limit for metadata and file bodies)\n"
+            .. "Retry with a larger limit, for example: .cmd --resolve --max-download-mb %g ...")
+            :format(budget.max_download_mb, retry_mb),
+    }
+end
+
 local function request(url, budget, consumer, headers)
-    assert(budget.remaining > 0, "download budget exhausted")
+    if budget.remaining <= 0 then budget_error(budget) end
     return http {
         url = url, headers = headers,
         to = function()
@@ -11,7 +26,7 @@ local function request(url, budget, consumer, headers)
             return function(chunk)
                 if chunk == nil then return consume() end
                 budget.remaining = budget.remaining - #chunk
-                assert(budget.remaining >= 0, "download budget exhausted")
+                if budget.remaining < 0 then budget_error(budget) end
                 consume(chunk)
             end
         end,
@@ -30,7 +45,7 @@ local function github(path, budget)
 end
 
 local function download_hash(url, budget, size)
-    assert(not size or size <= budget.remaining, "download budget exhausted")
+    if size and size > budget.remaining then budget_error(budget, size) end
     return request(url, budget, sha256)
 end
 
@@ -73,7 +88,7 @@ Streams the file without saving it. Keeps the supplied URL when following redire
 JSON output is a single object.]],
             args = { { "url", description = "HTTPS download URL" } },
             run = function(options, url)
-                local budget = { remaining = options.max_download_mb * 1000000 }
+                local budget = new_budget(options)
                 local result = { url = url, sha256 = download_hash(url, budget) }
                 write_result(options.format, result)
             end
@@ -86,7 +101,7 @@ Outputs a commit-pinned raw-file URL and SHA-256. JSON output is a single object
             opts = { ref = { description = "Branch, tag, or commit (default: repository default branch)" } },
             args = { repo_argument, { "path", description = "File path relative to the repository root" } },
             run = function(options, repo, path)
-                local budget = { remaining = options.max_download_mb * 1000000 }
+                local budget = new_budget(options)
                 local ref = options.ref or github(repo, budget).default_branch
                 local commit = github(repo .. "/commits/" .. encode(ref), budget).sha
                 local url = "https://raw.githubusercontent.com/" .. repo .. "/" .. commit .. "/" .. path:gsub("[^/]+", encode)
@@ -103,7 +118,7 @@ JSON output is always an array.]],
             opts = { tag = { default = "latest", description = "Release tag or latest" } },
             args = { repo_argument },
             run = function(options, repo)
-                local budget = { remaining = options.max_download_mb * 1000000 }
+                local budget = new_budget(options)
                 local endpoint = repo .. "/releases/"
                 if options.tag == "latest" then endpoint = endpoint .. "latest"
                 else endpoint = endpoint .. "tags/" .. encode(options.tag) end

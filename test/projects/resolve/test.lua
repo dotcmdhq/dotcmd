@@ -48,7 +48,9 @@ local function run(routes, ...)
     env.io.stdout = routes.stdout or stdout
     local ok, code = pcall(main, { ... })
     if ok then result.code = code
-    elseif type(code) == "table" then result.code = code.exit_code
+    elseif type(code) == "table" then
+        result.code = code.exit_code or 1
+        if code.message then result.stderr = result.stderr .. tostring(code.message) end
     else result.code = 1; result.stderr = result.stderr .. tostring(code) end
     stdout:seek("set")
     result.stdout = stdout:read("a")
@@ -178,6 +180,9 @@ test("resolve streams enforce decimal MB budgets without Content-Length", functi
     t.success(result)
     result = run({ [url] = { chunks = { bytes, "x" } } }, "--resolve", "url", url, "--max-download-mb", "1")
     t.failure(result, "download budget exhausted")
+    assert(result.stderr:find("1 MB shared limit for metadata and file bodies", 1, true), result.stderr)
+    assert(result.stderr:find(".cmd --resolve --max-download-mb 64 ...", 1, true), result.stderr)
+    assert(not result.stderr:find("resolve.lua:", 1, true), result.stderr)
     assert(result.stdout == "")
 end)
 
@@ -187,6 +192,8 @@ test("resolve budget counts metadata and stops before oversized assets", functio
     routes[download_base .. "small.zip"] = "small"
     local result = run(routes, "--resolve", "github-release", "owner/repo", "--max-download-mb", "1", "--format", "json")
     t.failure(result, "download budget exhausted")
+    assert(result.stderr:find("1 MB shared limit", 1, true), result.stderr)
+    assert(result.stderr:find("--max-download-mb 64", 1, true), result.stderr)
     assert(result.stdout == "" and #result.requests == 1)
 end)
 
@@ -235,6 +242,8 @@ test("resolve metadata errors and zero budgets fail cleanly", function()
     assert(result.stdout == "")
     result = run({}, "--resolve", "url", "https://example.com/file", "--max-download-mb", "0")
     t.failure(result, "download budget exhausted")
+    assert(result.stderr:find("0 MB shared limit", 1, true), result.stderr)
+    assert(result.stderr:find("--max-download-mb 64", 1, true), result.stderr)
     assert(#result.requests == 0 and result.stdout == "")
 end)
 

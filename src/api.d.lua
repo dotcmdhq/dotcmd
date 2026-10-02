@@ -46,6 +46,9 @@
 
 ---@alias Output "inherit"|"capture"|"discard"|File
 ---@alias Input "inherit"|"discard"|File
+---Update or remove a command's environment variable.
+---Receives the effective previous value inherited from the parent process or an inner command, or nil when absent.
+---Return a string to set the variable, or nil or false to remove it.
 ---@alias EnvUpdate fun(old: string?): string|false|nil
 ---@alias EnvValue string|false|EnvUpdate
 
@@ -125,6 +128,9 @@
 ---@field name? string Download filename; defaults to the URL filename, or download.
 ---@field prepare? Prepare Run only on a prepared-cache miss. Accepts a function; errors discard partial output.
 
+---Task function receiving unparsed command-line arguments.
+---Use directly as a value in the task table returned by .cmd.lua.
+---Each returned value is printed on its own line; return no values to print nothing. Errors fail the task.
 ---@alias TaskFunction fun(...: string): any
 
 ---@alias Arity "1"|"?"|"+"|"*"

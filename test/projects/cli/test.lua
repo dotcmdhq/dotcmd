@@ -556,10 +556,17 @@ test("API entries use concise signatures and declaration-first field rows", func
     assert(command:find("      [1] command: string|Command\n"
         .. "        Program string or inner command at index 1.", 1, true), command)
     local fields = assert(command:find("\n    Fields:\n", 1, true), command)
-    local examples = assert(command:find("\n    Examples:\n\n"
-        .. "      Forward all task arguments with named fields first and ... last:\n\n"
-        .. "          exec { cwd = host.invocation_dir, env = env, program, ... }\n\n", 1, true), command)
+    local examples = assert(command:find("\n    Examples:\n\n", 1, true), command)
     assert(examples > fields, command)
+    for _, example in ipairs({
+        "\n          local git = {\n",
+        "\n          exec { git, \"status\", \"--short\" }\n"
+            .. "          exec { git, \"diff\", \"--stat\" }\n",
+        "\n      Forward all task arguments with named fields first and ... last:\n\n"
+            .. "          exec { cwd = host.invocation_dir, env = env, program, ... }\n\n",
+    }) do
+        assert(command:find(example, examples, true), command)
+    end
     local host_docs = success(t.run_project(empty, "--api", "host"))
     assert(host_docs:find("  arch: \"x64\"|\"arm64\"\n"
         .. "  cache_dir: string\n    Shared cache root; honors DOTCMD_CACHE_DIR.", 1, true), host_docs)
@@ -625,7 +632,7 @@ test("API lookup errors identify the entry and available members", function()
             for name in pairs(api.schema.fields) do names[#names + 1] = name end
             for name in pairs(api.definitions) do names[#names + 1] = name end
             table.sort(names)
-            assert(result.stderr:find("Available entries: " .. table.concat(names, ", ") .. "\n", 1, true), result.stderr)
+            assert(result.stderr:gsub("\r\n", "\n"):find("Available entries: " .. table.concat(names, ", ") .. "\n", 1, true), result.stderr)
         end
         assert(not result.stderr:find("stack traceback", 1, true), result.stderr)
     end

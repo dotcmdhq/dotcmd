@@ -3,7 +3,7 @@ local api = require("dotcmd.api")
 
 test("API registry describes every public global", function()
     local globals = { host = host, fs = fs, json = json, http = http, exec = exec, spawn = spawn,
-        sha256 = sha256, extract = extract, fetch = fetch, plugin = plugin }
+        sha256 = sha256, extract = extract, fetch = fetch, plugin = plugin, task = task }
     assert(S.validate(api, globals) == globals)
     -- Resolve nested named types without losing the root registry's scope.
     assert(S.validate_call(S.at(api, { "fs", "stat" }), "path", { follow = false }))

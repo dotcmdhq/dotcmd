@@ -12,7 +12,7 @@ function eval.compile(source, name, env)
     local chunk, message = load(source, name, "t", env)
     if chunk then return chunk end
     if incomplete(expression_error) then message = expression_error end
-    return nil, message
+    return nil, message, incomplete(message)
 end
 
 local function report(message)
@@ -24,20 +24,29 @@ function eval.repl(env, format_error)
     local output = format.writer(io.stdout)
     local is_terminal = require("dotcmd._terminal")
     local interactive = is_terminal(io.stdin) and is_terminal(io.stdout)
+    local editor = interactive and os.getenv("TERM") ~= "dumb" and require("dotcmd.readline").new()
     local source, message = "", nil
     while true do
-        if interactive then
+        if interactive and not editor then
             io.stdout:write(source == "" and "> " or ">> ")
             io.stdout:flush()
         end
-        local line = io.stdin:read("l")
+        local line, chunk, partial
+        if editor then line, chunk, message = editor:read(env, eval.compile)
+        else line = io.stdin:read("l") end
+        if line == false then
+            source = ""
+            goto continue
+        end
         if line == nil then
             if source ~= "" then report(message) end
             return
         end
-        source = source == "" and line or source .. "\n" .. line
-        local chunk
-        chunk, message = eval.compile(source, "=repl", env)
+        if editor then editor:add(line)
+        else
+            source = source == "" and line or source .. "\n" .. line
+            chunk, message, partial = eval.compile(source, "=repl", env)
+        end
         if chunk then
             local ok, failure = xpcall(function()
                 local results = table.pack(chunk())
@@ -46,10 +55,11 @@ function eval.repl(env, format_error)
             end, format_error)
             if not ok then report(failure) end
             source = ""
-        elseif not incomplete(message) then
+        elseif not partial then
             report(message)
             source = ""
         end
+        ::continue::
     end
 end
 

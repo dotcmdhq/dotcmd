@@ -68,7 +68,10 @@ test("pretty markup styles values, literal keys, and separators without styling 
         "assert \27[2m= \27[22m\27[36m<function: ", 1, true))
 
     assert(format.ansi(pretty(nil)) == "\27[36mnil\27[39m")
-    assert(format.ansi(pretty("text")) == "text")
+    assert(format.ansi(pretty("text")) == '\27[32m"text"\27[39m')
+    assert(format.plain(pretty("")) == '""')
+    assert(format.plain(pretty('quote " slash \\ newline\n tab\t nul\0'))
+        == '"quote \\" slash \\\\ newline\\n tab\\t nul\\000"')
 end)
 
 test("writer detects a regular file once and writes plain text", function()

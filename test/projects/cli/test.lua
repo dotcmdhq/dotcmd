@@ -129,7 +129,7 @@ end)
 test("CLI prints all returned values on separate lines, preserving nils", function()
     assert(success(t.run_project(child, "nothing")) == "")
     assert(success(t.run_project(child, "nil-value")) == "nil\n")
-    assert(success(t.run_project(child, "values")) == "printed\nhello\n3\nfalse\nnil\n\ntwo\nlines\nnil\n")
+    assert(success(t.run_project(child, "values")) == 'printed\n"hello"\n3\nfalse\nnil\n""\n"two\\nlines"\nnil\n')
     assert(success(t.run_project(child, "objects")) == "custom display\n{}\n")
 end)
 
@@ -239,7 +239,7 @@ test("CLI pretty-printing shows unsupported nested values as pseudo-Lua", functi
     }
     for kind, fragment in pairs(expected) do
         local output = success(t.run_project(child, "pretty-bad-value", kind))
-        assert(output:sub(1, 9) == "before\n{\n", output)
+        assert(output:sub(1, 11) == '"before"\n{\n', output)
         assert(output:find(fragment, 1, true), output)
         assert(output:sub(-8) == "    }\n}\n", output)
     end

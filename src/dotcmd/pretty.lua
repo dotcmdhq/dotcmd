@@ -108,7 +108,7 @@ end
 
 return function(value)
     local root_kind = type(value)
-    if root_kind == "string" then return value end
+    if root_kind == "string" then return { style = string_style, quote(value) } end
     if root_kind == "number" then
         return { style = scalar_style, number(value) }
     end

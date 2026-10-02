@@ -7,6 +7,7 @@ local S = require("dotcmd.schema")
 local api = require("dotcmd.api")
 local fetch_schema = S.at(api, { "fetch" })
 local plugin_schema = S.at(api, { "plugin" })
+local task_schema = S.at(api, { "task" })
 local output = format.writer(io.stdout)
 
 -- Project tasks are {name = function(...) ... end} or
@@ -98,6 +99,43 @@ end
 
 local launcher = internal.launcher
 local all_tasks, project_missing
+local project_ok, project_error
+
+local function fail_invocation(message, code, path)
+    if message and path and #path > 0 then message = table.concat(path, " ") .. ": " .. message end
+    error({ message = message, exit_code = code }, 0)
+end
+
+-- Prepare one invocation without catching task errors or formatting its values.
+local function invocation(argv, fail)
+    local resolution, message, code = tasks.resolve(all_tasks, argv)
+    if not resolution then
+        if not project_ok then
+            if type(project_error) == "table" then error(project_error, 0) end
+            return fail(tostring(project_error), code or 1)
+        end
+        return fail(message .. "\nRun .cmd --help to list available tasks.", code or 1)
+    end
+    local selected, arguments, path = resolution.task, resolution.arguments, resolution.path
+    local schema = { opts = resolution.opts, args = selected.tasks and {} or selected.args }
+    if selected.tasks and not selected.run then
+        local _, parse_error = args.parse(schema, arguments)
+        if not parse_error then require("dotcmd.help")(all_tasks, project_missing, table.unpack(path)) end
+        return fail(parse_error, 2, path)
+    end
+    if schema.opts ~= nil or schema.args ~= nil then
+        local parameters, parse_error = args.parse(schema, arguments)
+        if not parameters then return fail(parse_error, 2, path) end
+        return selected.run, parameters
+    end
+    return selected.run, table.pack(table.unpack(arguments))
+end
+
+function task(...)
+    S.validate_call(task_schema, ...)
+    local run, parameters = invocation({ ... }, fail_invocation)
+    return run(table.unpack(parameters, 1, parameters.n))
+end
 
 local builtin_tasks = {
     __eval = {
@@ -117,13 +155,7 @@ Examples:
         end,
     },
     __repl = {
-        description = [[Start a Lua REPL
-
-Uses the same runtime globals and project working directory as tasks.
-Expressions and returned values use the task result formatter; print retains Lua behavior.
-Accepts multiline input. Global assignments persist; locals belong to one input chunk.
-Errors are reported and the session continues. End input (EOF) to exit.
-Prompts appear only when standard input and output are terminals.]],
+        description = "Start a Lua REPL",
         args = {},
         run = function()
             require("dotcmd.eval").repl(_ENV, internal.format_error)
@@ -213,7 +245,7 @@ Examples:
   .cmd --api fetch
   .cmd --api fs.stat
   .cmd --api Task]],
-        args = { { "name", arity = "?", description = "Global, dotted member path, or named type" } },
+        args = { { "name", arity = "?", type = "string", description = "Global, dotted member path, or named type" } },
         run = function(name) api.show(name) end,
     },
     __help = {
@@ -231,46 +263,23 @@ return function(argv)
         if not fs.stat(".cmd.lua", { follow = false }) then return {}, true end
         return assert(loadfile(".cmd.lua", "t"))(), false
     end)
+    project_ok, project_error = ok, project
     project_missing = missing or false
     local task_definitions = ok and project or {}
     for key, task in pairs(builtin_tasks) do task_definitions[key] = task end
 
     all_tasks = tasks.normalize(task_definitions)
 
-    local resolution, resolve_error, error_code = tasks.resolve(all_tasks, argv)
-    if not resolution then
-        if not ok then
-            if type(project) == "table" then error(project) end
-            io.stderr:write("dotcmd: " .. tostring(project) .. "\n")
-        else
-            io.stderr:write("dotcmd: " .. tostring(resolve_error) .. "\nRun .cmd --help to list available tasks.\n")
-        end
-        return error_code or 1
-    end
-    local task, arguments, path, inherited_opts =
-        resolution.task, resolution.arguments, resolution.path, resolution.opts
-    local schema = { opts = inherited_opts, args = task.tasks and {} or task.args }
-    if task.tasks and not task.run then
-        local _, message = args.parse(schema, arguments)
+    local run, parameters = invocation(argv, function(message, code, path)
         if message then
-            local command = #path == 0 and "dotcmd" or "dotcmd " .. table.concat(path, " ")
-            io.stderr:write(command .. ": " .. message .. "\n")
-        else
-            require("dotcmd.help")(all_tasks, project_missing, table.unpack(path))
+            local prefix = "dotcmd"
+            if path and #path > 0 then prefix = prefix .. " " .. table.concat(path, " ") end
+            io.stderr:write(prefix .. ": " .. message .. "\n")
         end
-        return 2
-    end
-    local results
-    if schema.opts ~= nil or schema.args ~= nil then
-        local parameters, message = args.parse(schema, arguments)
-        if not parameters then
-            io.stderr:write("dotcmd " .. table.concat(path, " ") .. ": " .. message .. "\n")
-            return 2
-        end
-        results = table.pack(task.run(table.unpack(parameters, 1, parameters.n)))
-    else
-        results = table.pack(task.run(table.unpack(arguments)))
-    end
+        return nil, code
+    end)
+    if not run then return parameters end
+    local results = table.pack(run(table.unpack(parameters, 1, parameters.n)))
     for i = 1, results.n do output:write({ pretty(results[i]), "\n" }) end
     output:flush()
     return 0

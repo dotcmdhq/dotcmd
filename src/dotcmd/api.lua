@@ -227,8 +227,9 @@ local api = S.registry {
             run = S.optional { schema = func({ { "arguments", S.any(), arity = "*" } }, { { "values", S.any(), arity = "*" } }, {
                 description = "Required on leaves. Receives one combined opts table first when this task or an ancestor declares opts, then "
                     .. "individual positionals. On a group, runs only when no child is selected; omitting it shows group help. Every "
-                    .. "returned value is printed on its own line, including nil; returning no values prints nothing. Plain tables "
-                    .. "are printed deterministically; tables with a __tostring metamethod and all non-table values retain print "
+                    .. "returned value is printed on its own line, including nil; returning no values prints nothing. Strings are "
+                    .. "quoted and escaped as Lua literals. Plain tables are printed deterministically; tables with a __tostring "
+                    .. "metamethod and other non-table values retain print "
                     .. "behavior. Return values are syntax-colored on terminals unless NO_COLOR is set or TERM is dumb; redirected "
                     .. "output remains plain. Values and keys that have no Lua literal representation, including functions, userdata, "
                     .. "threads, cycles, table keys, and non-finite numbers, are shown as angle-bracketed tostring pseudo-values. "
@@ -256,6 +257,21 @@ local api = S.registry {
         fields = {
         host = S.ref { name = "Host" }, fs = S.ref { name = "Fs" },
         json = S.ref { name = "Json", description = "Encode and decode JSON." },
+        task = func({ { "arguments", S.string { description = "CLI words: task path followed by options and positional arguments." }, arity = "*" } },
+            { { "values", S.any(), arity = "*" } }, {
+                description = "Invokes a task with CLI words, including built-ins, aliases, nested tasks, defaults, and conversions.\n"
+                    .. "Uses the loaded project task definitions without reloading .cmd.lua. Available after project loading completes.\n"
+                    .. "Returns every original Lua value, including nils, without printing them; explicit task output is retained.\n"
+                    .. "Task errors propagate. Lookup and argument errors raise tables with message and the CLI exit_code.\n"
+                    .. "A group without run shows help and raises exit_code 2.",
+                examples = [[Show help for the API documentation command:
+
+    task("--help", "--api")
+
+Delegate to another task and return its values:
+
+    return task("build", "--release")]],
+            }),
         http = func({ { "options", S.union { alternatives = { S.string(), S.ref { name = "HttpOptions" } } } } }, { { "response", S.ref { name = "HttpResponse" } } }, { description = "HTTPS requests; transport/filesystem failures raise. SSL_CERT_FILE selects a PEM trust bundle." }),
         exec = S.func { description = "Executes without a shell; returns the exit code and captured output.\nChecked nonzero exits raise a table with "
             .. "the child's exit_code and, unless effective stderr is inherited, a message.", signatures = {

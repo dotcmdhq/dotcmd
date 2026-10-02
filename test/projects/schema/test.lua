@@ -516,10 +516,10 @@ return {
 }
 ]])
     local result = t.run_project(project, "test")
-    assert(result.code == 1 and result.stdout == "")
+    assert(result.exit_code == 1 and result.stdout == "")
     assert(result.stderr:gsub("\r\n", "\n") == "dotcmd: value.check: expected boolean, got string\n", result.stderr)
     result = t.run_project(project, "call")
-    assert(result.code == 1 and result.stdout == "")
+    assert(result.exit_code == 1 and result.stdout == "")
     assert(result.stderr:gsub("\r\n", "\n") == "dotcmd: fetch: argument \"sha256\" must be a string, got number\n", result.stderr)
 end)
 

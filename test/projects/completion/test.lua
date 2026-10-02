@@ -42,7 +42,7 @@ test("task names, aliases, hidden tasks and help", function()
     equal(values("", "--setup", "completions"), "bash|zsh|fish|powershell|pwsh")
     equal(values("c", "--help", "--setup"), "completions")
     equal(values("--setup-completions"), "")
-    assert(t.run_project(child, "--setup-completions").code == 1)
+    assert(t.run_project(child, "--setup-completions").exit_code == 1)
     local help = t.success(t.run_project(child, "--help"))
     assert(not help:find("hidden", 1, true) and not help:find("--complete ", 1, true)
         and not help:find("--setup-completions", 1, true))
@@ -112,7 +112,7 @@ test("shell token boundaries and unfinished quoting", function()
     end
     equal(#request("bash", "./.cmd docs --mode $(touch bad)"), 0)
     equal(#request("words", "", "missing"), 0)
-    assert(t.run_project(child, "--complete", "words", "invalid").code == 1)
+    assert(t.run_project(child, "--complete", "words", "invalid").exit_code == 1)
 end)
 
 local function setup_env(name)
@@ -127,7 +127,7 @@ test("setup uses an optional shell enum and SHELL when detection is unavailable"
     local home, env = setup_env("detect")
     t.failure(t.run_project(child, { env = env }, "--setup", "completions"), "cannot detect a supported shell")
     assert(not fs.stat(home .. "/config"))
-    assert(t.run_project(child, { env = env }, "--setup", "completions", "unknown").code == 2)
+    assert(t.run_project(child, { env = env }, "--setup", "completions", "unknown").exit_code == 2)
     env.SHELL = "/usr/bin/fish"
     t.success(t.run_project(child, { env = env }, "--setup", "completions"))
     assert(fs.stat(home .. "/config/fish/completions/.cmd.fish"))
@@ -184,7 +184,7 @@ test("PowerShell setup queries the selected runtime and preserves the reported p
         env.host = setmetatable({ os = "windows", project_dir = child }, { __index = host })
         env.os = setmetatable({ getenv = function(key) return variables[key] or nil end }, { __index = os })
         local query
-        env.exec = function(args) query = args; return { stdout = profile, code = 0 } end
+        env.exec = function(args) query = args; return { stdout = profile, exit_code = 0 } end
         env.print = function() end
         env.loadfile = function(file, mode)
             return loadfile(file == ".cmd.lua" and child .. "/.cmd.lua" or file, mode, env)
@@ -245,7 +245,7 @@ test("Windows setup detects the shell through the batch launcher", function()
         local result = exec { executable, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
             "& '.\\.cmd' --setup completions", cwd = child, env = env,
             stdout = "capture", stderr = "capture", check = false }
-        if result.code == 0 then
+        if result.exit_code == 0 then
             local output = t.success(result)
             assert(output:find("Installed " .. shell .. " completions:", 1, true), output)
             assert(fs.stat(home .. "/config/dotcmd/completions.ps1"))

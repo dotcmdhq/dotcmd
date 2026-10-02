@@ -47,11 +47,11 @@ local function run(routes, ...)
     })
     env.io.stdout = routes.stdout or stdout
     local ok, code = pcall(main, { ... })
-    if ok then result.code = code
+    if ok then result.exit_code = code
     elseif type(code) == "table" then
-        result.code = code.exit_code or 1
+        result.exit_code = code.exit_code or 1
         if code.message then result.stderr = result.stderr .. tostring(code.message) end
-    else result.code = 1; result.stderr = result.stderr .. tostring(code) end
+    else result.exit_code = 1; result.stderr = result.stderr .. tostring(code) end
     stdout:seek("set")
     result.stdout = stdout:read("a")
     assert(result.project_loads == 1, "resolver changed project loading semantics")
@@ -308,6 +308,6 @@ test("resolve rejects invalid formats, limits, repositories and options", functi
         { "url", "https://example.com/file", "--json" },
     } do
         local result = run({}, "--resolve", table.unpack(argv))
-        assert(result.code == 2 and result.stdout == "" and #result.requests == 0, result.stderr)
+        assert(result.exit_code == 2 and result.stdout == "" and #result.requests == 0, result.stderr)
     end
 end)

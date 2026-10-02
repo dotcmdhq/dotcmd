@@ -94,7 +94,7 @@ local test = t.test
 ]] .. t.read(project .. "/test.lua") .. "\nreturn t.finish()\nend}\n")
             local result = t.run_project(project, { env = env }, "test")
             io.write(result.stdout); io.stderr:write(result.stderr)
-            if result.code == 0 then
+            if result.exit_code == 0 then
                 passed = passed + 1
             else
                 failed = failed + 1; io.stderr:write("FAIL suite " .. name .. "\n")

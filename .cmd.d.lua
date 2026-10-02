@@ -50,7 +50,7 @@
 
 ---Exit code and requested captured output.
 ---@class (exact) ExecResult
----@field code integer Exit code.
+---@field exit_code integer Exit code.
 ---@field stderr string Present when captured.
 ---@field stdout string Present when captured.
 

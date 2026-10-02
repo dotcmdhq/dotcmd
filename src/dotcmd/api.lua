@@ -139,7 +139,7 @@ Forward all task arguments with named fields first and ... last:
             },
         },
         ExecResult = S.table { description = "Exit code and requested captured output.", fields = {
-            code = S.integer { description = "Exit code." }, stdout = S.string { description = "Present when captured." },
+            exit_code = S.integer { description = "Exit code." }, stdout = S.string { description = "Present when captured." },
             stderr = S.string { description = "Present when captured." },
         } },
         Process = S.table { description = "Running process, with requested pipes and lifecycle methods.", fields = {

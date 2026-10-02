@@ -10,7 +10,7 @@ struct lua_State;
 // Output streams accept "inherit", "capture", "discard", or {path="file"}; stderr
 // also accepts "stdout". Input accepts "inherit", "discard", or {path="file"}.
 // File paths are relative to the child's cwd; output files are truncated.
-// Returns {code, stdout, stderr}; output fields are present only when captured.
+// Returns {exit_code, stdout, stderr}; output fields are present only when captured.
 // Start/I/O failures always raise. On a nonzero exit, check=true raises
 // {exit_code}; message is included unless the effective stderr stream is inherited.
 // spawn(program, ...) or spawn{command, ..., cwd, env, stdin, stdout, stderr}

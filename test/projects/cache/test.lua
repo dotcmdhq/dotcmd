@@ -67,7 +67,10 @@ test("launcher downloads and reuses a verified binary", function()
     local cache = host.project_dir .. "/bootstrap cache ü"
     local env = environment(); env.DOTCMD_CACHE_DIR = cache
     local fresh = bootstrap_project("bootstrap fresh", hash, url .. "/binary")
-    local output = t.success(invoke(fresh, env))
+    local result = invoke(fresh, env)
+    -- A fresh download may write downloader progress to stderr.
+    assert(result.exit_code == 0, result.stderr .. result.stdout)
+    local output = result.stdout:gsub("\r\n", "\n")
     assert(t.normalized(output:gsub("\n$", "")) == t.normalized(cache), output)
     assert(sha256 { path = cached_binary(cache) } == hash)
 

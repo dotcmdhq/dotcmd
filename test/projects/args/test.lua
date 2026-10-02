@@ -7,7 +7,7 @@ end
 
 local function rejects(name, expected, ...)
     local result = t.run_project(child, name:gsub("_", "-"), ...)
-    assert(result.code == 2, result.stdout .. result.stderr)
+    assert(result.exit_code == 2, result.stdout .. result.stderr)
     assert(result.stdout == "", result.stdout)
     assert(result.stderr:find(expected, 1, true), result.stderr)
     assert(not result.stderr:find("stack traceback", 1, true), result.stderr)
@@ -169,7 +169,7 @@ test("malformed CLI input fails before run", function()
 end)
 
 test("parsed tasks preserve exit status", function()
-    assert(t.run_project(child, "status").code == 42)
+    assert(t.run_project(child, "status").exit_code == 42)
 end)
 
 test("parsed tasks print returned values independently of exit status", function()

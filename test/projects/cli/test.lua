@@ -8,7 +8,7 @@ local load_error = host.project_dir .. "/load-error"
 
 test("CLI help without a project", function()
     local bare = t.run_project(empty)
-    assert(bare.code == 2 and bare.stderr == "", bare.stderr)
+    assert(bare.exit_code == 2 and bare.stderr == "", bare.stderr)
     local explicit = success(t.run_project(empty, "--help"))
     assert((bare.stdout:gsub("\r\n", "\n")) == explicit, bare.stdout)
     for _, args in ipairs({ { "-h" }, { "-?" }, { "--help" } }) do
@@ -65,7 +65,7 @@ test("CLI requires the launcher when invoked as a binary", function()
         command.cwd, command.stdout, command.stderr = child, "capture", "capture"
         command.check = false
         local result = exec(command)
-        assert(result.code == 2, result.stderr)
+        assert(result.exit_code == 2, result.stderr)
         assert(result.stdout == "", result.stdout)
         assert(result.stderr:gsub("\r\n", "\n") == "dotcmd: invoke the project's .cmd launcher\n", result.stderr)
     end
@@ -81,7 +81,7 @@ test("CLI built-ins work when project loading fails", function()
         assert(not output:find("Project tasks:", 1, true), output)
         for _, name in ipairs({ "--version", "--cache-dir", "--licenses" }) do
             local result = t.run_project(project, name, "extra")
-            assert(result.code == 2, result.stderr)
+            assert(result.exit_code == 2, result.stderr)
             assert(result.stdout == "", result.stdout)
             assert(result.stderr:find("unexpected positional argument: extra", 1, true), result.stderr)
         end
@@ -109,13 +109,13 @@ test("CLI clean errors for missing project and unknown task", function()
 end)
 test("CLI preserves built-in resolution errors without a project file", function()
     local subtask = t.run_project(empty, "--setup", "nonexistent")
-    assert(subtask.code == 1, subtask.stderr)
+    assert(subtask.exit_code == 1, subtask.stderr)
     assert(subtask.stderr:gsub("\r\n", "\n") == [[dotcmd: unknown subtask: nonexistent
 Run .cmd --help to list available tasks.
 ]], subtask.stderr)
 
     local option = t.run_project(empty, "--setup", "--bogus")
-    assert(option.code == 2, option.stderr)
+    assert(option.exit_code == 2, option.stderr)
     assert(option.stderr:gsub("\r\n", "\n") == [[dotcmd: unknown option: --bogus
 Run .cmd --help to list available tasks.
 ]], option.stderr)
@@ -254,12 +254,12 @@ end)
 
 test("CLI structured errors have custom exit codes and optional clean diagnostics", function()
     local result = t.run_project(child, "structured-error", "23", "failure ü")
-    assert(result.code == 23 and result.stdout == "", result.stderr)
+    assert(result.exit_code == 23 and result.stdout == "", result.stderr)
     assert(result.stderr:gsub("\r\n", "\n") == "dotcmd: failure ü\n", result.stderr)
     result = t.run_project(child, "structured-error", "-", "default failure")
-    assert(result.code == 1 and result.stderr:gsub("\r\n", "\n") == "dotcmd: default failure\n")
+    assert(result.exit_code == 1 and result.stderr:gsub("\r\n", "\n") == "dotcmd: default failure\n")
     result = t.run_project(child, "rethrow")
-    assert(result.code == 23 and result.stderr:gsub("\r\n", "\n") == "dotcmd: caught error\n")
+    assert(result.exit_code == 23 and result.stderr:gsub("\r\n", "\n") == "dotcmd: caught error\n")
 end)
 
 test("CLI preserves diagnostics when structured error metadata is invalid", function()
@@ -281,14 +281,14 @@ end)
 test("CLI structured errors unwind resources without losing their diagnostic", function()
     local path = host.project_dir .. "/closed.txt"
     local result = t.run_project(child, "unwind", path)
-    assert(result.code == 19 and result.stderr:gsub("\r\n", "\n") == "dotcmd: before cleanup\n", result.stderr)
+    assert(result.exit_code == 19 and result.stderr:gsub("\r\n", "\n") == "dotcmd: before cleanup\n", result.stderr)
     assert(t.read(path) == "closed")
 end)
 
 test("CLI preserves structured project loading errors while keeping built-ins available", function()
     local project = t.project("structured load error", "error { exit_code = 31, message = \"load failed\" }")
     local result = t.run_project(project, "build")
-    assert(result.code == 31 and result.stderr:gsub("\r\n", "\n") == "dotcmd: load failed\n")
+    assert(result.exit_code == 31 and result.stderr:gsub("\r\n", "\n") == "dotcmd: load failed\n")
     assert(success(t.run_project(project, "--version")) == "dotcmd " .. version .. "\n")
 end)
 test("CLI general help shows sorted tasks with first-line summaries", function()
@@ -355,13 +355,13 @@ test("CLI task help handles raw functions, empty schemas, and unknown tasks", fu
 end)
 test("CLI built-in help accepts a task path", function()
     local bare = t.run_project(child)
-    assert(bare.code == 2 and bare.stderr == "", bare.stderr)
+    assert(bare.exit_code == 2 and bare.stderr == "", bare.stderr)
     assert((bare.stdout:gsub("\r\n", "\n")) == success(t.run_project(child, "--help")))
     local output = success(t.run_project(child, "--help", "--help"))
     assert(output:find("Usage: .cmd --help [task...]\n", 1, true), output)
     assert(output:find("Task path to describe", 1, true), output)
     local result = t.run_project(child, "--help", "deploy", "extra")
-    assert(result.code == 1, result.stderr)
+    assert(result.exit_code == 1, result.stderr)
     assert(result.stderr:find("unknown task: deploy extra", 1, true), result.stderr)
     assert(success(t.run_project(child, "-h", "--help")) == output)
     assert(success(t.run_project(child, "-?", "--help")) == output)
@@ -385,7 +385,7 @@ test("CLI task aliases preserve literal spellings and share argument parsing", f
     for _, alias in ipairs({ "docs", "docs_local", "-d" }) do
         assert(success(t.run_project(child, alias, "hello")) == "hello\n")
         local result = t.run_project(child, alias)
-        assert(result.code == 2, result.stderr)
+        assert(result.exit_code == 2, result.stderr)
         assert(result.stderr:find("missing required argument: value", 1, true), result.stderr)
         local output = success(t.run_project(child, "--help", alias))
         assert(output:find("Usage: .cmd " .. alias .. " <value>\n", 1, true), output)
@@ -475,7 +475,7 @@ end)
 test("CLI explicit exit status propagation is silent", function()
     for _, code in ipairs({ 0, 1, 42, 255 }) do
         local result = t.run_project(child, "status", tostring(code))
-        assert(result.code == code and result.stdout == "" and result.stderr == "", result.stderr)
+        assert(result.exit_code == code and result.stdout == "" and result.stderr == "", result.stderr)
     end
 end)
 
@@ -623,7 +623,7 @@ test("API lookup errors identify the entry and available members", function()
         { "", "unknown API entry \"\"", "Available entries:" },
     }) do
         local result = t.run_project(empty, "--api", case[1])
-        assert(result.code == 2 and result.stdout == "", result.stderr)
+        assert(result.exit_code == 2 and result.stdout == "", result.stderr)
         assert(result.stderr:find(case[2], 1, true), result.stderr)
         if case[3] then assert(result.stderr:find(case[3], 1, true), result.stderr) end
         if case[3] == "Available entries:" then
@@ -637,7 +637,7 @@ test("API lookup errors identify the entry and available members", function()
         assert(not result.stderr:find("stack traceback", 1, true), result.stderr)
     end
     local extra = t.run_project(empty, "--api", "fetch", "extra")
-    assert(extra.code == 2 and extra.stderr:find("unexpected positional argument: extra", 1, true), extra.stderr)
+    assert(extra.exit_code == 2 and extra.stderr:find("unexpected positional argument: extra", 1, true), extra.stderr)
 end)
 
 test("API discovery follows ordinary project loading without invoking schema predicates", function()

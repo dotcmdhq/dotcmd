@@ -954,7 +954,7 @@ static int Result(lua_State* L, Process* p, int index) {
     lua_pop(L, 1);
     lua_createtable(L, 0, 3);
     lua_pushinteger(L, p->code);
-    lua_setfield(L, -2, "code");
+    lua_setfield(L, -2, "exit_code");
     for (int i = 0; i < 2; ++i) {
         Stream* s = &p->streams[i];
         if (s->mode == Capture) {

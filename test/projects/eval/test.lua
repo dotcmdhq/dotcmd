@@ -36,14 +36,14 @@ end)
 test("eval propagates syntax errors and structured exit codes", function()
     t.failure(t.run_project(empty, "--eval", "local ="), "eval:1:")
     local result = t.run_project(empty, "--eval", "error {message = 'evaluation failed', exit_code = 23}")
-    assert(result.code == 23 and result.stdout == "", result.stderr)
+    assert(result.exit_code == 23 and result.stdout == "", result.stderr)
     assert(result.stderr:gsub("\r\n", "\n") == "dotcmd: evaluation failed\n", result.stderr)
 end)
 
 test("eval and repl validate arguments and advertise usage", function()
     for _, argv in ipairs { { "--eval" }, { "--eval", "1", "2" }, { "--repl", "extra" } } do
         local result = t.run_project(empty, table.unpack(argv))
-        assert(result.code == 2 and result.stdout == "", result.stderr)
+        assert(result.exit_code == 2 and result.stdout == "", result.stderr)
     end
     local help = t.success(t.run_project(empty, "--help"))
     assert(help:find("--eval <code>", 1, true) and help:find("--repl", 1, true), help)
@@ -64,7 +64,7 @@ end)
 
 test("repl recovers from syntax and runtime errors", function()
     local result = repl(empty, "local =\nerror('oops', 0)\nerror {message = 'structured', exit_code = 9}\n6 * 7\n")
-    assert(result.code == 0 and result.stdout:gsub("\r\n", "\n") == "42\n", result.stdout .. result.stderr)
+    assert(result.exit_code == 0 and result.stdout:gsub("\r\n", "\n") == "42\n", result.stdout .. result.stderr)
     for _, text in ipairs { "repl:1:", "dotcmd: oops", "dotcmd: structured" } do
         assert(result.stderr:find(text, 1, true), result.stderr)
     end
@@ -73,7 +73,7 @@ end)
 
 test("repl reports incomplete input at EOF", function()
     local result = repl(empty, "if true then\n")
-    assert(result.code == 0 and result.stdout == "", result.stdout .. result.stderr)
+    assert(result.exit_code == 0 and result.stdout == "", result.stdout .. result.stderr)
     assert(result.stderr:find("<eof>", 1, true), result.stderr)
 end)
 

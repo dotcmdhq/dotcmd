@@ -61,7 +61,7 @@ local function run(options, ...)
     })
     local args = { ... }
     local ok, code = pcall(main, args)
-    result.code = ok and code or 1
+    result.exit_code = ok and code or 1
     if not ok then result.stderr = result.stderr .. tostring(code) end
     assert(stdout:seek("set") == 0)
     result.stdout = result.stdout .. stdout:read("a")
@@ -149,7 +149,7 @@ test("update argument errors and help do not download or change the launcher", f
         { "" }, { "." }, { ".." }, { "latest", "extra" },
     }) do
         local result = run(nil, "--update", table.unpack(args))
-        assert(result.code == 2 and result.stdout == "", result.stderr)
+        assert(result.exit_code == 2 and result.stdout == "", result.stderr)
         assert(#result.requests == 0 and t.read(result.path) == original)
     end
     local result = run(nil, "--help", "--update")
@@ -284,6 +284,6 @@ return {}
     end
     local before = t.read(project .. "/.cmd")
     t.failure(invoke("9.9.9"), "HTTP status 404")
-    assert(invoke("").code == 2)
+    assert(invoke("").exit_code == 2)
     assert(t.read(project .. "/.cmd") == before)
 end)

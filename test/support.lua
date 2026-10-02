@@ -28,12 +28,12 @@ function t.symlink(target, path, directory)
         stderr = "capture",
         check = false,
     }
-    if host.os == "windows" and result.code ~= 0
+    if host.os == "windows" and result.exit_code ~= 0
         and (result.stdout .. result.stderr):lower():find("privilege", 1, true) then
         print("SKIP symlink creation requires Windows Developer Mode or privileges")
         return false
     end
-    assert(result.code == 0, result.stderr .. result.stdout)
+    assert(result.exit_code == 0, result.stderr .. result.stdout)
     return true
 end
 
@@ -45,7 +45,7 @@ function t.junction(target, path)
         stderr = "capture",
         check = false,
     }
-    assert(result.code == 0, result.stderr .. result.stdout)
+    assert(result.exit_code == 0, result.stderr .. result.stdout)
 end
 
 function t.command(project, ...)
@@ -80,13 +80,13 @@ function t.project(name, source)
 end
 
 function t.success(result)
-    assert(result.code == 0, result.stderr .. result.stdout)
+    assert(result.exit_code == 0, result.stderr .. result.stdout)
     assert(result.stderr == "", result.stderr)
     return (result.stdout:gsub("\r\n", "\n"))
 end
 
 function t.failure(result, expected)
-    assert(result.code == 1, "expected exit 1, got " .. result.code .. "\n" .. result.stdout .. result.stderr)
+    assert(result.exit_code == 1, "expected exit 1, got " .. result.exit_code .. "\n" .. result.stdout .. result.stderr)
     if expected then assert(result.stderr:find(expected, 1, true), result.stderr) end
     return result.stderr
 end

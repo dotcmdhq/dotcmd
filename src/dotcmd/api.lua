@@ -243,7 +243,10 @@ local api = S.registry {
                     .. "allowed." }),
         } },
     },
-    schema = S.table { fields = {
+    schema = S.table {
+        description = ".cmd.lua returns a table of tasks and is evaluated for every invocation,\n"
+            .. "including help and completion. Put task-specific work inside task functions.",
+        fields = {
         host = S.ref { name = "Host" }, fs = S.ref { name = "Fs" },
         json = S.ref { name = "Json", description = "Encode and decode JSON." },
         http = func({ { "options", S.union { alternatives = { S.string(), S.ref { name = "HttpOptions" } } } } }, { { "response", S.ref { name = "HttpResponse" } } }, { description = "HTTPS requests; transport/filesystem failures raise. SSL_CERT_FILE selects a PEM trust bundle." }),
@@ -450,7 +453,8 @@ function api.show(name)
         end
     end
     if not name then
-        output:write({ bold = true, "Lua API\n" })
+        output:write({ bold = true, "Lua API\n\n" })
+        output:write({ description(api.schema), "\n" })
         local functions, tables = {}, {}
         for _, key in ipairs(sorted_keys(api.schema.fields)) do
             local value = api.schema.fields[key]

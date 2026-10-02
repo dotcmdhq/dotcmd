@@ -100,6 +100,7 @@ local launcher = internal.launcher
 local all_tasks, project_missing
 
 local builtin_tasks = {
+    __resolve = require("dotcmd.resolve"),
     __complete = {
         hidden = true,
         args = { { "protocol" }, { "prefix" }, { "words", arity = "*" } },

@@ -1,6 +1,5 @@
 # TODO
 
-- Explore `--resolve` for emitting selected tool artifacts' URLs, versions, and SHA-256s (Lua/JSON/CSV/TSV): start with URLs and GitHub releases, use published hashes where available or stream downloads under a total byte budget, and leave artifact selection, installation, and environment configuration to the project.
 - Generate LuaLS definitions from installed plugins for the global `plugin(url, sha256)` function. Collect overloads with literal URLs and source SHA-256s in one definition file, using each plugin chunk's return type, so callers need no type annotation. Keep `@return any` before the overloads and leave the generic parameters unannotated: broad `@param url string`/`@param sha256 string` annotations suppress literal argument suggestions. This shape supports URL and SHA-256 completion and plugin-specific return-type narrowing. Example (replace hash placeholders with the installed plugins' actual hashes):
 
   ```lua
@@ -17,4 +16,3 @@
 - remove all type annotation comments and make them from scratch
 - dotcmd exe download progress?
 - extraction progress
-

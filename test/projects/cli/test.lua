@@ -524,7 +524,7 @@ test("API function documentation includes overloads and transitive referenced ty
         previous = position
     end
     for _, text in ipairs({ "\n    Fields:\n      name?: string\n        Download filename;",
-        "\n      prepare?: Prepare\n        Run only on a prepared-cache miss.",
+        "\n      prepare?: Prepare\n        Runs only on a prepared-cache miss; errors discard partial output.",
         "\n      sha256: string\n        Pinned download hash.",
         "\n    Output is temporary and will be moved after success",
         "\n    Cache identity includes stripped Lua bytecode, not captured values or ambient state." }) do
@@ -609,7 +609,7 @@ test("API globals, named types, and dotted paths describe their referenced types
     assert(prepare:match("^Prepare %(input: string, output: string%) %-> any%.%.%.\n\n"), prepare)
     assert(not prepare:find("Arguments:", 1, true), prepare)
     local field = success(t.run_project(empty, "--api", "FetchOptions.prepare"))
-    assert(field:find("Run only on a prepared-cache miss.", 1, true), field)
+    assert(field:find("Runs only on a prepared-cache miss; errors discard partial output.", 1, true), field)
     assert(field:find("\n  Prepare (", 1, true), field)
 end)
 

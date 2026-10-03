@@ -6,7 +6,7 @@ A cross-platform task runner you check in.
 
 # Why it exists
 
-.cmd solves a problem of setting up dev dependencies and build scripts for cross-platform projects in a way that exposes the same command line interface on Linux, macOS and Windows. It is designed to be checked into the repo. A fresh checkout should be enough to build, test, and run a project. It simplifies both contributor onboarding and CI configuration.
+.cmd solves a problem of setting up dev dependencies and build scripts for cross-platform projects in a way that exposes the same command line interface on Linux, macOS and Windows. It is designed to be checked into the repo. A fresh checkout should be enough to build, test, and run a project. It simplifies both contributor onboarding and CI configuration: **with `.cmd`, there are no prerequisites**.
 
 # What it is
 

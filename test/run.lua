@@ -57,6 +57,7 @@ return function(repo)
     local launcher = t.read(repo .. "/.cmd"):gsub("^:; version=[^\n]+", ":; version=test")
     local env = { HOME = home, USERPROFILE = home, XDG_CACHE_HOME = cache, LOCALAPPDATA = appdata,
         DOTCMD_CACHE_DIR = false, DOTCMD_TEST_URL = server_url, DOTCMD_TEST_HTTP_URL = server_http_url,
+        DOTCMD_TEST_INTERRUPT = host.executable:gsub("[^/\\]+$", "test_interrupt" .. host.exe_suffix),
         SSL_CERT_FILE = certificate,
         SSL_CERT_DIR = false, NO_PROXY = "*", no_proxy = "*",
     }

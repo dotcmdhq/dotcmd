@@ -1,5 +1,76 @@
 local child = host.project_dir .. "/child"
 
+if host.os ~= "windows" then
+    local project = t.project("interrupt", [[return {
+        run = function(mode, signal, cleanup)
+            local command = { "sh", "-c", [=[
+                signal=$1; status=$2
+                if [ "$3" = cleanup ]; then
+                    trap 'sleep 1; printf "cleanup\n"; exit "$status"' "$signal"
+                else
+                    sleep 1
+                    exec "$4" --signal "$signal"
+                fi
+                sleep 1
+                kill -"$signal" "$PPID" "$$"
+                exit 99
+            ]=], "sh", signal, signal == "INT" and "130" or "131", cleanup,
+                os.getenv("DOTCMD_TEST_INTERRUPT") }
+            local result
+            if mode == "exec" then
+                command.check = false
+                result = exec(command)
+            else
+                local process <close> = spawn(command)
+                result = process:wait { check = false }
+            end
+            io.write("parent:", result.exit_code, "\n")
+        end,
+        startup = function()
+            local result = exec {
+                os.getenv("DOTCMD_TEST_INTERRUPT"), "--startup",
+                stdout = "capture", stderr = "capture", check = false
+            }
+            assert(result.exit_code == 130 and result.stdout == "cleanup\n" and result.stderr == "")
+            io.write("parent\n")
+        end,
+        restored = function(status)
+            if status == "missing" then
+                pcall(exec, { "dotcmd-interrupt-test-missing-program" })
+            else
+                pcall(exec, { "sh", "-c", "exit " .. status })
+            end
+            local process <close> = spawn {
+                "sh", "-c", 'kill -INT "$PPID"; printf "survived\\n"', stdout = "pipe"
+            }
+            io.write(process.stdout:read("a"))
+        end
+    }]])
+    for _, mode in ipairs { "exec", "spawn" } do
+        test(mode .. " waits for interrupt cleanup and preserves child signal handling", function()
+            for _, signal in ipairs { "INT", "QUIT" } do
+                local code = signal == "INT" and 130 or 131
+                local result = t.run_project(project, "run", mode, signal, "cleanup")
+                assert(t.success(result) == "cleanup\nparent:" .. code .. "\n", result.stdout)
+                result = t.run_project(project, "run", mode, signal, "default")
+                assert(t.success(result) == "parent:" .. code .. "\n", result.stdout)
+            end
+        end)
+    end
+    test("exec protects the parent throughout immediate child startup", function()
+        for _ = 1, 100 do
+            assert(t.success(t.run_project(project, "startup")) == "parent\n")
+        end
+    end)
+    test("exec restores interrupt handling after successful and failed children", function()
+        for _, status in ipairs { "0", "17", "missing" } do
+            local result = t.run_project(project, "restored", status)
+            assert(result.exit_code == 130 and result.stdout == "" and result.stderr == "",
+                result.stdout .. result.stderr)
+        end
+    end)
+end
+
 local function windows_drive_test(name, fn)
     if host.os ~= "windows" then return end
     test(name, function()

@@ -57,6 +57,7 @@ struct Process {
     bool check;
     bool exited;
     bool closed;
+    bool interrupts;
     lua_Integer code;
 #ifdef _WIN32
     wchar_t* application;
@@ -68,12 +69,51 @@ struct Process {
 #else
     pid_t pid;
     int error_pipe[2];
+    struct sigaction interrupt;
+    struct sigaction quit;
 #endif
 };
 
 #ifndef _WIN32
 static struct sigaction original_sigpipe;
+#else
+static void WindowsError(lua_State* L, const char* operation, DWORD error);
+static BOOL WINAPI WaitInterrupt(DWORD event) {
+    return event == CTRL_C_EVENT || event == CTRL_BREAK_EVENT;
+}
 #endif
+
+static void ProtectInterrupts(lua_State* L, Process* p) {
+    if (p->interrupts) return;
+#ifdef _WIN32
+    if (!GetConsoleCP()) return;
+    if (!SetConsoleCtrlHandler(WaitInterrupt, TRUE))
+        WindowsError(L, "handle console interrupts", GetLastError());
+#else
+    struct sigaction ignore = {};
+    ignore.sa_handler = SIG_IGN;
+    sigemptyset(&ignore.sa_mask);
+    if (sigaction(SIGINT, &ignore, &p->interrupt) < 0)
+        luaL_error(L, "exec: ignore SIGINT: %s", strerror(errno));
+    if (sigaction(SIGQUIT, &ignore, &p->quit) < 0) {
+        int error = errno;
+        sigaction(SIGINT, &p->interrupt, NULL);
+        luaL_error(L, "exec: ignore SIGQUIT: %s", strerror(error));
+    }
+#endif
+    p->interrupts = true;
+}
+
+static void RestoreInterrupts(Process* p) {
+    if (!p->interrupts) return;
+#ifdef _WIN32
+    SetConsoleCtrlHandler(WaitInterrupt, FALSE);
+#else
+    sigaction(SIGQUIT, &p->quit, NULL);
+    sigaction(SIGINT, &p->interrupt, NULL);
+#endif
+    p->interrupts = false;
+}
 
 static bool Append(Buffer* b, const void* data, size_t size) {
     if (size > SIZE_MAX - b->size) return false;
@@ -164,6 +204,7 @@ static void CloseProcess(Process* p) {
             file->f = NULL;
         }
     }
+    RestoreInterrupts(p);
 }
 
 static int Cleanup(lua_State* L) {
@@ -452,10 +493,25 @@ static void StartProcess(lua_State* L, Process* p) {
             }
         }
     }
+    sigset_t mask;
+    bool blocked = p->interrupts;
+    if (blocked) {
+        sigset_t signals;
+        sigemptyset(&signals);
+        sigaddset(&signals, SIGINT);
+        sigaddset(&signals, SIGQUIT);
+        int error = pthread_sigmask(SIG_BLOCK, &signals, &mask);
+        if (error) luaL_error(L, "exec: block interrupts: %s", strerror(error));
+    }
     p->pid = fork();
-    if (p->pid < 0) { p->pid = 0; luaL_error(L, "exec: fork: %s", strerror(errno)); }
+    int fork_error = errno;
+    if (p->pid != 0 && blocked) pthread_sigmask(SIG_SETMASK, &mask, NULL);
+    if (p->pid < 0) { p->pid = 0; luaL_error(L, "exec: fork: %s", strerror(fork_error)); }
     if (p->pid == 0) {
         close(p->error_pipe[0]);
+        // Parent protection must not change the child's interrupt handling.
+        RestoreInterrupts(p);
+        if (blocked) pthread_sigmask(SIG_SETMASK, &mask, NULL);
         if (sigaction(SIGPIPE, &original_sigpipe, NULL) < 0) ChildFail(p, "restore SIGPIPE");
         if (p->cwd && chdir(p->cwd) < 0) ChildFail(p, "chdir");
         for (int i = 0; i < 3; ++i) {
@@ -506,8 +562,11 @@ static bool FinishProcess(lua_State* L, Process* p, bool block) {
     if (!p->exited && p->pid > 0) {
         int status;
         pid_t waited;
+        if (block) ProtectInterrupts(L, p);
         do { waited = waitpid(p->pid, &status, block ? 0 : WNOHANG); } while (waited < 0 && errno == EINTR);
-        if (waited < 0) luaL_error(L, "exec: wait: %s", strerror(errno));
+        int error = errno;
+        RestoreInterrupts(p);
+        if (waited < 0) luaL_error(L, "exec: wait: %s", strerror(error));
         if (!waited) return false;
         p->pid = 0;
         p->exited = true;
@@ -746,9 +805,12 @@ static void StartProcess(lua_State* L, Process* p) {
 
 static bool FinishProcess(lua_State* L, Process* p, bool block) {
     if (!p->exited && p->process) {
+        if (block) ProtectInterrupts(L, p);
         DWORD ready = WaitForSingleObject(p->process, block ? INFINITE : 0);
+        DWORD error = GetLastError();
+        RestoreInterrupts(p);
         if (ready == WAIT_TIMEOUT) return false;
-        if (ready != WAIT_OBJECT_0) WindowsError(L, "wait", GetLastError());
+        if (ready != WAIT_OBJECT_0) WindowsError(L, "wait", error);
         DWORD code;
         if (!GetExitCodeProcess(p->process, &code)) WindowsError(L, "exit code", GetLastError());
         p->code = code;
@@ -920,6 +982,7 @@ static Process* NewProcess(lua_State* L, bool spawn) {
     // Preserve output order without flushing unrelated files or process pipes.
     fflush(stdout);
     fflush(stderr);
+    if (!spawn) ProtectInterrupts(L, p);
     StartProcess(L, p);
     ExposePipes(L, p, index);
     *guard = NULL;

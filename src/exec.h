@@ -16,5 +16,8 @@ struct lua_State;
 // spawn(program, ...) or spawn{command, ..., cwd, env, stdin, stdout, stderr}
 // returns a process with wait{check=true}, poll, kill, and close methods.
 // "pipe" streams are Lua file handles; "capture" streams drain in the background.
+// On Unix, synchronous startup and blocking waits ignore SIGINT/SIGQUIT in the parent so
+// foreground children can finish their interrupt cleanup before dotcmd returns.
+// Windows similarly handles Ctrl+C/Ctrl+Break only in the parent.
 // <close> stops and waits for the direct child, then closes its streams.
 void RegisterExec(lua_State* L);

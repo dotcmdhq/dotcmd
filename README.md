@@ -10,7 +10,7 @@ A cross-platform task runner you check in.
 
 # What it is
 
-.cmd is a small polyglot shell script that works on Linux, macOS and Windows, in shells such as zsh, bash, pwsh and cmd. It's purpose is to download a self-contained Lua executable that is then used as a cross-platform program downloader and launcher. It's small, performant and secure — built-in tools make it trivial to pin all dependencies using SHA-256 hashes.
+.cmd is a small polyglot shell script that works on Linux, macOS and Windows, in shells such as zsh, bash, pwsh and cmd. Its purpose is to download a self-contained Lua executable that is then used as a cross-platform program downloader and launcher. It's small, performant and secure — built-in tools make it trivial to pin all dependencies using SHA-256 hashes.
 
 # Installation
 

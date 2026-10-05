@@ -111,3 +111,7 @@ In the example, `fetch` supplies the Go toolchain for the current platform witho
 `exec` runs a program with the arguments supplied in a Lua table. It launches the program directly, so each argument is passed as written without shell quoting or expansion. Commands run from the project directory by default; `cwd` and `env` can customize the child's working directory and environment.
 
 Output goes directly to the terminal by default, and a nonzero exit code fails the task. In the example, `exec` first runs the downloaded Go compiler, then runs the resulting program.
+
+# Examples
+
+- [Clojure](examples/clojure): launch a REPL or evaluate expressions using a downloaded JDK and Clojure CLI.

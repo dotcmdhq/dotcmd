@@ -52,6 +52,11 @@ jobs:
           mkdir dist &&
           cp "target/release/dotcmd${{ matrix.suffix }}"
           "dist/dotcmd-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.suffix }}"
+      - name: Test examples
+        env:
+          DOTCMD_CACHE_DIR: ${{ runner.temp }}/dotcmd
+        run: >-
+          ./target/release/dotcmd${{ matrix.suffix }} examples/clojure/.cmd clj -Srepro -M -e "(assert (= 42 (+ 40 2)))"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dotcmd-${{ matrix.os }}-${{ matrix.arch }}
